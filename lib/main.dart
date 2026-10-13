@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/export.dart';
 import 'core/number_extractor.dart';
+import 'core/shares.dart';
 import 'core/storage.dart';
 import 'core/updates.dart';
 import 'core/work.dart';
@@ -52,6 +53,23 @@ class _LibraryHomeState extends State<LibraryHome> {
   void initState() {
     super.initState();
     _load();
+    _listenForSharedShorts();
+  }
+
+  Future<void> _listenForSharedShorts() async {
+    await SharedShorts.start((url) {
+      if (!mounted) return;
+      setState(() {
+        urlInput.text = url;
+        candidates = [];
+        commentInput.clear();
+        numberInput.clear();
+        titleInput.clear();
+        authorInput.clear();
+        message = '공유된 쇼츠 링크를 받았어. 댓글을 불러오거나 원문을 붙여넣어줘.';
+      });
+      if (apiKeyInput.text.trim().isNotEmpty) _fetch();
+    });
   }
 
   Future<void> _load() async {
