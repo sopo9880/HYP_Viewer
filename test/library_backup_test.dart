@@ -40,4 +40,41 @@ void main() {
   test('rejects unsupported JSON', () {
     expect(() => LibraryBackup.decode('{"works": []}'), throwsFormatException);
   });
+
+  test('reading history survives JSON export and import', () {
+    final opened = WorkEntry.create(
+      workId: '2711759',
+      title: '개인 서재 작품',
+    ).copyWith(
+      currentPage: 7,
+      lastOpenedAt: '2026-10-14T01:00:00Z',
+    );
+    final backup = LibraryBackup(works: [opened], collections: const []);
+    final restored = LibraryBackup.decode(backup.encode());
+    expect(restored.works.single.lastOpenedAt, '2026-10-14T01:00:00.000Z');
+    expect(restored.works.single.currentPage, 7);
+  });
+
+  test('older v1 backup without lastOpenedAt remains compatible', () {
+    final oldWork = WorkEntry.create(workId: '1234567');
+    final restored = LibraryBackup.decode(
+      LibraryBackup(works: [oldWork], collections: const []).encode(),
+    );
+    expect(restored.works.single.lastOpenedAt, isNull);
+  });
+
+  test('merging retains the most recent actual reading timestamp', () {
+    final older = WorkEntry.create(workId: '1234567')
+        .copyWith(lastOpenedAt: '2026-10-01T00:00:00Z');
+    final newer = WorkEntry.create(workId: '1234567')
+        .copyWith(lastOpenedAt: '2026-10-14T00:00:00Z');
+    final merged = LibraryBackup.merge(
+      LibraryBackup(works: [older], collections: const []),
+      LibraryBackup(works: [newer], collections: const []),
+    );
+    expect(
+      merged.works.single.lastOpenedAt, '2026-10-14T00:00:00Z',
+    );
+  });
+
 }
