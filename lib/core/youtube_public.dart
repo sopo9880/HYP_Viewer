@@ -198,9 +198,11 @@ class YoutubePublicClient {
 
   static String? _commentToken(Map<String, dynamic>? data) {
     if (data == null) return null;
-    final contents = _map(_map(_map(data['contents'])?
-        ['twoColumnWatchNextResults'])?['results'])?['results'];
-    final items = _map(contents)?['contents'];
+    final content = _map(data['contents']);
+    final watch = _map(content?['twoColumnWatchNextResults']);
+    final results = _map(watch?['results']);
+    final inner = _map(results?['results']);
+    final items = inner?['contents'];
     if (items is List) {
       for (final item in items) {
         final section = _map(_map(item)?['itemSectionRenderer']);
