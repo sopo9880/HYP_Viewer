@@ -11,6 +11,7 @@ import 'core/export.dart';
 import 'core/gallery.dart';
 import 'ui/gallery_reader.dart';
 import 'core/number_extractor.dart';
+import 'core/online_gallery.dart';
 import 'core/shares.dart';
 import 'core/storage.dart';
 import 'core/updates.dart';
@@ -44,6 +45,13 @@ class LibraryHome extends StatefulWidget {
 class _LibraryHomeState extends State<LibraryHome> {
   final storage = LibraryStorage();
   final galleryStore = GalleryStore();
+  final sourceSettings = OnlineSourceSettings();
+  final onlineSourceInput = TextEditingController();
+  CancelDownload? galleryDownloadToken;
+  String? downloadingGalleryKey;
+  int downloadedGalleryPages = 0;
+  int totalGalleryPages = 0;
+  int downloadedGalleryBytes = 0;
   bool downloadingUpdate = false;
   double updateProgress = 0;
   final urlInput = TextEditingController();
@@ -61,8 +69,27 @@ class _LibraryHomeState extends State<LibraryHome> {
   void initState() {
     super.initState();
     _load();
+    _loadOnlineSource();
     _listenForSharedShorts();
     WidgetsBinding.instance.addPostFrameCallback((_) => _automaticUpdateCheck());
+  }
+
+  Future<void> _loadOnlineSource() async {
+    try {
+      final pattern = await sourceSettings.load();
+      if (mounted) setState(() => onlineSourceInput.text = pattern);
+    } catch (e) {
+      _status('온라인 소스 설정을 읽지 못했어: ' + e.toString());
+    }
+  }
+
+  Future<void> _saveOnlineSource() async {
+    try {
+      await sourceSettings.save(onlineSourceInput.text.trim());
+      _status('온라인 이미지 소스 설정을 저장했어.');
+    } catch (e) {
+      _status('온라인 소스 설정 오류: ' + e.toString());
+    }
   }
 
   Future<void> _listenForSharedShorts() async {
@@ -217,6 +244,107 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
+  Future<void> _readOnline(WorkEntry work) async {
+    final pattern = onlineSourceInput.text.trim();
+    if (pattern.isEmpty) {
+      _status('온라인 소스 URL 패턴을 먼저 설정해줘.');
+      return;
+    }
+    final client = http.Client();
+    try {
+      final remote = await OnlineGalleryProvider(client).load(pattern, work.workId);
+      if (!mounted) return;
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(builder: (ctx) => GalleryReader(
+          work: work,
+          archive: remote,
+          onPageChanged: (page) {
+            _updateWork(work.copyWith(currentPage: page));
+          },
+        )),
+      );
+    } catch (e) {
+      _status('온라인 읽기 실패: ' + e.toString());
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _downloadOnline(WorkEntry work) async {
+    if (galleryDownloadToken != null) {
+      _status('이미 다른 다운로드가 실행 중이야.');
+      return;
+    }
+    final pattern = onlineSourceInput.text.trim();
+    if (pattern.isEmpty) {
+      _status('온라인 소스 URL 패턴을 먼저 설정해줘.');
+      return;
+    }
+    final client = http.Client();
+    CancelDownload? token;
+    try {
+      final remote = await OnlineGalleryProvider(client).load(pattern, work.workId);
+      if (!remote.downloadAllowed) {
+        _status('이 온라인 소스는 작품 다운로드를 허용하지 않아.');
+        return;
+      }
+      if (!mounted) return;
+      final approved = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('오프라인 다운로드'),
+          content: Text('이 작품의 이미지 ' + remote.pageCount.toString() +
+              '장을 다운로드해 로컬 CBZ 파일로 저장할까?\n' +
+              '본인이 저장 권한을 가진 작품만 다운로드해야 해. '
+              '기존 오프라인 파일이 있다면 교체돼.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('취소')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('다운로드')),
+          ],
+        ),
+      );
+      if (approved != true || !mounted) return;
+      token = CancelDownload();
+      setState(() {
+        galleryDownloadToken = token;
+        downloadingGalleryKey = work.key;
+        downloadedGalleryPages = 0;
+        totalGalleryPages = remote.pageCount;
+        downloadedGalleryBytes = 0;
+      });
+      final archive = await OnlineGalleryDownloader(galleryStore).download(
+        remote,
+        cancellation: token,
+        onProgress: (completed, total, bytes) {
+          if (mounted) {
+            setState(() {
+              downloadedGalleryPages = completed;
+              totalGalleryPages = total;
+              downloadedGalleryBytes = bytes;
+            });
+          }
+        },
+      );
+      _status('다운로드 완료: ' + archive.pageCount.toString() +
+          '장. 이제 인터넷 없이도 읽을 수 있어.');
+    } on DownloadCancelled {
+      _status('다운로드가 취소됐어. 기존 오프라인 파일은 유지했어.');
+    } catch (e) {
+      _status('다운로드 실패: ' + e.toString());
+    } finally {
+      client.close();
+      if (token != null && mounted) {
+        setState(() {
+          galleryDownloadToken = null;
+          downloadingGalleryKey = null;
+        });
+      }
+    }
+  }
+
   Future<void> _importGallery(WorkEntry work) async {
     try {
       final picked = await FilePicker.platform.pickFiles(
@@ -368,7 +496,7 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   @override
   void dispose() {
-    for (final ctrl in [urlInput, commentInput, numberInput, titleInput, authorInput, apiKeyInput]) {
+    for (final ctrl in [urlInput, commentInput, numberInput, titleInput, authorInput, apiKeyInput, onlineSourceInput]) {
       ctrl.dispose();
     }
     super.dispose();
@@ -391,6 +519,27 @@ class _LibraryHomeState extends State<LibraryHome> {
         TextField(controller: apiKeyInput, obscureText: true, decoration: const InputDecoration(labelText: 'YouTube API 키 (선택)', border: OutlineInputBorder())),
         const SizedBox(height: 8),
         OutlinedButton.icon(onPressed: busy ? null : _fetch, icon: const Icon(Icons.download), label: const Text('설명란 및 댓글 불러오기')),
+        const SizedBox(height: 10),
+        Text('온라인 작품 소스 (허가된 HTTPS 서버)', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 6),
+        TextField(
+          controller: onlineSourceInput,
+          decoration: const InputDecoration(
+            labelText: '매니페스트 주소 템플릿',
+            hintText: 'https://my-gallery.example/galleries/{workId}.json',
+            helperText: '코드별 이미지 목록을 제공하는 본인 소스만 연결해줘.',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Align(
+          alignment: Alignment.centerRight,
+          child: OutlinedButton.icon(
+            onPressed: _saveOnlineSource,
+            icon: const Icon(Icons.settings),
+            label: const Text('소스 주소 저장'),
+          ),
+        ),
         const SizedBox(height: 10),
         TextField(controller: commentInput, minLines: 3, maxLines: 8,
           decoration: const InputDecoration(labelText: '댓글 원문 (직접 붙여넣기 가능)', border: OutlineInputBorder())),
@@ -438,15 +587,47 @@ class _LibraryHomeState extends State<LibraryHome> {
               onPressed: () => launchUrl(Uri.parse(work.videoUrl), mode: LaunchMode.externalApplication),
               child: const Text('원본 쇼츠')),
             TextButton.icon(
+              onPressed: () => _readOnline(work),
+              icon: const Icon(Icons.cloud_outlined),
+              label: const Text('온라인 읽기'),
+            ),
+            TextButton.icon(
+              onPressed: galleryDownloadToken == null
+                  ? () => _downloadOnline(work) : null,
+              icon: const Icon(Icons.cloud_download_outlined),
+              label: const Text('다운로드'),
+            ),
+            TextButton.icon(
               onPressed: () => _openGallery(work),
               icon: const Icon(Icons.menu_book),
-              label: const Text('읽기'),
+              label: const Text('오프라인 읽기'),
             ),
             TextButton.icon(
               onPressed: () => _importGallery(work),
               icon: const Icon(Icons.folder_open),
               label: const Text('CBZ/ZIP 연결'),
             ),
+            if (downloadingGalleryKey == work.key)
+              SizedBox(
+                width: 270,
+                child: Column(
+                  children: [
+                    LinearProgressIndicator(
+                      value: totalGalleryPages > 0
+                          ? downloadedGalleryPages / totalGalleryPages : null,
+                    ),
+                    Text('다운로드 ' + downloadedGalleryPages.toString() +
+                        '/' + totalGalleryPages.toString() +
+                        '장 · ' + (downloadedGalleryBytes / (1024 * 1024))
+                            .toStringAsFixed(1) + 'MB'),
+                    TextButton.icon(
+                      onPressed: galleryDownloadToken?.cancel,
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('다운로드 취소'),
+                    ),
+                  ],
+                ),
+              ),
           ]),
         ])),
       ]),
