@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/export.dart';
 import 'core/gallery.dart';
+import 'core/hitomi_reader_link.dart';
 import 'ui/gallery_reader.dart';
 import 'ui/hyp_dashboard.dart';
 import 'ui/hyp_theme.dart';
@@ -105,7 +106,9 @@ class _LibraryHomeState extends State<LibraryHome> {
         numberInput.clear();
         titleInput.clear();
         authorInput.clear();
-        message = '공유된 쇼츠 링크를 받았어. 댓글을 불러오거나 원문을 붙여넣어줘.';
+        message = apiKeyInput.text.trim().isEmpty
+            ? '쇼츠 링크를 받았어. API 키가 없어 댓글 자동 조회는 불가능해. 유튜브에서 댓글을 복사해 붙여넣어줘.'
+            : '쇼츠 링크를 받았어. 설명란과 댓글을 조회할게.';
       });
       if (apiKeyInput.text.trim().isNotEmpty) _fetch();
     });
@@ -141,7 +144,7 @@ class _LibraryHomeState extends State<LibraryHome> {
       return;
     }
     if (apiKeyInput.text.trim().isEmpty) {
-      _status('YouTube API 키를 입력하거나 댓글을 직접 붙여넣어줘.');
+      _status('YouTube Data API 키가 없어 댓글을 자동으로 가져올 수 없어. 유튜브에서 댓글을 복사해 붙여넣거나 개인 API 키를 입력해줘.');
       return;
     }
     setState(() => busy = true);
@@ -220,6 +223,24 @@ class _LibraryHomeState extends State<LibraryHome> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  Future<void> _openShortsInput() async {
+    final id = ShortsLink.videoId(urlInput.text);
+    if (id == null) {
+      _status('정확한 YouTube Shorts 링크를 입력해줘.');
+      return;
+    }
+    try {
+      final opened = await launchUrl(
+        Uri.parse('https://www.youtube.com/shorts/$id'),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) throw Exception('유튜브 앱이나 브라우저를 열지 못했어.');
+      _status('유튜브에서 댓글을 복사한 다음 앱에 붙여넣어줘.');
+    } catch (e) {
+      _status('유튜브 열기 실패: ' + e.toString());
+    }
+  }
+
   Future<void> _export(bool excel) async {
     try {
       final data = excel ? LibraryExport.xlsx(library) : LibraryExport.json(library);
@@ -268,32 +289,62 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
-  Future<void> _readOnline(WorkEntry work) async {
-    final pattern = onlineSourceInput.text.trim();
-    if (pattern.isEmpty) {
-      _status('온라인 소스 URL 패턴을 먼저 설정해줘.');
+  /// Opens the built-in fixed web-reader URL. This is NOT a JSON gallery or
+  /// an in-app image downloader; browser navigation cannot update app progress.
+  Future<void> _readOnline(WorkEntry work, {int? page}) async {
+    final currentPage = page ?? work.currentPage;
+    try {
+      final uri = HitomiReaderLink.forWork(work.workId, page: currentPage);
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) throw Exception('웹 브라우저를 실행하지 못했어.');
+      await _touchRead(work, page: currentPage);
+      _status('웹 리더를 열었어. 브라우저에서 넘긴 페이지는 앱에 자동 저장되지 않아.');
+    } catch (e) {
+      _status('웹 리더 열기 실패: ' + e.toString());
+    }
+  }
+
+  Future<void> _chooseWebPage(WorkEntry work) async {
+    var input = work.currentPage.toString();
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('웹 리더 시작 페이지'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('1페이지는 #1, 2페이지부터는 #2-3처럼 열어. '
+                '외부 브라우저에서 넘긴 페이지는 자동 기록되지 않아.'),
+            const SizedBox(height: 12),
+            TextFormField(
+              key: const Key('reader-page-input'),
+              initialValue: input,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: '시작 페이지'),
+              onChanged: (value) => input = value,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, input),
+            child: const Text('웹에서 열기'),
+          ),
+        ],
+      ),
+    );
+    if (selected == null) return;
+    final page = int.tryParse(selected.trim());
+    if (page == null || page < 1 || page > 1000000) {
+      _status('시작 페이지는 1~1000000 사이의 숫자로 입력해줘.');
       return;
     }
-    final client = http.Client();
-    try {
-      final remote = await OnlineGalleryProvider(client).load(pattern, work.workId);
-      if (!mounted) return;
-      await _touchRead(work);
-      await Navigator.push<void>(
-        context,
-        MaterialPageRoute(builder: (ctx) => GalleryReader(
-          work: work,
-          archive: remote,
-          onPageChanged: (page) {
-            _touchRead(work, page: page);
-          },
-        )),
-      );
-    } catch (e) {
-      _status('온라인 읽기 실패: ' + e.toString());
-    } finally {
-      client.close();
-    }
+    await _readOnline(work, page: page);
   }
 
   Future<void> _downloadOnline(WorkEntry work) async {
@@ -559,10 +610,12 @@ class _LibraryHomeState extends State<LibraryHome> {
     onCheckRelease: () => _checkRelease(),
     onOpenGallery: (work) => _openGallery(work),
     onReadOnline: _readOnline,
+    onReadWebPage: _chooseWebPage,
     onDownloadOnline: _downloadOnline,
     onImportGallery: _importGallery,
     onUpdateWork: _updateWork,
     onOpenOriginal: _openOriginal,
+    onOpenShortsInput: _openShortsInput,
     onCancelGalleryDownload: () => galleryDownloadToken?.cancel(),
     onDismissMessage: () => setState(() => message = ''),
   );
