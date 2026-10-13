@@ -52,11 +52,13 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
   }
 
   void _search() {
-    if (widget.comment.text.trim().isNotEmpty) {
-      widget.onAnalyze();
-    } else if (widget.url.text.trim().isNotEmpty) {
+    // A new Shorts URL must be fetched even if an older comment is present.
+    // Manual extraction has its own button inside the details section.
+    if (widget.url.text.trim().isNotEmpty) {
       setState(() => _showDetails = true);
-      widget.onFetch(); // Attempts public comment extraction without a key.
+      widget.onFetch();
+    } else if (widget.comment.text.trim().isNotEmpty) {
+      widget.onAnalyze();
     } else {
       setState(() => _showDetails = true);
     }
@@ -146,14 +148,23 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               icon: const Icon(Icons.search),
               label: const Text('작품 찾기'),
             );
+            final advanced = ExpansionTile(
+              key: const Key('youtube-advanced-settings'),
+              title: const Text('고급 설정 · 내 YouTube Data API 키 사용 (선택)'),
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              children: [apiKey],
+            );
             if (wide) {
-              return Row(
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(flex: 5, child: url),
-                  const SizedBox(width: 10),
-                  Expanded(flex: 4, child: apiKey),
-                  const SizedBox(width: 10),
-                  SizedBox(width: 150, child: search),
+                  Row(children: [
+                    Expanded(child: url),
+                    const SizedBox(width: 10),
+                    SizedBox(width: 150, child: search),
+                  ]),
+                  advanced,
                 ],
               );
             }
@@ -162,9 +173,8 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               children: [
                 url,
                 const SizedBox(height: 10),
-                apiKey,
-                const SizedBox(height: 10),
                 search,
+                advanced,
               ],
             );
           }),
