@@ -90,11 +90,15 @@ class GalleryArchive implements GalleryPageSource {
 /// CBZ is stored in app support files, outside the application installation
 /// directory. JSON library backups store only metadata; CBZ stays local.
 class GalleryStore {
+  final Directory? baseDirectory;
+
+  const GalleryStore({this.baseDirectory});
+
   Future<File> _localFile(String workId) async {
     if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
       throw const FormatException('잘못된 작품 번호');
     }
-    final root = await getApplicationSupportDirectory();
+    final root = baseDirectory ?? await getApplicationSupportDirectory();
     final dir = Directory(root.path + Platform.pathSeparator + 'galleries');
     await dir.create(recursive: true);
     return File(dir.path + Platform.pathSeparator + workId + '.cbz');
