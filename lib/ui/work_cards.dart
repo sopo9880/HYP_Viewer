@@ -156,9 +156,9 @@ class HypWorkCard extends StatelessWidget {
                           const PopupMenuItem(
                               value: 'offline', child: Text('오프라인 읽기')),
                         const PopupMenuItem(
-                            value: 'online', child: Text('웹 리더로 열기')),
+                            value: 'online', child: Text('앱 내 온라인 읽기')),
                         const PopupMenuItem(
-                            value: 'page', child: Text('시작 페이지 지정')),
+                            value: 'page', child: Text('웹 리더 · 시작 페이지 선택')),
                         const PopupMenuItem(
                             value: 'download', child: Text('JSON 소스 다운로드')),
                         const PopupMenuItem(
