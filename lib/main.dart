@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'core/export.dart';
 import 'core/gallery.dart';
 import 'core/hitomi_reader_link.dart';
+import 'core/hitomi_gallery.dart';
 import 'ui/gallery_reader.dart';
 import 'ui/hyp_dashboard.dart';
 import 'ui/hyp_theme.dart';
@@ -20,6 +21,7 @@ import 'core/storage.dart';
 import 'core/updates.dart';
 import 'core/work.dart';
 import 'core/youtube.dart';
+import 'core/youtube_public.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -106,11 +108,9 @@ class _LibraryHomeState extends State<LibraryHome> {
         numberInput.clear();
         titleInput.clear();
         authorInput.clear();
-        message = apiKeyInput.text.trim().isEmpty
-            ? '쇼츠 링크를 받았어. API 키가 없어 댓글 자동 조회는 불가능해. 유튜브에서 댓글을 복사해 붙여넣어줘.'
-            : '쇼츠 링크를 받았어. 설명란과 댓글을 조회할게.';
+        message = '쇼츠 링크를 받았어. 공개 댓글을 자동으로 조회할게.';
       });
-      if (apiKeyInput.text.trim().isNotEmpty) _fetch();
+      _fetch();
     });
   }
 
@@ -143,20 +143,24 @@ class _LibraryHomeState extends State<LibraryHome> {
       _status('정확한 YouTube Shorts 링크를 입력해줘.');
       return;
     }
-    if (apiKeyInput.text.trim().isEmpty) {
-      _status('YouTube Data API 키가 없어 댓글을 자동으로 가져올 수 없어. 유튜브에서 댓글을 복사해 붙여넣거나 개인 API 키를 입력해줘.');
-      return;
-    }
     setState(() => busy = true);
     final client = http.Client();
     try {
-      final data = await YoutubeClient(client).fetch(videoId, apiKeyInput.text.trim());
+      final key = apiKeyInput.text.trim();
+      final data = key.isEmpty
+          ? await YoutubePublicClient(client).fetch(videoId)
+          : await YoutubeClient(client).fetch(videoId, key);
       titleInput.text = data.title;
       commentInput.text = [data.description, ...data.comments]
           .where((s) => s.trim().isNotEmpty).join('\n');
       _analyze();
+      if (data.comments.isEmpty) {
+        _status('영상 설명란은 읽었지만 공개 댓글을 가져오지 못했어. '
+            '댓글이 필요하면 유튜브에서 직접 복사해줘.');
+      }
     } catch (e) {
-      _status('댓글 조회 실패: ' + e.toString());
+      _status('댓글 자동 조회 실패: ' + e.toString() +
+          ' / 유튜브에서 댓글을 복사해 직접 붙여넣을 수 있어.');
     } finally {
       client.close();
       if (mounted) setState(() => busy = false);
@@ -289,9 +293,36 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
-  /// Opens the built-in fixed web-reader URL. This is NOT a JSON gallery or
-  /// an in-app image downloader; browser navigation cannot update app progress.
-  Future<void> _readOnline(WorkEntry work, {int? page}) async {
+  /// Stream images in the shared Flutter reader; no JSON URL setup required.
+  /// If the remote source blocks the client, the web-reader action is available.
+  Future<void> _readOnline(WorkEntry work) async {
+    final client = http.Client();
+    try {
+      final remote = await HitomiGalleryProvider(client).load(work.workId);
+      if (!mounted) return;
+      await _touchRead(work);
+      final readerWork = work.copyWith(
+        currentPage: work.currentPage.clamp(1, remote.pageCount).toInt(),
+        title: work.title.isEmpty ? remote.title : work.title,
+      );
+      if (!mounted) return;
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(builder: (ctx) => GalleryReader(
+          work: readerWork,
+          archive: remote,
+          onPageChanged: (page) { _touchRead(work, page: page); },
+        )),
+      );
+    } catch (e) {
+      _status('앱 내 온라인 읽기 실패: ' + e.toString() +
+          ' / 작품 메뉴의 웹 리더로 열기를 이용할 수 있어.');
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _openWebReader(WorkEntry work, {int? page}) async {
     final currentPage = page ?? work.currentPage;
     try {
       final uri = HitomiReaderLink.forWork(work.workId, page: currentPage);
@@ -344,7 +375,7 @@ class _LibraryHomeState extends State<LibraryHome> {
       _status('시작 페이지는 1~1000000 사이의 숫자로 입력해줘.');
       return;
     }
-    await _readOnline(work, page: page);
+    await _openWebReader(work, page: page);
   }
 
   Future<void> _downloadOnline(WorkEntry work) async {
