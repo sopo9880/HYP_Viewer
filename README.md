@@ -2,7 +2,7 @@
 
 Local-first **Windows setup.exe + Android APK** app for finding and organizing references from YouTube Shorts. No AI service, login, or cloud library required.
 
-**Status:** experimental MVP. The development PR contains source code and an automated build workflow; there is no official stable release yet.
+**Status:** experimental v0.1.0 release candidate. Android signing must be configured for a durable release APK.
 
 ## Features implemented in the MVP
 
@@ -51,7 +51,7 @@ In the app, set an authorized image-source URL template such as https://gallery.
 
 ## Official releases
 
-The tag-triggered workflow creates Windows and Android installers **after a persistent Android signing key has been configured** as GitHub Actions Secrets. Follow [the release guide](docs/RELEASE_GUIDE.md) and preserve the signing key. The public repository does not require personal GitHub tokens to check its Releases. The updater refuses to install files lacking SHA-256 verification; Android and Windows always ask before installation.
+The reviewed 0.x release request in `.github/release-request.txt` triggers Windows and (when persistently signed) Android installers from main. The owner has explicitly required **only 0.x versions** until a future instruction to release 1.x. See [release guide](docs/RELEASE_GUIDE.md) and [version policy](docs/VERSIONING.md). The public repository does not require personal GitHub tokens to check its Releases. The updater refuses to install files lacking SHA-256 verification; Android and Windows always ask before installation.
 
 ## Privacy & backups
 

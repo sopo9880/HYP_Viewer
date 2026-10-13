@@ -34,16 +34,24 @@ Add these under repo Settings > Secrets and variables > Actions:
 - HYP_ANDROID_KEY_PASSWORD: your key password
 
 Never send the secret values in chat or commit them to source control.
-Missing secrets cause the official release workflow to stop. There is no
-fallback to a randomly generated debug certificate.
+Missing secrets never cause a debug-signed APK to be published. The Windows
+installer can release independently while Android waits for key configuration.
 
-## Official release
+## Official v0.x releases
 
-1. Merge a passing PR into main.
-2. Increase version and build number in pubspec.yaml.
-3. Create a matching annotated Git tag, such as v0.1.1, on that commit.
-4. Push tag. GitHub Actions attempts the signed APK and Windows installer.
-5. Both builds must pass before a release is published with SHA256SUMS.txt.
+See [VERSIONING.md](VERSIONING.md). Every automated release must remain within
+v0.MINOR.PATCH until the owner explicitly requests a 1.x release.
+
+1. Confirm Android and Windows CI checks pass on a reviewed PR.
+2. Update pubspec.yaml and bump the +build integer for Android.
+3. Update .github/release-request.txt to the matching v0.x tag.
+4. Merge the PR into main, triggering Publish HYP Viewer 0.x Releases.
+5. The workflow validates version consistency and builds Windows Setup.exe.
+   It also builds a permanently signed Android APK if signing secrets exist.
+6. GitHub Releases receives the built installers and SHA256SUMS.txt.
+7. If Android signing secrets were missing, add them and rerun the same
+   release workflow on the same main commit to attach the signed APK.
+
 
 The Windows installer has a stable Inno Setup AppId and installs per user.
 Flutter's application-support directory remains outside the app installation

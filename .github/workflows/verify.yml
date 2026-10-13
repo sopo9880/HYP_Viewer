@@ -30,6 +30,8 @@ jobs:
       - name: Generate Flutter Android host project
         run: flutter create --platforms=android --org com.sopo9880 --project-name hyp_viewer .
       - run: flutter pub get
+      - name: Enforce 0.x release policy
+        run: python3 scripts/check_release_version.py
       - run: flutter analyze --no-fatal-infos
       - run: flutter test
       - run: flutter build apk --debug

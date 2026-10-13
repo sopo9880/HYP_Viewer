@@ -1,14 +1,85 @@
-name: Publish HYP Viewer installers
+name: Publish HYP Viewer 0.x Releases
 
+# Releases begin only when the reviewed release-request file changes on main.
+# A manual re-run on that same commit may later attach a permanently signed APK.
 on:
   push:
-    tags: ["v[0-9]*"]
+    branches: [main]
+    paths:
+      - .github/release-request.txt
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: hyp-publish-release
+  cancel-in-progress: false
+
 jobs:
+  preflight:
+    name: Enforce 0.x version and check Android signing
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      android_ready: ${{ steps.signing.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the release request and pubspec
+        id: version
+        run: python3 scripts/check_release_version.py
+      - name: Check signing key presence without printing secrets
+        id: signing
+        env:
+          SIGNING_B64: ${{ secrets.HYP_ANDROID_KEYSTORE_BASE64 }}
+          SIGNING_STORE: ${{ secrets.HYP_ANDROID_KEYSTORE_PASSWORD }}
+          SIGNING_ALIAS: ${{ secrets.HYP_ANDROID_KEY_ALIAS }}
+          SIGNING_KEY: ${{ secrets.HYP_ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          if [[ -n "$SIGNING_B64" && -n "$SIGNING_STORE" && -n "$SIGNING_ALIAS" && -n "$SIGNING_KEY" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "Persistent Android signing is configured."
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Android signing secrets are missing: only Windows Setup.exe can be published for now."
+          fi
+
+  windows:
+    name: Build Windows Setup.exe
+    needs: preflight
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Windows host project
+        run: flutter create --platforms=windows --org com.sopo9880 --project-name hyp_viewer .
+      - run: flutter pub get
+      - run: flutter test
+      - run: flutter build windows --release
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+      - name: Package Setup.exe
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$env:RELEASE_VERSION" "installer\hyp_viewer.iss"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: installer/Output/HYP_Viewer_Setup_*.exe
+          if-no-files-found: error
+
   android:
+    name: Build persistently signed Android APK
+    needs: preflight
+    if: ${{ needs.preflight.outputs.android_ready == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +91,7 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Prepare Android project
+      - name: Generate Android host project
         run: flutter create --platforms=android --org com.sopo9880 --project-name hyp_viewer .
       - run: flutter pub get
       - run: flutter test
@@ -32,64 +103,96 @@ jobs:
           HYP_ANDROID_KEY_PASSWORD: ${{ secrets.HYP_ANDROID_KEY_PASSWORD }}
         run: python3 scripts/prepare_android_signing.py
       - run: flutter build apk --release
-      - name: Rename APK
+      - name: Name signed APK
+        env:
+          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
         shell: bash
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk "dist/HYP_Viewer_$GITHUB_REF_NAME.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/HYP_Viewer_$RELEASE_TAG.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: android-release
-          path: dist/*.apk
-          if-no-files-found: error
-
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - name: Prepare Windows project
-        run: flutter create --platforms=windows --org com.sopo9880 --project-name hyp_viewer .
-      - run: flutter pub get
-      - run: flutter build windows --release
-      - name: Install Inno Setup
-        shell: pwsh
-        run: choco install innosetup -y --no-progress
-      - name: Build installer
-        shell: pwsh
-        run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" "installer\hyp_viewer.iss"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-release
-          path: installer/Output/HYP_Viewer_Setup_*.exe
+          path: dist/HYP_Viewer_*.apk
           if-no-files-found: error
 
   publish:
+    name: Publish or safely complete a v0.x GitHub Release
     runs-on: ubuntu-latest
-    needs: [android, windows]
+    needs: [preflight, windows, android]
+    if: ${{ always() && needs.preflight.result == 'success' && needs.windows.result == 'success' && (needs.android.result == 'success' || needs.android.result == 'skipped') }}
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: android-release
-          path: dist
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: windows-release
           path: dist
-      - name: Generate SHA256 checksums
+      - uses: actions/download-artifact@v4
+        if: ${{ needs.preflight.outputs.android_ready == 'true' }}
+        with:
+          name: android-release
+          path: dist
+      - name: Generate checksums and transparent release notes
+        env:
+          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
+          ANDROID_READY: ${{ needs.preflight.outputs.android_ready }}
         shell: bash
         run: |
-          cd dist
-          sha256sum *.apk *.exe > SHA256SUMS.txt
-      - name: Publish only after both builds succeeded
+          set -euo pipefail
+          (cd dist && sha256sum HYP_Viewer_Setup_*.exe > SHA256SUMS.txt)
+          if [[ "$ANDROID_READY" == "true" ]]; then
+            (cd dist && sha256sum HYP_Viewer_v*.apk >> SHA256SUMS.txt)
+            ANDROID_NOTE="Permanently signed APK included."
+          else
+            ANDROID_NOTE="Signed APK pending. A persistent Android keystore must be configured before it can be attached. Do not use ephemeral debug APKs for normal updating."
+          fi
+          cat > release-notes.md <<EOF
+          # HYP Viewer $RELEASE_TAG (0.x preview)
+
+          First experimental 0.x release. This app is not yet feature-complete.
+
+          - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
+          - Android: $ANDROID_NOTE
+
+          Features: YouTube Shorts share handling, deterministic work-number
+          candidates, local library and reading progress, portable JSON
+          backup/import and XLSX export, local CBZ/ZIP reader, and an
+          opt-in HTTPS image manifest source for online reading / permitted
+          manual CBZ downloads.
+
+          Known limitations: No built-in Hitomi gallery scraper. Automatic
+          YouTube comments require a user-provided YouTube Data API key.
+          Downloaded CBZ files are not included in JSON backups.
+
+          Verify assets using SHA256SUMS.txt. Only download from sources
+          you have permission to access and retain.
+          EOF
+      - name: Publish v0.x only and never replace assets from a different commit
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
         shell: bash
-        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')
+            if [[ "$sha" != "$GITHUB_SHA" ]]; then
+              echo "::error::The existing tag targets a different commit. Refusing to overwrite."
+              exit 1
+            fi
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+            gh release edit "$RELEASE_TAG" --notes-file release-notes.md
+          else
+            tag_exists=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null || true)
+            if [[ -n "$tag_exists" && "$tag_exists" != "$GITHUB_SHA" ]]; then
+              echo "::error::Tag exists at a different commit."
+              exit 1
+            fi
+            if [[ -n "$tag_exists" ]]; then
+              gh release create "$RELEASE_TAG" dist/* --verify-tag --title "HYP Viewer $RELEASE_TAG" --notes-file release-notes.md
+            else
+              gh release create "$RELEASE_TAG" dist/* --target "$GITHUB_SHA" --title "HYP Viewer $RELEASE_TAG" --notes-file release-notes.md
+            fi
+          fi
