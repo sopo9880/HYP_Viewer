@@ -278,7 +278,7 @@ class _HypDashboardState extends State<HypDashboard> {
         selectedIndex: [
           HypPage.home, HypPage.library, HypPage.favorites,
           HypPage.downloads, HypPage.settings,
-        ].indexOf(_page).clamp(0, 4),
+        ].indexOf(_page).clamp(0, 4).toInt(),
         onDestinationSelected: (index) => _navigate([
           HypPage.home, HypPage.library, HypPage.favorites,
           HypPage.downloads, HypPage.settings,
