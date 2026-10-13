@@ -7,7 +7,7 @@ import '../core/work.dart';
 /// PageView supports swiping; InteractiveViewer supports pan/zoom.
 class GalleryReader extends StatefulWidget {
   final WorkEntry work;
-  final GalleryArchive archive;
+  final GalleryPageSource archive;
   final ValueChanged<int> onPageChanged;
 
   const GalleryReader({
@@ -50,7 +50,7 @@ class _GalleryReaderState extends State<GalleryReader> {
 
   Future<Uint8List> _bytesAt(int index) {
     _imageCache.removeWhere((key, _) => (key - index).abs() > 3);
-    return _imageCache.putIfAbsent(index, () async => widget.archive.pageBytes(index));
+    return _imageCache.putIfAbsent(index, () async => widget.archive.loadPage(index));
   }
 
   Widget _imageAt(int index) {
