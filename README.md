@@ -13,10 +13,11 @@ Local-first **Windows setup.exe + Android APK** app for finding and organizing r
 - Local library with favorites, reading page, completion state and metadata.
 - **JSON export/import** for Android-to-Android, Android-to-Windows and Windows-to-Windows library backup or merge.
 - **Excel XLSX export only** to read and organize library information.
-- Check public GitHub Releases for a newer version and open the release page.
+- Import user-owned CBZ/ZIP image archives per saved work; open a built-in full-screen reader with zoom, page swiping, horizontal/vertical navigation and progress saving.
+- Check public GitHub Releases, download a platform-specific installer, validate its SHA-256 digest, and request OS-approved installation (APK system installer or Windows Setup.exe).
 - Windows Inno Setup installer and Android debug APK produced by the GitHub Actions verification workflow.
 
-The current MVP is **not yet a full gallery-image reader**. No scraped, copyrighted, or explicit imagery is bundled or distributed. Reading arbitrary remote image galleries and in-app silent auto-installation remain future work.
+The local CBZ/ZIP **image reader is implemented**, but it does not automatically fetch images from the numeric work ID or scrape a third-party site. The user provides an archive they have the right to use. No third-party imagery is bundled or distributed. JSON library backups preserve metadata and reading progress but do not contain local CBZ image files.
 
 ## Try the development builds
 
@@ -38,9 +39,13 @@ flutter run -d windows
 
 Do not use `flutter create --overwrite`: native Android sharing files already live in the repository.
 
+## Reading locally
+
+Save a work number, then click **CBZ/ZIP 연결** on its library card. Select a comic archive containing PNG/JPEG/WebP/GIF/BMP pages (maximum 180 MB compressed, 1500 pages). Click **읽기** to open it again; your last page is retained. Files stay in app support storage, not in the installation directory.
+
 ## Official releases
 
-The tag-triggered workflow creates Windows and Android installers **after a persistent Android signing key has been configured** as GitHub Actions Secrets. Follow [the release guide](docs/RELEASE_GUIDE.md) and preserve the signing key. The public repository does not require personal GitHub tokens to check its Releases.
+The tag-triggered workflow creates Windows and Android installers **after a persistent Android signing key has been configured** as GitHub Actions Secrets. Follow [the release guide](docs/RELEASE_GUIDE.md) and preserve the signing key. The public repository does not require personal GitHub tokens to check its Releases. The updater refuses to install files lacking SHA-256 verification; Android and Windows always ask before installation.
 
 ## Privacy & backups
 
