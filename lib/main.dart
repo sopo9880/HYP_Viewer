@@ -10,6 +10,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'core/export.dart';
 import 'core/gallery.dart';
 import 'ui/gallery_reader.dart';
+import 'ui/hyp_dashboard.dart';
+import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
 import 'core/online_gallery.dart';
 import 'core/shares.dart';
@@ -29,9 +31,8 @@ class HypViewerApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     title: 'HYP Viewer',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.deepPurple),
-    darkTheme: ThemeData.dark(useMaterial3: true),
-    themeMode: ThemeMode.system,
+    theme: HypTheme.dark,
+    themeMode: ThemeMode.dark,
     home: const LibraryHome(),
   );
 }
@@ -44,6 +45,7 @@ class LibraryHome extends StatefulWidget {
 
 class _LibraryHomeState extends State<LibraryHome> {
   final storage = LibraryStorage();
+  int navigationEpoch = 0;
   final galleryStore = GalleryStore();
   final sourceSettings = OnlineSourceSettings();
   final onlineSourceInput = TextEditingController();
@@ -97,6 +99,7 @@ class _LibraryHomeState extends State<LibraryHome> {
       if (!mounted) return;
       setState(() {
         urlInput.text = url;
+        navigationEpoch += 1;
         candidates = [];
         commentInput.clear();
         numberInput.clear();
@@ -196,6 +199,27 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
+  Future<void> _touchRead(WorkEntry work, {int? page}) async {
+    final matches = library.works.where((w) => w.key == work.key);
+    if (matches.isEmpty) return;
+    final current = matches.first;
+    await _updateWork(current.copyWith(
+      currentPage: page ?? current.currentPage,
+      lastOpenedAt: DateTime.now().toUtc().toIso8601String(),
+    ));
+  }
+
+  Future<void> _openOriginal(WorkEntry work) async {
+    final uri = Uri.tryParse(work.videoUrl);
+    if (uri == null || uri.scheme != 'https' ||
+        !['www.youtube.com', 'youtube.com', 'm.youtube.com']
+            .contains(uri.host.toLowerCase())) {
+      _status('원본 쇼츠 링크가 유효하지 않아.');
+      return;
+    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   Future<void> _export(bool excel) async {
     try {
       final data = excel ? LibraryExport.xlsx(library) : LibraryExport.json(library);
@@ -254,13 +278,14 @@ class _LibraryHomeState extends State<LibraryHome> {
     try {
       final remote = await OnlineGalleryProvider(client).load(pattern, work.workId);
       if (!mounted) return;
+      await _touchRead(work);
       await Navigator.push<void>(
         context,
         MaterialPageRoute(builder: (ctx) => GalleryReader(
           work: work,
           archive: remote,
           onPageChanged: (page) {
-            _updateWork(work.copyWith(currentPage: page));
+            _touchRead(work, page: page);
           },
         )),
       );
@@ -370,13 +395,14 @@ class _LibraryHomeState extends State<LibraryHome> {
     try {
       final book = archive ?? await galleryStore.read(work.workId);
       if (!mounted) return;
+      await _touchRead(work);
       await Navigator.push<void>(
         context,
         MaterialPageRoute(builder: (ctx) => GalleryReader(
           work: work,
           archive: book,
           onPageChanged: (page) {
-            _updateWork(work.copyWith(currentPage: page));
+            _touchRead(work, page: page);
           },
         )),
       );
@@ -503,134 +529,41 @@ class _LibraryHomeState extends State<LibraryHome> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('HYP Viewer'), actions: [
-        IconButton(tooltip: '업데이트 확인', onPressed: downloadingUpdate ? null : _checkRelease, icon: const Icon(Icons.system_update)),
-        IconButton(tooltip: 'JSON 내보내기', onPressed: () => _export(false), icon: const Icon(Icons.file_download)),
-        IconButton(tooltip: 'Excel 내보내기', onPressed: () => _export(true), icon: const Icon(Icons.table_chart)),
-        IconButton(tooltip: 'JSON 가져오기', onPressed: _import, icon: const Icon(Icons.file_upload)),
-      ]),
-      body: ListView(padding: const EdgeInsets.all(18), children: [
-        Text('쇼츠 작품 번호 찾기', style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 12),
-        TextField(controller: urlInput, decoration: const InputDecoration(labelText: 'YouTube Shorts 링크', border: OutlineInputBorder())),
-        const SizedBox(height: 12),
-        TextField(controller: apiKeyInput, obscureText: true, decoration: const InputDecoration(labelText: 'YouTube API 키 (선택)', border: OutlineInputBorder())),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(onPressed: busy ? null : _fetch, icon: const Icon(Icons.download), label: const Text('설명란 및 댓글 불러오기')),
-        const SizedBox(height: 10),
-        Text('온라인 작품 소스 (허가된 HTTPS 서버)', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 6),
-        TextField(
-          controller: onlineSourceInput,
-          decoration: const InputDecoration(
-            labelText: '매니페스트 주소 템플릿',
-            hintText: 'https://my-gallery.example/galleries/{workId}.json',
-            helperText: '코드별 이미지 목록을 제공하는 본인 소스만 연결해줘.',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Align(
-          alignment: Alignment.centerRight,
-          child: OutlinedButton.icon(
-            onPressed: _saveOnlineSource,
-            icon: const Icon(Icons.settings),
-            label: const Text('소스 주소 저장'),
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextField(controller: commentInput, minLines: 3, maxLines: 8,
-          decoration: const InputDecoration(labelText: '댓글 원문 (직접 붙여넣기 가능)', border: OutlineInputBorder())),
-        const SizedBox(height: 8),
-        FilledButton.tonalIcon(onPressed: _analyze, icon: const Icon(Icons.numbers), label: const Text('숫자 추출')),
-        for (final candidate in candidates.take(20)) ListTile(
-          title: Text(candidate.code),
-          subtitle: Text(candidate.evidence, maxLines: 2, overflow: TextOverflow.ellipsis),
-          trailing: const Icon(Icons.add_circle_outline),
-          onTap: () => setState(() => numberInput.text = candidate.code),
-        ),
-        const SizedBox(height: 8),
-        TextField(controller: numberInput, keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: '확정 작품 번호', border: OutlineInputBorder())),
-        const SizedBox(height: 8),
-        TextField(controller: titleInput, decoration: const InputDecoration(labelText: '작품 제목', border: OutlineInputBorder())),
-        const SizedBox(height: 8),
-        TextField(controller: authorInput, decoration: const InputDecoration(labelText: '작가', border: OutlineInputBorder())),
-        const SizedBox(height: 10),
-        FilledButton.icon(onPressed: _saveWork, icon: const Icon(Icons.bookmark_add), label: const Text('서재에 저장')),
-        if (busy) const LinearProgressIndicator(),
-        if (downloadingUpdate) LinearProgressIndicator(value: updateProgress),
-        if (message.isNotEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text(message)),
-        const Divider(height: 30),
-        Text('내 서재 (' + library.works.length.toString() + ')',
-          style: Theme.of(context).textTheme.titleLarge),
-        if (library.works.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('저장된 작품이 없어.')),
-        for (final work in library.works) Card(child: Column(children: [
-          ListTile(title: Text(work.title.isEmpty ? work.workId : work.title),
-            subtitle: Text('번호 ' + work.workId + ' / ' + work.author),
-            trailing: IconButton(
-              icon: Icon(work.favorite ? Icons.favorite : Icons.favorite_border),
-              onPressed: () => _updateWork(work.copyWith(favorite: !work.favorite)),
-            )),
-          Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
-            IconButton(onPressed: () => _updateWork(
-              work.copyWith(currentPage: (work.currentPage - 1).clamp(1, 1000000).toInt())),
-              icon: const Icon(Icons.remove_circle_outline)),
-            Text('페이지 ' + work.currentPage.toString()),
-            IconButton(onPressed: () => _updateWork(work.copyWith(currentPage: work.currentPage + 1)),
-              icon: const Icon(Icons.add_circle_outline)),
-            FilterChip(label: const Text('완독'), selected: work.completed,
-              onSelected: (v) => _updateWork(work.copyWith(completed: v))),
-            if (work.videoUrl.isNotEmpty) TextButton(
-              onPressed: () => launchUrl(Uri.parse(work.videoUrl), mode: LaunchMode.externalApplication),
-              child: const Text('원본 쇼츠')),
-            TextButton.icon(
-              onPressed: () => _readOnline(work),
-              icon: const Icon(Icons.cloud_outlined),
-              label: const Text('온라인 읽기'),
-            ),
-            TextButton.icon(
-              onPressed: galleryDownloadToken == null
-                  ? () => _downloadOnline(work) : null,
-              icon: const Icon(Icons.cloud_download_outlined),
-              label: const Text('다운로드'),
-            ),
-            TextButton.icon(
-              onPressed: () => _openGallery(work),
-              icon: const Icon(Icons.menu_book),
-              label: const Text('오프라인 읽기'),
-            ),
-            TextButton.icon(
-              onPressed: () => _importGallery(work),
-              icon: const Icon(Icons.folder_open),
-              label: const Text('CBZ/ZIP 연결'),
-            ),
-            if (downloadingGalleryKey == work.key)
-              SizedBox(
-                width: 270,
-                child: Column(
-                  children: [
-                    LinearProgressIndicator(
-                      value: totalGalleryPages > 0
-                          ? downloadedGalleryPages / totalGalleryPages : null,
-                    ),
-                    Text('다운로드 ' + downloadedGalleryPages.toString() +
-                        '/' + totalGalleryPages.toString() +
-                        '장 · ' + (downloadedGalleryBytes / (1024 * 1024))
-                            .toStringAsFixed(1) + 'MB'),
-                    TextButton.icon(
-                      onPressed: galleryDownloadToken?.cancel,
-                      icon: const Icon(Icons.cancel_outlined),
-                      label: const Text('다운로드 취소'),
-                    ),
-                  ],
-                ),
-              ),
-          ]),
-        ])),
-      ]),
-    );
-  }
+  Widget build(BuildContext context) => HypDashboard(
+    library: library,
+    galleryStore: galleryStore,
+    urlInput: urlInput,
+    apiKeyInput: apiKeyInput,
+    commentInput: commentInput,
+    numberInput: numberInput,
+    titleInput: titleInput,
+    authorInput: authorInput,
+    onlineSourceInput: onlineSourceInput,
+    candidates: candidates,
+    busy: busy,
+    message: message,
+    navigationEpoch: navigationEpoch,
+    downloadingUpdate: downloadingUpdate,
+    updateProgress: updateProgress,
+    downloadingGalleryKey: downloadingGalleryKey,
+    downloadedGalleryPages: downloadedGalleryPages,
+    totalGalleryPages: totalGalleryPages,
+    downloadedGalleryBytes: downloadedGalleryBytes,
+    onAnalyze: _analyze,
+    onFetch: _fetch,
+    onSaveWork: _saveWork,
+    onSaveOnlineSource: _saveOnlineSource,
+    onExportJson: () => _export(false),
+    onExportExcel: () => _export(true),
+    onImportJson: _import,
+    onCheckRelease: () => _checkRelease(),
+    onOpenGallery: (work) => _openGallery(work),
+    onReadOnline: _readOnline,
+    onDownloadOnline: _downloadOnline,
+    onImportGallery: _importGallery,
+    onUpdateWork: _updateWork,
+    onOpenOriginal: _openOriginal,
+    onCancelGalleryDownload: () => galleryDownloadToken?.cancel(),
+    onDismissMessage: () => setState(() => message = ''),
+  );
 }
