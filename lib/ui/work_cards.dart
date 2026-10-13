@@ -71,7 +71,7 @@ class HypWorkCard extends StatelessWidget {
     final progress = work.completed
         ? 1.0
         : totalPages != null && totalPages! > 0
-            ? (work.currentPage / totalPages!).clamp(0.0, 1.0)
+            ? (work.currentPage / totalPages!).clamp(0.0, 1.0).toDouble()
             : null;
     return Material(
       color: HypColors.surface,
