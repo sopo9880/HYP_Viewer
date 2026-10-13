@@ -13,7 +13,7 @@ void main() {
   test('release asset only accepts expected GitHub owner and path', () {
     ReleaseAsset? parse(String url) => ReleaseAsset.fromJson({
       'name': 'HYP_Viewer_v0.2.0.apk', 'browser_download_url': url, 'size': 42,
-      'digest': 'sha256:' + 'a' * 64,
+      'digest': 'sha256:' + ''.padLeft(64, 'a'),
     });
     expect(parse('https://github.com/sopo9880/HYP_Viewer/releases/download/v0.2.0/HYP_Viewer_v0.2.0.apk'), isNotNull);
     expect(parse('https://github.com.evil.org/sopo9880/HYP_Viewer/releases/download/v0.2.0/x.apk'), isNull);
@@ -22,9 +22,9 @@ void main() {
 
   test('platform only selects uniquely named assets', () {
     final a = ReleaseAsset('HYP_Viewer_v0.2.0.apk',
-      Uri.parse('https://github.com/sopo9880/HYP_Viewer/releases/download/v0.2.0/HYP_Viewer_v0.2.0.apk'), 42, 'a' * 64);
+      Uri.parse('https://github.com/sopo9880/HYP_Viewer/releases/download/v0.2.0/HYP_Viewer_v0.2.0.apk'), 42, ''.padLeft(64, 'a'));
     final e = ReleaseAsset('HYP_Viewer_Setup_v0.2.0.exe',
-      Uri.parse('https://github.com/sopo9880/HYP_Viewer/releases/download/v0.2.0/HYP_Viewer_Setup_v0.2.0.exe'), 42, 'b' * 64);
+      Uri.parse('https://github.com/sopo9880/HYP_Viewer/releases/download/v0.2.0/HYP_Viewer_Setup_v0.2.0.exe'), 42, ''.padLeft(64, 'b'));
     final release = ReleaseUpdate('0.2.0', 'notes', 'https://github.com/sopo9880/HYP_Viewer', assets: [a, e]);
     expect(release.installerFor(TargetPlatform.android)?.name, a.name);
     expect(release.installerFor(TargetPlatform.windows)?.name, e.name);
