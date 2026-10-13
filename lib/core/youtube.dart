@@ -35,7 +35,9 @@ class YoutubeClient {
       'part': 'snippet', 'id': id, 'key': apiKey
     });
     final videoResponse = await client.get(videoUri).timeout(const Duration(seconds: 12));
-    if (videoResponse.statusCode != 200) throw Exception('YouTube video request failed');
+    if (videoResponse.statusCode != 200) {
+      throw Exception('YouTube 영상 정보 조회 실패 (HTTP ${videoResponse.statusCode}). API 키/할당량을 확인해줘.');
+    }
     final videoData = jsonDecode(videoResponse.body) as Map<String, dynamic>;
     final items = videoData['items'] as List? ?? [];
     if (items.isEmpty) throw Exception('Video was not found');
@@ -46,12 +48,14 @@ class YoutubeClient {
     });
     final commentResponse = await client.get(commentUri).timeout(const Duration(seconds: 12));
     final comments = <String>[];
-    if (commentResponse.statusCode == 200) {
-      final commentData = jsonDecode(commentResponse.body) as Map<String, dynamic>;
-      for (final item in commentData['items'] as List? ?? []) {
-        final body = item['snippet']?['topLevelComment']?['snippet']?['textDisplay'];
-        if (body is String) comments.add(body);
-      }
+    if (commentResponse.statusCode != 200) {
+      throw Exception('YouTube 댓글 조회 실패 (HTTP ${commentResponse.statusCode}). '
+          'API 권한·할당량 또는 영상의 댓글 허용 여부를 확인해줘.');
+    }
+    final commentData = jsonDecode(commentResponse.body) as Map<String, dynamic>;
+    for (final item in commentData['items'] as List? ?? []) {
+      final body = item['snippet']?['topLevelComment']?['snippet']?['textDisplay'];
+      if (body is String) comments.add(body);
     }
     return YoutubeResults(metadata['title'] as String? ?? '',
         metadata['description'] as String? ?? '', comments);
