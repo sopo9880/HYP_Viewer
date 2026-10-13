@@ -2,24 +2,24 @@
 
 Local-first **Windows setup.exe + Android APK** app for finding and organizing references from YouTube Shorts. No AI service, login, or cloud library required.
 
-**Status:** experimental v0.1.0 release candidate. Android signing must be configured for a durable release APK.
+**Status:** v0.1.0 is published. This feature branch contains unreleased changes intended for the next 0.x update; it is not a new release yet.
 
 ## Features implemented in the MVP
 
 - Share a Shorts URL from YouTube to the Android app, or paste a URL in Windows.
 - Extract numeric work-reference candidates from text using deterministic rules (no LLM).
-- Optional YouTube Data API request to load a video's description and sampled top-level comments. **Each user must supply their own API key** to use this automatic fetch; it is not embedded or saved in exports. Without a key, paste comment text directly.
+- **Keyless Shorts comment lookup (experimental on this branch):** fetch public YouTube watch-page metadata and sample comments using the website's public client configuration. No personal YouTube Data API key is required; changes to YouTube, consent screens and anti-bot controls can prevent access. The optional personal Data API key remains available as an advanced fallback. If fetching fails, paste comment text manually. See [technical notes](docs/YOUTUBE_PUBLIC_COMMENTS.md).
 - Inspect all candidate codes and the original text; manually enter the correct number when ambiguous.
 - Local library with favorites, reading page, completion state and metadata.
 - **JSON export/import** for Android-to-Android, Android-to-Windows and Windows-to-Windows library backup or merge.
 - **Excel XLSX export only** to read and organize library information.
 - Import user-owned CBZ/ZIP image archives per saved work; open a built-in full-screen reader with zoom, page swiping, horizontal/vertical navigation and progress saving.
-- **Online reading (opt-in):** configure an authorized HTTPS image source manifest, use the work ID to load pages, and read without importing a file first.
+- **In-app online reading:** resolve metadata and images for a numbered Hitomi gallery, then display its pages in the existing Flutter reader with saved progress. As a fallback open a fixed external web reader URL: page 1 uses `#1`; page N>=2 uses `#N-(N+1)`.
 - **Optional offline download:** press Download, review the consent dialog, and save a CBZ only if the source explicitly permits downloads. Progress and cancellation are included.
 - Check public GitHub Releases, download a platform-specific installer, validate its SHA-256 digest, and request OS-approved installation (APK system installer or Windows Setup.exe).
 - Windows Inno Setup installer and Android debug APK produced by the GitHub Actions verification workflow.
 
-The reader supports either locally imported CBZ/ZIP files or an **explicitly configured, authorized HTTPS manifest server** that maps the numeric work ID to images. No arbitrary third-party scraper is included. The download button saves approved remote pages as CBZ files. No third-party imagery is bundled or distributed. JSON library backups preserve metadata and reading progress but do not contain locally saved CBZ files.
+The reader supports local CBZ/ZIP files and numbered Hitomi galleries, with optional external web-reader links. A **separate, user-authorized JSON manifest server** is still supported for explicitly permitted offline CBZ downloads. Built-in Hitomi image reading does not imply or enable bulk downloading. No third-party imagery is bundled. JSON backups preserve metadata and progress but do not contain saved image archives.
 
 ## Try the development builds
 
@@ -47,7 +47,7 @@ Save a work number, then click **CBZ/ZIP 연결** on its library card. Select a 
 
 ## Online reading and optional downloads
 
-In the app, set an authorized image-source URL template such as https://gallery.example.org/galleries/{workId}.json and click the Save Source button. A compatible server returns a JSON page manifest with an explicit allowDownload flag. Each work card offers **온라인 읽기**, **다운로드**, **오프라인 읽기** and **CBZ/ZIP 연결**. See [online source setup](docs/ONLINE_SOURCES.md) for the exact schema, permissions, file limits and limitations.
+For in-app reading, save a numeric work ID and select **앱 내 온라인 읽기**. The app resolves gallery metadata automatically. For the external browser, use **웹 리더 · 시작 페이지 선택**; this opens the fixed `https://hitomi.la/reader/{workId}.html#...` link, but browser progress is not synchronized. To enable **JSON 소스 다운로드**, optionally configure an authorized image-source URL template such as `https://gallery.example.org/galleries/{workId}.json`. Downloads are enabled only if that source explicitly returns `allowDownload: true`. See [online sources](docs/ONLINE_SOURCES.md).
 
 ## Official releases
 
