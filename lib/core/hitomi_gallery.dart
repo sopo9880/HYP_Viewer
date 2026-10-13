@@ -27,6 +27,15 @@ class HitomiGallery implements GalleryPageSource {
   int get pageCount => pageUrls.length;
 
   @override
+  String filename(int index) {
+    if (index < 0 || index >= pageUrls.length) {
+      throw RangeError.index(index, pageUrls);
+    }
+    final extension = pageUrls[index].pathSegments.last.split('.').last;
+    return 'page_' + (index + 1).toString().padLeft(5, '0') + '.' + extension;
+  }
+
+  @override
   Future<Uint8List> loadPage(int index) {
     if (index < 0 || index >= pageUrls.length) {
       throw RangeError.index(index, pageUrls);
