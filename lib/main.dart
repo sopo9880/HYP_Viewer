@@ -1,10 +1,14 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/export.dart';
+import 'core/gallery.dart';
+import 'ui/gallery_reader.dart';
 import 'core/number_extractor.dart';
 import 'core/shares.dart';
 import 'core/storage.dart';
@@ -38,6 +42,9 @@ class LibraryHome extends StatefulWidget {
 
 class _LibraryHomeState extends State<LibraryHome> {
   final storage = LibraryStorage();
+  final galleryStore = GalleryStore();
+  bool downloadingUpdate = false;
+  double updateProgress = 0;
   final urlInput = TextEditingController();
   final commentInput = TextEditingController();
   final numberInput = TextEditingController();
@@ -208,7 +215,99 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
+  Future<void> _importGallery(WorkEntry work) async {
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['cbz', 'zip'],
+        withData: false,
+      );
+      if (picked == null) return;
+      final selected = picked.files.single.path;
+      if (selected == null) {
+        _status('선택한 파일의 경로를 읽지 못했어.');
+        return;
+      }
+      final archive = await galleryStore.importFile(work.workId, selected);
+      _status('페이지 ' + archive.pageCount.toString() + '장을 불러왔어.');
+      await _openGallery(work, archive: archive);
+    } catch (e) {
+      _status('이미지 파일 가져오기 실패: ' + e.toString());
+    }
+  }
+
+  Future<void> _openGallery(WorkEntry work, {GalleryArchive? archive}) async {
+    try {
+      final book = archive ?? await galleryStore.read(work.workId);
+      if (!mounted) return;
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(builder: (ctx) => GalleryReader(
+          work: work,
+          archive: book,
+          onPageChanged: (page) {
+            _updateWork(work.copyWith(currentPage: page));
+          },
+        )),
+      );
+    } catch (e) {
+      _status('읽기 실패: ' + e.toString() + ' / CBZ 또는 ZIP 파일을 먼저 연결해줘.');
+    }
+  }
+
+  Future<void> _downloadInstaller(
+      ReleaseUpdate release, ReleaseAsset asset) async {
+    if (downloadingUpdate) return;
+    final client = http.Client();
+    setState(() {
+      downloadingUpdate = true;
+      updateProgress = 0;
+      message = '설치 파일을 내려받는 중이야.';
+    });
+    try {
+      final installer = await UpdateService(client).download(
+        release,
+        asset,
+        onProgress: (value) {
+          if (mounted) setState(() => updateProgress = value.clamp(0.0, 1.0));
+        },
+      );
+      if (!mounted) return;
+      final install = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('업데이트 파일 검증 완료'),
+          content: const Text(
+            '다운로드한 파일의 SHA-256을 확인했어. '
+            'Windows는 앱을 종료한 뒤 설치하고, Android는 시스템 설치 확인창이 열려. 계속할까?',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('나중에')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('설치 시작')),
+          ],
+        ),
+      );
+      if (install == true) {
+        await UpdateService(client).launchInstaller(installer);
+        if (Platform.isWindows) {
+          exit(0);
+        }
+        _status('Android 설치 화면을 열었어. 시스템에서 설치를 승인해줘.');
+      } else {
+        _status('검증된 설치 파일을 임시 폴더에 보관했어.');
+      }
+    } catch (e) {
+      _status('업데이트 실패: ' + e.toString());
+    } finally {
+      client.close();
+      if (mounted) setState(() => downloadingUpdate = false);
+    }
+  }
+
   Future<void> _checkRelease() async {
+    if (downloadingUpdate) return;
     final client = http.Client();
     try {
       final current = (await PackageInfo.fromPlatform()).version;
@@ -218,16 +317,29 @@ class _LibraryHomeState extends State<LibraryHome> {
         return;
       }
       if (!mounted) return;
-      final approved = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-        title: Text('업데이트 v' + next.version),
-        content: Text(next.notes),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('GitHub 릴리스 열기')),
-        ],
-      ));
-      if (approved == true) {
+      final asset = next.installerFor(defaultTargetPlatform);
+      final choice = await showDialog<String>(context: context, builder: (ctx) =>
+        AlertDialog(
+          title: Text('업데이트 v' + next.version),
+          content: Text(next.notes.isEmpty
+              ? '새 버전이 공개됐어. 설치 파일을 다운로드할까?'
+              : next.notes),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx),
+                child: const Text('취소')),
+            TextButton(onPressed: () => Navigator.pop(ctx, 'web'),
+                child: const Text('릴리스 보기')),
+            if (asset != null) FilledButton(
+              onPressed: () => Navigator.pop(ctx, 'download'),
+              child: const Text('다운로드 및 검증'),
+            ),
+          ],
+        ),
+      );
+      if (choice == 'web') {
         await launchUrl(Uri.parse(next.url), mode: LaunchMode.externalApplication);
+      } else if (choice == 'download' && asset != null) {
+        await _downloadInstaller(next, asset);
       }
     } catch (e) {
       _status('업데이트 확인 실패: ' + e.toString());
@@ -248,7 +360,7 @@ class _LibraryHomeState extends State<LibraryHome> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('HYP Viewer'), actions: [
-        IconButton(tooltip: '업데이트 확인', onPressed: _checkRelease, icon: const Icon(Icons.system_update)),
+        IconButton(tooltip: '업데이트 확인', onPressed: downloadingUpdate ? null : _checkRelease, icon: const Icon(Icons.system_update)),
         IconButton(tooltip: 'JSON 내보내기', onPressed: () => _export(false), icon: const Icon(Icons.file_download)),
         IconButton(tooltip: 'Excel 내보내기', onPressed: () => _export(true), icon: const Icon(Icons.table_chart)),
         IconButton(tooltip: 'JSON 가져오기', onPressed: _import, icon: const Icon(Icons.file_upload)),
@@ -282,6 +394,7 @@ class _LibraryHomeState extends State<LibraryHome> {
         const SizedBox(height: 10),
         FilledButton.icon(onPressed: _saveWork, icon: const Icon(Icons.bookmark_add), label: const Text('서재에 저장')),
         if (busy) const LinearProgressIndicator(),
+        if (downloadingUpdate) LinearProgressIndicator(value: updateProgress),
         if (message.isNotEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text(message)),
         const Divider(height: 30),
         Text('내 서재 (' + library.works.length.toString() + ')',
@@ -306,6 +419,16 @@ class _LibraryHomeState extends State<LibraryHome> {
             if (work.videoUrl.isNotEmpty) TextButton(
               onPressed: () => launchUrl(Uri.parse(work.videoUrl), mode: LaunchMode.externalApplication),
               child: const Text('원본 쇼츠')),
+            TextButton.icon(
+              onPressed: () => _openGallery(work),
+              icon: const Icon(Icons.menu_book),
+              label: const Text('읽기'),
+            ),
+            TextButton.icon(
+              onPressed: () => _importGallery(work),
+              icon: const Icon(Icons.folder_open),
+              label: const Text('CBZ/ZIP 연결'),
+            ),
           ]),
         ])),
       ]),
