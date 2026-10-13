@@ -12,7 +12,7 @@ import 'gallery.dart';
 /// A remote gallery is opt-in and must be supplied by a source the user is
 /// authorized to access. The source manifest explicitly grants downloads.
 /// This module intentionally does not scrape or bypass other sites.
-class OnlineGallery {
+class OnlineGallery implements GalleryPageSource {
   final String workId;
   final String title;
   final bool downloadAllowed;
