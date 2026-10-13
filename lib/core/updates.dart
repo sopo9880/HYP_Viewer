@@ -48,12 +48,10 @@ class ReleaseUpdate {
     if (platform != TargetPlatform.android && platform != TargetPlatform.windows) {
       return null;
     }
-    final matches = assets.where((a) {
-      if (platform == TargetPlatform.android) {
-        return a.name.startsWith('HYP_Viewer_') && a.name.endsWith('.apk');
-      }
-      return a.name.startsWith('HYP_Viewer_Setup_') && a.name.endsWith('.exe');
-    }).toList();
+    final expectedName = platform == TargetPlatform.android
+        ? 'HYP_Viewer_v' + version + '.apk'
+        : 'HYP_Viewer_Setup_v' + version + '.exe';
+    final matches = assets.where((a) => a.name == expectedName).toList();
     return matches.length == 1 ? matches.first : null;
   }
 }
