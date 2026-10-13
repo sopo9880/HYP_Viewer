@@ -70,8 +70,8 @@ void main() {
     try {
       final online = await gallery(client);
       final store = GalleryStore(baseDirectory: tmp);
-      expect(
-        () => OnlineGalleryDownloader(store, temporaryDirectory: tmp).download(
+      await expectLater(
+        OnlineGalleryDownloader(store, temporaryDirectory: tmp).download(
           online, cancellation: CancelDownload(),
         ),
         throwsFormatException,
@@ -93,8 +93,8 @@ void main() {
       await downloader.download(online, cancellation: CancelDownload());
       final old = await store.read(workId);
       final token = CancelDownload();
-      expect(
-        () => downloader.download(
+      await expectLater(
+        downloader.download(
           online,
           cancellation: token,
           onProgress: (done, total, bytes) {
