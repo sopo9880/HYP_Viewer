@@ -176,21 +176,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The single-ref endpoint returns 404 for a missing tag; piping that error
+          # through jq can produce "null", incorrectly treated as an existing SHA.
+          # Matching refs returns [] instead. Filter the exact tag name so prefix
+          # matches cannot be mistaken for the intended release.
+          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_TAG" --jq ".[] | select(.ref == \"refs/tags/$RELEASE_TAG\") | .object.sha")
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')
-            if [[ "$sha" != "$GITHUB_SHA" ]]; then
+            if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
               echo "::error::The existing tag targets a different commit. Refusing to overwrite."
               exit 1
             fi
             gh release upload "$RELEASE_TAG" dist/* --clobber
             gh release edit "$RELEASE_TAG" --notes-file release-notes.md
           else
-            tag_exists=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null || true)
-            if [[ -n "$tag_exists" && "$tag_exists" != "$GITHUB_SHA" ]]; then
+            if [[ -n "$tag_sha" && "$tag_sha" != "$GITHUB_SHA" ]]; then
               echo "::error::Tag exists at a different commit."
               exit 1
             fi
-            if [[ -n "$tag_exists" ]]; then
+            if [[ -n "$tag_sha" ]]; then
               gh release create "$RELEASE_TAG" dist/* --verify-tag --title "HYP Viewer $RELEASE_TAG" --notes-file release-notes.md
             else
               gh release create "$RELEASE_TAG" dist/* --target "$GITHUB_SHA" --title "HYP Viewer $RELEASE_TAG" --notes-file release-notes.md
