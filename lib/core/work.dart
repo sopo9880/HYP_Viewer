@@ -12,6 +12,8 @@ class WorkEntry {
   final int currentPage;
   final List<String> collections;
   final String updatedAt;
+  // Optional: absent in older schemaVersion 1 JSON backups.
+  final String? lastOpenedAt;
 
   const WorkEntry({
     required this.videoId,
@@ -25,6 +27,7 @@ class WorkEntry {
     required this.currentPage,
     required this.collections,
     required this.updatedAt,
+    this.lastOpenedAt,
   });
 
   factory WorkEntry.create({
@@ -61,6 +64,7 @@ class WorkEntry {
     bool? completed,
     int? currentPage,
     List<String>? collections,
+    String? lastOpenedAt,
   }) {
     return WorkEntry(
       videoId: videoId,
@@ -73,6 +77,7 @@ class WorkEntry {
       completed: completed ?? this.completed,
       currentPage: currentPage ?? this.currentPage,
       collections: collections ?? this.collections,
+      lastOpenedAt: lastOpenedAt ?? this.lastOpenedAt,
       updatedAt: DateTime.now().toUtc().toIso8601String(),
     );
   }
@@ -89,6 +94,7 @@ class WorkEntry {
     'currentPage': currentPage,
     'collections': collections,
     'updatedAt': updatedAt,
+    if (lastOpenedAt != null) 'lastOpenedAt': lastOpenedAt,
   };
 
   factory WorkEntry.fromJson(Map<String, dynamic> data) {
@@ -115,6 +121,8 @@ class WorkEntry {
           : <String>[],
       updatedAt: DateTime.tryParse(text('updatedAt'))?.toUtc().toIso8601String() ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true).toIso8601String(),
+      lastOpenedAt: DateTime.tryParse(text('lastOpenedAt'))
+          ?.toUtc().toIso8601String(),
     );
   }
 }
@@ -199,6 +207,9 @@ class LibraryBackup {
             : incoming.currentPage,
         collections: {...existing.collections, ...incoming.collections}.toList(),
         updatedAt: recent.updatedAt,
+        lastOpenedAt: (existing.lastOpenedAt ?? '').compareTo(
+            incoming.lastOpenedAt ?? '') >= 0
+            ? existing.lastOpenedAt : incoming.lastOpenedAt,
       );
     }
     return LibraryBackup(
