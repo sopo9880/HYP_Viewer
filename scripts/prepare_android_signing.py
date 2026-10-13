@@ -46,7 +46,7 @@ properties_file.write_text(
 config = """
     signingConfigs {
         create("release") {
-            val props = java.util.Properties().apply {
+            val props = Properties().apply {
                 load(rootProject.file("key.properties").inputStream())
             }
             keyAlias = props.getProperty("keyAlias")
@@ -57,6 +57,9 @@ config = """
     }
 
 """
+if "import java.util.Properties" not in raw:
+    raw = "import java.util.Properties\n\n" + raw
+
 raw = raw.replace("    buildTypes {", config + "    buildTypes {", 1)
 raw = raw.replace(needle, 'signingConfig = signingConfigs.getByName("release")', 1)
 gradle.write_text(raw, encoding="utf-8")
