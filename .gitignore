@@ -1,0 +1,30 @@
+# Flutter tooling and generated artifacts
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+build/
+coverage/
+.idea/
+.vscode/
+*.iml
+.metadata
+android/.gradle/
+android/.kotlin/
+android/local.properties
+android/key.properties
+android/app/upload-keystore.jks
+android/app/build/
+windows/flutter/ephemeral/
+installer/Output/
+
+# Secrets and personal data must never be committed
+*.jks
+*.keystore
+*.p12
+*.pfx
+.env
+*.env
+HYP_Library*.json
+HYP_Library*.xlsx
