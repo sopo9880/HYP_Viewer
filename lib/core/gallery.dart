@@ -130,14 +130,23 @@ class GalleryStore {
     final archive = GalleryArchive.decode(bytes); // Validate BEFORE replacing.
     final target = await _localFile(workId);
     final tmp = File(target.path + '.importing');
+    final previous = File(target.path + '.previous');
+    var movedExisting = false;
     try {
       await tmp.writeAsBytes(bytes, flush: true);
-      // Existing gallery is copied to a local fallback before replacing.
+      // Move the existing file to a local rollback copy only after the new
+      // CBZ was fully validated and saved to staging.
       if (await target.exists()) {
-        await target.copy(target.path + '.previous');
-        await target.delete();
+        if (await previous.exists()) await previous.delete();
+        await target.rename(previous.path);
+        movedExisting = true;
       }
       await tmp.rename(target.path);
+    } catch (_) {
+      if (movedExisting && !await target.exists() && await previous.exists()) {
+        await previous.rename(target.path);
+      }
+      rethrow;
     } finally {
       if (await tmp.exists()) await tmp.delete();
     }
