@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/export.dart';
 import 'core/gallery.dart';
@@ -61,6 +62,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     super.initState();
     _load();
     _listenForSharedShorts();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _automaticUpdateCheck());
   }
 
   Future<void> _listenForSharedShorts() async {
@@ -306,14 +308,30 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
-  Future<void> _checkRelease() async {
+  Future<void> _automaticUpdateCheck() async {
+    try {
+      final root = await getApplicationSupportDirectory();
+      final file = File(root.path + Platform.pathSeparator + 'update_check_at.txt');
+      final now = DateTime.now().toUtc();
+      if (await file.exists()) {
+        final last = DateTime.tryParse(await file.readAsString());
+        if (last != null && now.difference(last).inHours < 24) return;
+      }
+      await file.writeAsString(now.toIso8601String());
+      if (mounted) await _checkRelease(silent: true);
+    } catch (_) {
+      // Offline usage, including widget tests, must work without update checks.
+    }
+  }
+
+  Future<void> _checkRelease({bool silent = false}) async {
     if (downloadingUpdate) return;
     final client = http.Client();
     try {
       final current = (await PackageInfo.fromPlatform()).version;
       final next = await UpdateService(client).latest(current);
       if (next == null) {
-        _status('현재 더 새로운 릴리스가 없어.');
+        if (!silent) _status('현재 더 새로운 릴리스가 없어.');
         return;
       }
       if (!mounted) return;
@@ -342,7 +360,7 @@ class _LibraryHomeState extends State<LibraryHome> {
         await _downloadInstaller(next, asset);
       }
     } catch (e) {
-      _status('업데이트 확인 실패: ' + e.toString());
+      if (!silent) _status('업데이트 확인 실패: ' + e.toString());
     } finally {
       client.close();
     }
