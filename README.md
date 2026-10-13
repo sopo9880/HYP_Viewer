@@ -22,21 +22,21 @@ The current MVP is **not yet a full gallery-image reader**. No scraped, copyrigh
 
 Open the [Build and verify Actions runs](https://github.com/sopo9880/HYP_Viewer/actions/workflows/verify.yml), select a successful run, then expand **Artifacts**. The Android debug APK is for temporary development testing and may require uninstall/reinstall when switching to a consistently signed official release. JSON-export your library first.
 
-The Windows artifact contains \`HYP_Viewer_Setup_v0.1.0.exe\`. It installs per user and keeps the local library outside the application folder.
+The Windows artifact contains `HYP_Viewer_Setup_v0.1.0.exe`. It installs per user and keeps the local library outside the application folder.
 
 ## Build locally
 
 Install Flutter and platform prerequisites, then run:
 
-\`\`\`sh
+```sh
 flutter create --platforms=android,windows --org com.sopo9880 --project-name hyp_viewer .
 flutter pub get
 flutter analyze
 flutter test
 flutter run -d windows
-\`\`\`
+```
 
-Do not use \`flutter create --overwrite\`: native Android sharing files already live in the repository.
+Do not use `flutter create --overwrite`: native Android sharing files already live in the repository.
 
 ## Official releases
 
