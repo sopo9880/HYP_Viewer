@@ -4,9 +4,16 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:path_provider/path_provider.dart';
 
+/// A shared page interface for local archives and authorized online galleries.
+abstract class GalleryPageSource {
+  int get pageCount;
+  String filename(int index);
+  Future<Uint8List> loadPage(int index);
+}
+
 /// A local, user-selected CBZ/ZIP gallery. No archive entry is extracted to
 /// the filesystem, avoiding ZIP path traversal and other path overwrite bugs.
-class GalleryArchive {
+class GalleryArchive implements GalleryPageSource {
   static const int maxCompressedBytes = 180 * 1024 * 1024;
   static const int maxUncompressedBytes = 750 * 1024 * 1024;
   static const int maxSingleImageBytes = 35 * 1024 * 1024;
@@ -50,6 +57,9 @@ class GalleryArchive {
   }
 
   String filename(int index) => _pages[index].name;
+
+  @override
+  Future<Uint8List> loadPage(int index) async => pageBytes(index);
 
   Uint8List pageBytes(int index) {
     if (index < 0 || index >= pageCount) throw RangeError.index(index, _pages);
