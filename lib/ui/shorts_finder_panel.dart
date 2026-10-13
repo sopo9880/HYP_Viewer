@@ -56,7 +56,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
       widget.onAnalyze();
     } else if (widget.url.text.trim().isNotEmpty) {
       setState(() => _showDetails = true);
-      widget.onFetch(); // Shows a clear explanation if the API key is missing.
+      widget.onFetch(); // Attempts public comment extraction without a key.
     } else {
       setState(() => _showDetails = true);
     }
@@ -101,7 +101,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
                         style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 4),
                     Text(
-                      'Shorts 설명란·댓글에서 작품 번호를 찾을 수 있어. 자동 댓글 조회에는 API 키가 필요해.',
+                      'Shorts 링크만 붙여넣으면 공개 설명란·댓글에서 번호를 찾아봐. API 키는 필요 없어.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -129,7 +129,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               controller: widget.apiKey,
               obscureText: !_revealApiKey,
               decoration: InputDecoration(
-                hintText: 'YouTube Data API 키 (자동 댓글 조회 시 필수)',
+                hintText: '개인 YouTube Data API 키 (고급 · 선택)',
                 prefixIcon: const Icon(Icons.key_outlined, color: HypColors.muted),
                 suffixIcon: IconButton(
                   tooltip: _revealApiKey ? 'API 키 숨기기' : 'API 키 보기',
@@ -170,8 +170,8 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
           }),
           const SizedBox(height: 10),
           const Text(
-            '현재 버전에는 공용 YouTube 댓글 서버가 없어. 자동 수집은 개인 API 키가 있어야 작동해. '
-            '키가 없다면 유튜브에서 댓글을 복사해 아래 입력란에 붙여넣어줘.',
+            '기본 조회는 API 키 없이 YouTube 공개 페이지에서 댓글을 읽어. '
+            '유튜브 제한으로 실패할 수도 있어. 이때는 직접 댓글을 복사해 붙여넣어줘.',
             style: TextStyle(fontSize: 12, color: HypColors.muted),
           ),
           const SizedBox(height: 8),
@@ -179,7 +179,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             OutlinedButton.icon(
               onPressed: widget.busy ? null : widget.onFetch,
               icon: const Icon(Icons.cloud_download_outlined, size: 19),
-              label: const Text('댓글 자동 조회 (API 키 필요)'),
+              label: const Text('설명란 · 댓글 자동 조회'),
             ),
             TextButton.icon(
               onPressed: widget.onOpenYoutube,
@@ -195,7 +195,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
                 : Icons.keyboard_arrow_down),
             label: Text(showDetails
                 ? '댓글·번호 입력 접기'
-                : 'API 키 없이 댓글 직접 입력 · 번호 확정'),
+                : '댓글 직접 입력 · 번호 확정'),
           ),
           if (widget.busy) ...[
             const SizedBox(height: 8),
