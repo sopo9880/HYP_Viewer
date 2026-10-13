@@ -38,6 +38,10 @@ void main() {
         '</html>';
   }
 
+  http.Response watchResponse(String htmlText) => http.Response.bytes(
+      utf8.encode(htmlText), 200,
+      headers: {'content-type': 'text/html; charset=utf-8'});
+
   Map<String, dynamic> section(String token) => {
     'contents': {
       'twoColumnWatchNextResults': {
@@ -70,7 +74,7 @@ void main() {
     final client = MockClient((request) async {
       if (request.method == 'GET') {
         expect(request.url.host, 'www.youtube.com');
-        return http.Response(html(initial: section('comments-one')), 200);
+        return watchResponse(html(initial: section('comments-one')));
       }
       expect(request.url.path, '/youtubei/v1/next');
       expect(request.url.queryParameters['key'], 'public-web-key');
@@ -159,7 +163,7 @@ void main() {
     final requests = <Map<String, dynamic>>[];
     final client = MockClient((request) async {
       if (request.method == 'GET') {
-        return http.Response(html(description: ''), 200);
+        return watchResponse(html(description: ''));
       }
       final json = jsonDecode(request.body) as Map<String, dynamic>;
       requests.add(json);
@@ -190,7 +194,7 @@ void main() {
 
   test('clearly fails when public web configuration is unavailable', () async {
     final client = MockClient((request) async =>
-        http.Response(html(initial: section('one'), withConfig: false), 200));
+        watchResponse(html(initial: section('one'), withConfig: false)));
     expect(() => YoutubePublicClient(client).fetch(videoId),
         throwsFormatException);
     client.close();
@@ -199,8 +203,8 @@ void main() {
   test('does not pretend empty comments were successfully loaded', () async {
     final client = MockClient((request) async {
       if (request.method == 'GET') {
-        return http.Response(html(
-          initial: section('comments-one'), description: ''), 200);
+        return watchResponse(html(
+          initial: section('comments-one'), description: ''));
       }
       return http.Response('{}', 200, headers: {'content-type': 'application/json'});
     });
