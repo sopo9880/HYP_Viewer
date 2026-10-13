@@ -14,10 +14,12 @@ Local-first **Windows setup.exe + Android APK** app for finding and organizing r
 - **JSON export/import** for Android-to-Android, Android-to-Windows and Windows-to-Windows library backup or merge.
 - **Excel XLSX export only** to read and organize library information.
 - Import user-owned CBZ/ZIP image archives per saved work; open a built-in full-screen reader with zoom, page swiping, horizontal/vertical navigation and progress saving.
+- **Online reading (opt-in):** configure an authorized HTTPS image source manifest, use the work ID to load pages, and read without importing a file first.
+- **Optional offline download:** press Download, review the consent dialog, and save a CBZ only if the source explicitly permits downloads. Progress and cancellation are included.
 - Check public GitHub Releases, download a platform-specific installer, validate its SHA-256 digest, and request OS-approved installation (APK system installer or Windows Setup.exe).
 - Windows Inno Setup installer and Android debug APK produced by the GitHub Actions verification workflow.
 
-The local CBZ/ZIP **image reader is implemented**, but it does not automatically fetch images from the numeric work ID or scrape a third-party site. The user provides an archive they have the right to use. No third-party imagery is bundled or distributed. JSON library backups preserve metadata and reading progress but do not contain local CBZ image files.
+The reader supports either locally imported CBZ/ZIP files or an **explicitly configured, authorized HTTPS manifest server** that maps the numeric work ID to images. No arbitrary third-party scraper is included. The download button saves approved remote pages as CBZ files. No third-party imagery is bundled or distributed. JSON library backups preserve metadata and reading progress but do not contain locally saved CBZ files.
 
 ## Try the development builds
 
@@ -42,6 +44,10 @@ Do not use `flutter create --overwrite`: native Android sharing files already li
 ## Reading locally
 
 Save a work number, then click **CBZ/ZIP 연결** on its library card. Select a comic archive containing PNG/JPEG/WebP/GIF/BMP pages (maximum 180 MB compressed, 1500 pages). Click **읽기** to open it again; your last page is retained. Files stay in app support storage, not in the installation directory.
+
+## Online reading and optional downloads
+
+In the app, set an authorized image-source URL template such as https://gallery.example.org/galleries/{workId}.json and click the Save Source button. A compatible server returns a JSON page manifest with an explicit allowDownload flag. Each work card offers **온라인 읽기**, **다운로드**, **오프라인 읽기** and **CBZ/ZIP 연결**. See [online source setup](docs/ONLINE_SOURCES.md) for the exact schema, permissions, file limits and limitations.
 
 ## Official releases
 

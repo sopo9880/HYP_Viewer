@@ -50,8 +50,11 @@ Flutter's application-support directory remains outside the app installation
 directory, so an update is designed to retain the local library. A Windows
 unsigned-publisher SmartScreen warning can appear until code signing is added.
 
-The installed app currently checks public GitHub Releases and offers to open
-the release page for user-approved installation. Fully automatic downloading
-and silent installation are not implemented.
+The installed app checks public GitHub Releases at most once a day, and can
+download a platform-appropriate APK or Setup.exe to a temporary directory after
+explicit approval. It checks the GitHub release SHA-256 digest, or the packaged
+SHA256SUMS.txt, before requesting the OS installer. There is a second prompt
+before installation, and Android's system installer still requires user approval.
+Silent installation and automatic reboot/restart are not implemented.
 
 Images not owned or licensed by the user are not included in the project.
