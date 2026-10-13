@@ -702,18 +702,17 @@ class _HypDashboardState extends State<HypDashboard> {
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 7),
           const Text(
-            '온라인 읽기는 앱에 고정된 Hitomi 웹 주소로 브라우저를 열어. '
-            '작품 번호가 자동 입력되며, 1페이지는 #1, '
-            '2페이지부터는 #2-3 형식이야. '
-            '작품 메뉴에서 시작 페이지를 직접 선택할 수 있어.',
+            '기본 온라인 읽기는 이미지 메타데이터를 이용해 앱 안에서 열어. '
+            '작품 메뉴의 웹 리더를 선택하면 브라우저에서 고정 링크를 열 수 있어. '
+            '1페이지는 #1, 2페이지부터는 #2-3 형식이야.',
             style: TextStyle(fontSize: 12, color: HypColors.muted),
           ),
           const SizedBox(height: 8),
           const SelectableText('https://hitomi.la/reader/{작품번호}.html#1'),
           const SizedBox(height: 4),
           const Text(
-            '외부 브라우저의 페이지 이동은 앱에 자동 기록되지 않아. '
-            '이 웹 주소는 이미지 JSON이나 다운로드 주소가 아니야.',
+            '앱 안에서 읽는 경우에는 페이지 진행도가 저장돼. '
+            '외부 브라우저에서 넘긴 페이지는 자동 기록되지 않아.',
             style: TextStyle(fontSize: 12, color: HypColors.muted),
           ),
         ],
@@ -725,7 +724,7 @@ class _HypDashboardState extends State<HypDashboard> {
           Text('추가 JSON 이미지 소스 (선택)', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 7),
           const Text(
-            '별도 허가된 HTTPS 이미지 서버에서 오프라인 다운로드하려는 경우에만 설정해줘. 웹 리더 링크와는 별개야.',
+            '자체 보유하거나 이용 허가된 JSON 이미지 서버를 통해 오프라인 저장하려는 경우에만 설정해줘. 기본 온라인 읽기나 웹 리더에 필요하지 않아.',
             style: TextStyle(fontSize: 12, color: HypColors.muted),
           ),
           const SizedBox(height: 12),
@@ -735,7 +734,7 @@ class _HypDashboardState extends State<HypDashboard> {
             decoration: const InputDecoration(
               labelText: '추가 JSON 소스 URL 패턴',
               hintText: 'https://gallery.example/galleries/{workId}.json',
-              helperText: '이 설정은 추가 JSON 소스 다운로드에만 사용해.',
+              helperText: '추가 JSON 소스로 다운로드할 때만 사용하는 고급 설정이야.',
             ),
           ),
           const SizedBox(height: 12),
