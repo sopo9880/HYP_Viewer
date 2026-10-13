@@ -239,8 +239,9 @@ class OnlineSourceSettings {
 class OnlineGalleryDownloader {
   static const int maxTotalImageBytes = 165 * 1024 * 1024;
   final GalleryStore galleryStore;
+  final Directory? temporaryDirectory;
 
-  const OnlineGalleryDownloader(this.galleryStore);
+  const OnlineGalleryDownloader(this.galleryStore, {this.temporaryDirectory});
 
   Future<GalleryArchive> download(
     OnlineGallery remote, {
@@ -250,7 +251,7 @@ class OnlineGalleryDownloader {
     if (!remote.downloadAllowed) {
       throw const FormatException('이 소스는 다운로드를 허용하지 않아.');
     }
-    final app = await getApplicationSupportDirectory();
+    final app = temporaryDirectory ?? await getApplicationSupportDirectory();
     final staging = Directory(
       app.path + Platform.pathSeparator + 'gallery_import_' +
       remote.workId + '_' + DateTime.now().microsecondsSinceEpoch.toString(),
