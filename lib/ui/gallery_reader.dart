@@ -1,23 +1,32 @@
+import 'dart:async';
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import '../core/gallery.dart';
+import '../core/reader_settings.dart';
 import '../core/work.dart';
 
-/// Page reader for local CBZ/ZIP archives and remote galleries.
-/// PageView supports swiping; InteractiveViewer supports pan/zoom.
+/// Common offline and online reader with adjacent prefetch and shortcuts.
 class GalleryReader extends StatefulWidget {
   final WorkEntry work;
   final GalleryPageSource archive;
   final ValueChanged<int> onPageChanged;
-  /// Optional browser fallback for online galleries when image requests fail.
+  final ReaderSettings settings;
   final Future<void> Function(int page)? onOpenInBrowser;
+  final void Function(int page, Uint8List bytes)? onPageLoaded;
+  final Future<void> Function(int page, Uint8List bytes)? onChooseCover;
 
   const GalleryReader({
     super.key,
     required this.work,
     required this.archive,
     required this.onPageChanged,
+    this.settings = const ReaderSettings(),
     this.onOpenInBrowser,
+    this.onPageLoaded,
+    this.onChooseCover,
   });
 
   @override
@@ -26,17 +35,47 @@ class GalleryReader extends StatefulWidget {
 
 class _GalleryReaderState extends State<GalleryReader> {
   late PageController _controller;
-  late int _currentPage;
+  late int _currentUnit;
   bool _vertical = false;
   bool _controlsVisible = true;
-  int _pageReloadGeneration = 0;
+  int _reloadGeneration = 0;
   final Map<int, Future<Uint8List>> _imageCache = {};
+
+  int get _step => widget.settings.twoPageSpread ? 2 : 1;
+  int get _units => (widget.archive.pageCount + _step - 1) ~/ _step;
+  int get _currentPage => _currentUnit * _step + 1;
 
   @override
   void initState() {
     super.initState();
-    _currentPage = widget.work.currentPage.clamp(1, widget.archive.pageCount).toInt();
-    _controller = PageController(initialPage: _currentPage - 1);
+    final initial = widget.work.currentPage
+        .clamp(1, widget.archive.pageCount).toInt();
+    _currentUnit = (initial - 1) ~/ _step;
+    _controller = PageController(initialPage: _currentUnit);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _prefetchAround(_currentUnit);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant GalleryReader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.settings.twoPageSpread != widget.settings.twoPageSpread) {
+      final page = _currentUnit *
+          (oldWidget.settings.twoPageSpread ? 2 : 1) + 1;
+      final previous = _controller;
+      _currentUnit = (page - 1) ~/ _step;
+      _controller = PageController(initialPage: _currentUnit);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        previous.dispose();
+        if (mounted) _prefetchAround(_currentUnit);
+      });
+    } else if (oldWidget.settings.preloadPages !=
+        widget.settings.preloadPages) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _prefetchAround(_currentUnit);
+      });
+    }
   }
 
   @override
@@ -45,206 +84,304 @@ class _GalleryReaderState extends State<GalleryReader> {
     super.dispose();
   }
 
-  void _toggleDirection() {
-    final previous = _controller;
-    setState(() {
-      _controller = PageController(initialPage: _currentPage - 1);
-      _vertical = !_vertical;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
-  }
+  Future<Uint8List> _bytesAt(int index) =>
+      _imageCache.putIfAbsent(index, () {
+        final result = widget.archive.loadPage(index).then((bytes) {
+          widget.onPageLoaded?.call(index + 1, bytes);
+          return bytes;
+        });
+        // Prevent unhandled errors from speculative prefetch; the visible
+        // FutureBuilder will still display the original failed Future.
+        unawaited(result.then<void>((_) {},
+            onError: (Object _, StackTrace __) {}));
+        return result;
+      });
 
-  Future<Uint8List> _bytesAt(int index) {
-    _imageCache.removeWhere((key, _) => (key - index).abs() > 3);
-    return _imageCache.putIfAbsent(index, () async => widget.archive.loadPage(index));
+  void _prefetchAround(int unit) {
+    if (!mounted || widget.archive.pageCount == 0) return;
+    final begin = unit * _step;
+    final end = (begin + _step).clamp(0, widget.archive.pageCount).toInt();
+    final radius = widget.settings.preloadPages;
+    final first = (begin - radius).clamp(0, widget.archive.pageCount).toInt();
+    final last = (end + radius).clamp(0, widget.archive.pageCount).toInt();
+    for (var index = first; index < last; index++) {
+      _bytesAt(index);
+    }
+    // Do not cache the full gallery in memory.
+    _imageCache.removeWhere((index, _) => index < first || index >= last);
   }
 
   void _retryPage(int index) {
     setState(() {
       _imageCache.remove(index);
-      // PageView preserves its built children across parent setState calls.
-      // Re-create it so FutureBuilder sees the new image request.
-      _pageReloadGeneration++;
+      _reloadGeneration++;
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _prefetchAround(_currentUnit);
+    });
+  }
+
+  void _turn(int delta) {
+    final target = (_currentUnit + delta).clamp(0, _units - 1).toInt();
+    if (target == _currentUnit || !_controller.hasClients) return;
+    _controller.animateToPage(target,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut);
+  }
+
+  void _jumpTo(int unit) {
+    if (!_controller.hasClients) return;
+    _controller.jumpToPage(unit.clamp(0, _units - 1).toInt());
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      _turn(widget.settings.reverse ? 1 : -1);
+    } else if (key == LogicalKeyboardKey.arrowRight) {
+      _turn(widget.settings.reverse ? -1 : 1);
+    } else if (key == LogicalKeyboardKey.pageDown ||
+               key == LogicalKeyboardKey.space) {
+      _turn(1);
+    } else if (key == LogicalKeyboardKey.pageUp) {
+      _turn(-1);
+    } else if (key == LogicalKeyboardKey.home) {
+      _jumpTo(0);
+    } else if (key == LogicalKeyboardKey.end) {
+      _jumpTo(_units - 1);
+    } else if (key == LogicalKeyboardKey.escape) {
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
+  }
+
+  Future<void> _useAsCover() async {
+    final choose = widget.onChooseCover;
+    if (choose == null) return;
+    final page = _currentPage;
+    try {
+      final bytes = await _bytesAt(page - 1);
+      await choose(page, bytes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(page.toString() + '페이지를 서재 표지로 지정했어.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('표지 저장 실패: ' + error.toString())),
+        );
+      }
+    }
+  }
+
+  void _toggleVertical() {
+    final previous = _controller;
+    setState(() {
+      _vertical = !_vertical;
+      _controller = PageController(initialPage: _currentUnit);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
   }
 
   Widget _failedImage(int index, Object error) {
     final raw = error.toString();
-    final reason = raw.length <= 450 ? raw : raw.substring(0, 450) + '…';
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.broken_image_outlined,
-                  color: Colors.white70, size: 48),
-              const SizedBox(height: 14),
-              Text('${index + 1}페이지 이미지를 불러오지 못했어.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              SelectableText(reason,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 12,
-                runSpacing: 10,
-                alignment: WrapAlignment.center,
-                children: [
-                  OutlinedButton.icon(
-                    key: const Key('reader-retry-page'),
-                    onPressed: () => _retryPage(index),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('다시 시도'),
-                  ),
-                  if (widget.onOpenInBrowser != null)
-                    FilledButton.icon(
-                      key: const Key('reader-web-fallback'),
-                      onPressed: () { widget.onOpenInBrowser?.call(index + 1); },
-                      icon: const Icon(Icons.open_in_new),
-                      label: const Text('웹 리더로 열기'),
-                    ),
-                ],
+    final reason = raw.length <= 430 ? raw : raw.substring(0, 430) + '…';
+    return Center(child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 540),
+        child: SingleChildScrollView(child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.broken_image_outlined,
+                color: Colors.white70, size: 42),
+            const SizedBox(height: 10),
+            Text((index + 1).toString() + '페이지를 불러오지 못했어.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            SelectableText(reason,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            const SizedBox(height: 12),
+            Wrap(alignment: WrapAlignment.center,
+                spacing: 8, runSpacing: 7, children: [
+              OutlinedButton.icon(
+                key: const Key('reader-retry-page'),
+                onPressed: () => _retryPage(index),
+                icon: const Icon(Icons.refresh),
+                label: const Text('다시 시도'),
               ),
-            ],
-          ),
-        ),
+              if (widget.onOpenInBrowser != null)
+                FilledButton.icon(
+                  key: const Key('reader-web-fallback'),
+                  onPressed: () { widget.onOpenInBrowser?.call(index + 1); },
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('웹 리더로 열기'),
+                ),
+            ]),
+          ],
+        )),
       ),
-    );
+    ));
   }
 
-  Widget _imageAt(int index) {
-    return FutureBuilder<Uint8List>(
-      future: _bytesAt(index),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return _failedImage(index, snapshot.error!);
-        }
-        if (!snapshot.hasData) {
-          return const Center(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 12),
-              Text('이미지를 불러오는 중…',
-                  style: TextStyle(color: Colors.white70)),
-            ]),
-          );
-        }
-        return Center(
-          child: InteractiveViewer(
-            minScale: 1,
-            maxScale: 5,
-            child: Image.memory(
-              snapshot.data!,
-              fit: BoxFit.contain,
-              gaplessPlayback: true,
-              errorBuilder: (context, error, stack) =>
-                  _failedImage(index, error),
-            ),
-          ),
-        );
-      },
-    );
+  Widget _pageAt(int index) => FutureBuilder<Uint8List>(
+    future: _bytesAt(index),
+    builder: (context, snapshot) {
+      if (snapshot.hasError) return _failedImage(index, snapshot.error!);
+      if (!snapshot.hasData) {
+        return const Center(child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 12),
+            Text('이미지를 불러오는 중…',
+                style: TextStyle(color: Colors.white70)),
+          ],
+        ));
+      }
+      return Center(child: InteractiveViewer(
+        minScale: 1,
+        maxScale: 5,
+        child: Image.memory(
+          snapshot.data!,
+          fit: BoxFit.contain,
+          gaplessPlayback: true,
+          errorBuilder: (context, error, stack) =>
+              _failedImage(index, error),
+        ),
+      ));
+    },
+  );
+
+  Widget _spreadAt(int unit) {
+    final first = unit * _step;
+    if (_step == 1) return _pageAt(first);
+    final second = first + 1;
+    final order = widget.settings.reverse
+        ? <int>[second, first]
+        : <int>[first, second];
+    return Row(children: [
+      for (final index in order) ...[
+        Expanded(child: index < widget.archive.pageCount
+            ? _pageAt(index)
+            : const ColoredBox(color: Colors.black)),
+        if (index == order.first)
+          const VerticalDivider(width: 3, color: Color(0xFF343440)),
+      ],
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
     final total = widget.archive.pageCount;
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-              backgroundColor: Colors.black,
-              foregroundColor: Colors.white,
-              title: Text(widget.work.title.isEmpty
-                  ? widget.work.workId
-                  : widget.work.title, maxLines: 1),
-              actions: [
-                IconButton(
-                  tooltip: _controlsVisible ? '페이지 도구 숨기기' : '페이지 도구 표시',
-                  onPressed: () => setState(() {
-                    _controlsVisible = !_controlsVisible;
-                  }),
-                  icon: Icon(_controlsVisible
-                      ? Icons.visibility_off
-                      : Icons.visibility),
-                ),
-                if (widget.onOpenInBrowser != null)
-                  IconButton(
-                    tooltip: '현재 페이지를 웹 리더로 열기',
-                    onPressed: () { widget.onOpenInBrowser?.call(_currentPage); },
-                    icon: const Icon(Icons.open_in_browser),
-                  ),
-                IconButton(
-                  tooltip: _vertical ? '가로 넘기기' : '세로 넘기기',
-                  icon: Icon(_vertical ? Icons.swap_horiz : Icons.swap_vert),
-                  onPressed: _toggleDirection,
-                ),
-              ],
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: Text(widget.work.title.isEmpty
+              ? widget.work.workId : widget.work.title,
+              overflow: TextOverflow.ellipsis),
+          actions: [
+            if (widget.onChooseCover != null)
+              IconButton(
+                tooltip: '현재 페이지를 서재 표지로 지정',
+                onPressed: _useAsCover,
+                icon: const Icon(Icons.photo_library_outlined),
+              ),
+            IconButton(
+              tooltip: _controlsVisible ? '페이지 도구 숨기기' : '페이지 도구 표시',
+              onPressed: () => setState(
+                () => _controlsVisible = !_controlsVisible),
+              icon: Icon(_controlsVisible
+                  ? Icons.visibility_off : Icons.visibility),
             ),
-      // Keep error/retry buttons directly hittable; an enclosing
-      // double-tap detector delays ordinary tap gestures in the reader.
-      body: PageView.builder(
-          key: ValueKey('$_vertical-$_pageReloadGeneration'),
-          controller: _controller,
-          scrollDirection: _vertical ? Axis.vertical : Axis.horizontal,
-          itemCount: total,
-          onPageChanged: (index) {
-            setState(() => _currentPage = index + 1);
-            widget.onPageChanged(index + 1);
-          },
-          itemBuilder: (context, index) => _imageAt(index),
+            if (widget.onOpenInBrowser != null)
+              IconButton(
+                tooltip: '현재 페이지를 웹 리더로 열기',
+                onPressed: () { widget.onOpenInBrowser?.call(_currentPage); },
+                icon: const Icon(Icons.open_in_browser),
+              ),
+            if (!widget.settings.twoPageSpread)
+              IconButton(
+                tooltip: _vertical ? '가로 넘기기' : '세로 넘기기',
+                icon: Icon(_vertical ? Icons.swap_horiz : Icons.swap_vert),
+                onPressed: _toggleVertical,
+              ),
+          ],
         ),
-      bottomNavigationBar: _controlsVisible
-          ? SafeArea(
-              top: false,
-              // A Row containing Slider can otherwise expand to the entire
-              // Scaffold height, covering the pages and intercepting taps.
-              child: SizedBox(
+        body: PageView.builder(
+          key: ValueKey(_vertical.toString() + '-' +
+              widget.settings.reverse.toString() + '-' +
+              _reloadGeneration.toString() + '-' +
+              widget.settings.twoPageSpread.toString()),
+          controller: _controller,
+          reverse: widget.settings.reverse,
+          scrollDirection: _vertical ? Axis.vertical : Axis.horizontal,
+          itemCount: _units,
+          onPageChanged: (unit) {
+            setState(() => _currentUnit = unit);
+            widget.onPageChanged(_currentPage);
+            _prefetchAround(unit);
+          },
+          itemBuilder: (context, unit) => _spreadAt(unit),
+        ),
+        bottomNavigationBar: _controlsVisible
+            ? SafeArea(top: false, child: SizedBox(
                 height: 64,
                 child: ColoredBox(
                   color: Colors.black,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
-                      children: [
-                        Text('$_currentPage / $total',
-                            style: const TextStyle(color: Colors.white)),
-                        Expanded(
-                          child: Slider(
-                            value: _currentPage.toDouble(),
-                            min: 1,
-                            max: total.toDouble(),
-                            divisions: total > 1 ? total - 1 : null,
-                            onChanged: (value) {
-                              final page = value.round().clamp(1, total).toInt();
-                              _controller.jumpToPage(page - 1);
-                            },
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: '다음 페이지',
-                          color: Colors.white,
-                          onPressed: _currentPage < total
-                              ? () => _controller.nextPage(
-                                  duration: const Duration(milliseconds: 170),
-                                  curve: Curves.easeOut)
-                              : null,
-                          icon: const Icon(Icons.chevron_right),
-                        ),
-                      ],
-                    ),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    child: Row(children: [
+                      IconButton(
+                        key: const Key('reader-previous'),
+                        tooltip: '이전 페이지 (PageUp)',
+                        color: Colors.white,
+                        onPressed: _currentUnit > 0
+                            ? () => _turn(-1) : null,
+                        icon: Icon(widget.settings.reverse
+                            ? Icons.chevron_right : Icons.chevron_left),
+                      ),
+                      Text('$_currentPage / $total',
+                          style: const TextStyle(color: Colors.white)),
+                      Expanded(child: Slider(
+                        value: (_currentUnit + 1).toDouble(),
+                        min: 1,
+                        max: _units.toDouble(),
+                        divisions: _units > 1 ? _units - 1 : null,
+                        onChanged: _units > 1
+                            ? (value) => _jumpTo(value.round() - 1) : null,
+                      )),
+                      IconButton(
+                        key: const Key('reader-next'),
+                        tooltip: '다음 페이지 (PageDown / Space)',
+                        color: Colors.white,
+                        onPressed: _currentUnit < _units - 1
+                            ? () => _turn(1) : null,
+                        icon: Icon(widget.settings.reverse
+                            ? Icons.chevron_left : Icons.chevron_right),
+                      ),
+                    ]),
                   ),
                 ),
-              ),
-            )
-          : null,
+              ))
+            : null,
+      ),
     );
   }
 }
