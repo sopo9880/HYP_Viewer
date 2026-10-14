@@ -70,6 +70,37 @@ void main() {
     expect(completed, [5]);
   });
 
+  testWidgets('side taps navigate by page number in both reading directions',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final rtl in [false, true]) {
+      final pages = _Pages();
+      await tester.pumpWidget(MaterialApp(
+        key: ValueKey('direction-$rtl'),
+        home: GalleryReader(
+          key: ValueKey('tap-reader-$rtl'),
+          work: WorkEntry.create(workId: '2711759').copyWith(currentPage: 3),
+          archive: pages, diskCacheEnabled: false,
+          settings: ReaderSettings(preloadPages: 0,
+              nextDirection: rtl ? 'right' : 'left'),
+          onPageChanged: (_) {},
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text('3 / 5'), findsOneWidget);
+      final rect = tester.getRect(find.byKey(const Key('reader-tap-zones')));
+      await tester.tapAt(Offset(rect.left + rect.width * 0.15,
+          rect.top + rect.height * 0.5));
+      await tester.pumpAndSettle();
+      expect(find.text('2 / 5'), findsOneWidget);
+      await tester.tapAt(Offset(rect.left + rect.width * 0.85,
+          rect.top + rect.height * 0.5));
+      await tester.pumpAndSettle();
+      expect(find.text('3 / 5'), findsOneWidget);
+    }
+  });
+
   testWidgets('preloads both directions and has physical previous button',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1100, 850));

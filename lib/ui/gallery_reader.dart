@@ -618,10 +618,19 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
               behavior: HitTestBehavior.translucent,
               onTapUp: (event) {
                 final width = MediaQuery.sizeOf(context).width;
-                if (!_webtoonZoomed &&
-                    event.localPosition.dx >= width * 0.3 &&
-                    event.localPosition.dx <= width * 0.7) {
+                if (_webtoonZoomed || !widget.settings.tapNavigation) return;
+                final delta = readerTapDelta(
+                  pointX: event.localPosition.dx,
+                  pointY: event.localPosition.dy,
+                  width: width,
+                  height: MediaQuery.sizeOf(context).height,
+                  vertical: true,
+                  reverse: widget.settings.reverse,
+                );
+                if (delta == 0) {
                   _toggleChrome();
+                } else {
+                  _turn(delta);
                 }
               },
               child: InteractiveViewer(

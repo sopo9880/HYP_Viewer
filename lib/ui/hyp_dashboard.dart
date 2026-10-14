@@ -2005,9 +2005,9 @@ class _HypDashboardState extends State<HypDashboard> {
             child: SwitchListTile.adaptive(
               key: const Key('reader-tap-navigation-setting'),
               contentPadding: EdgeInsets.zero,
-              title: const HypText('화면 좌우·상하 터치로 페이지 넘기기'),
-              subtitle: const HypText('왼쪽 터치는 왼쪽으로, 오른쪽은 오른쪽으로. '
-                  '세로 방향에서는 위/아래를 눌러 넘겨.'),
+              title: const HypText('화면 좌우 터치로 페이지 넘기기 (기본 켜짐)'),
+              subtitle: const HypText('왼쪽 30%는 이전 페이지, 오른쪽 30%는 다음 페이지. '
+                  '가운데 40%는 화면 UI 숨김·표시. 기존에 꺼둔 설정은 유지돼.'),
               value: widget.readerSettings.tapNavigation,
               onChanged: (v) => widget.onSaveReaderSettings(
                   widget.readerSettings.copyWith(tapNavigation: v)),
