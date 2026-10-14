@@ -799,6 +799,7 @@ class _LibraryHomeState extends State<LibraryHome> {
           // bookmark/cover action arrives while an earlier save is in flight.
           return work.copyWith(
             currentPage: w.currentPage,
+            completed: w.completed,
             lastOpenedAt: w.lastOpenedAt,
             openCount: w.openCount,
             totalPages: w.totalPages,
@@ -815,12 +816,15 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
-  Future<void> _touchRead(WorkEntry work, {int? page, int? pageCount}) async {
+  Future<void> _touchRead(WorkEntry work, {
+    int? page, int? pageCount, bool? completed,
+  }) async {
     try {
       await _commitLibrary((latest) => LibraryBackup(
         works: latest.works.map((w) => w.key == work.key
             ? w.copyWith(
                 currentPage: page ?? w.currentPage,
+                completed: completed ?? w.completed,
                 lastOpenedAt: page == null
                     ? DateTime.now().toUtc().toIso8601String()
                     : w.lastOpenedAt,
@@ -1336,6 +1340,10 @@ class _LibraryHomeState extends State<LibraryHome> {
           work: readerWork,
           archive: remote,
           onPageChanged: (page) { _touchRead(work, page: page); },
+          onFinishedReading: (total) {
+            unawaited(_touchRead(work, page: total,
+                pageCount: total, completed: true));
+          },
           onOpenInBrowser: (page) => _openWebReader(work, page: page),
           onDownloadOffline: () => _downloadOnline(work),
           settings: readerSettings,
@@ -1956,6 +1964,10 @@ class _LibraryHomeState extends State<LibraryHome> {
           archive: book,
           onPageChanged: (page) {
             _touchRead(work, page: page);
+          },
+          onFinishedReading: (total) {
+            unawaited(_touchRead(work, page: total,
+                pageCount: total, completed: true));
           },
           settings: readerSettings,
           onVerticalScrollingChanged: (vertical) {
