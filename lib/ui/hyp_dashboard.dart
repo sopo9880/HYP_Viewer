@@ -828,16 +828,61 @@ class _HypDashboardState extends State<HypDashboard> {
     ],
   );
 
+  Widget _selectionControls(List<WorkEntry> visible) =>
+      !_selectingWorks ? const SizedBox.shrink() : Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Wrap(spacing: 8, runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text('선택됨: ' + _selectedWorkIds.length.toString() + '개'),
+            OutlinedButton(
+              key: const Key('library-select-visible'),
+              onPressed: visible.isEmpty ? null : () => setState(() {
+                _selectedWorkIds.addAll(visible.map((w) => w.workId));
+              }),
+              child: const HypText('전체 선택'),
+            ),
+            OutlinedButton(
+              key: const Key('library-clear-selection'),
+              onPressed: _selectedWorkIds.isEmpty ? null
+                  : () => setState(() => _selectedWorkIds.clear()),
+              child: const HypText('선택 해제'),
+            ),
+            OutlinedButton.icon(
+              key: const Key('library-edit-selected'),
+              onPressed: _selectedWorkIds.length == 1
+                  ? _editSelectedWork : null,
+              icon: const Icon(Icons.edit_outlined),
+              label: const HypText('정보 수정'),
+            ),
+            FilledButton.icon(
+              key: const Key('library-delete-selected'),
+              onPressed: _selectedWorkIds.isNotEmpty
+                  ? _removeSelectedWorks : null,
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const HypText('선택 삭제'),
+            ),
+          ],
+        ),
+      );
+
   Widget _libraryContent() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Row(children: [
-        Expanded(child: HypSectionTitle(
-          icon: Icons.library_books_rounded,
-          title: '내 서재',
-          subtitle: '추가한 작품과 읽기 진행도를 관리하세요.',
-        )),
-        const SizedBox(width: 8),
+      HypSectionTitle(
+        icon: Icons.library_books_rounded,
+        title: '내 서재',
+        subtitle: '추가한 작품과 읽기 진행도를 관리하세요.',
+      ),
+      const SizedBox(height: 10),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        OutlinedButton.icon(
+          key: const Key('library-select-mode'),
+          onPressed: _toggleSelectionMode,
+          icon: Icon(_selectingWorks
+              ? Icons.close : Icons.checklist_outlined),
+          label: HypText(_selectingWorks ? '선택 종료' : '선택'),
+        ),
         OutlinedButton.icon(
           key: const Key('library-download-all'),
           onPressed: widget.library.works.isEmpty
@@ -846,7 +891,8 @@ class _HypDashboardState extends State<HypDashboard> {
           label: const HypText('전체 다운로드'),
         ),
       ]),
-      const SizedBox(height: 15),
+      _selectionControls(_works),
+      const SizedBox(height: 8),
       _gridOrEmpty(_works,
         emptyTitle: '내 서재에 작품이 없어',
         emptyMessage: '홈에서 번호를 찾아 저장해줘.',
@@ -854,11 +900,27 @@ class _HypDashboardState extends State<HypDashboard> {
     ],
   );
 
-  Widget _searchContent() => _fullPage(
-    '검색 결과',
-    '"' + _search.text + '" · ' + _results.length.toString() + '개 작품',
-    Icons.search_rounded,
-    _results,
+  Widget _searchContent() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Align(
+        alignment: Alignment.centerRight,
+        child: OutlinedButton.icon(
+          key: const Key('search-select-mode'),
+          onPressed: _toggleSelectionMode,
+          icon: Icon(_selectingWorks
+              ? Icons.close : Icons.checklist_outlined),
+          label: HypText(_selectingWorks ? '선택 종료' : '선택'),
+        ),
+      ),
+      _selectionControls(_results),
+      _fullPage(
+        '검색 결과',
+        '"' + _search.text + '" · ' + _results.length.toString() + '개 작품',
+        Icons.search_rounded,
+        _results,
+      ),
+    ],
   );
 
   Widget _gridOrEmpty(List<WorkEntry> works, {
@@ -887,6 +949,10 @@ class _HypDashboardState extends State<HypDashboard> {
         }
       },
       onAction: _workAction,
+      selectionMode: _selectingWorks && _canSelectWorks,
+      selectedWorkIds: _selectedWorkIds,
+      onSelect: _canSelectWorks ? _toggleSelectedWork : null,
+      onLongPress: _canSelectWorks ? _startSelection : null,
     );
   }
 
@@ -914,6 +980,9 @@ class _HypDashboardState extends State<HypDashboard> {
       await _refreshOffline();
     } else if (action == 'cover') {
       await widget.onChooseCover(work);
+      await _refreshOffline();
+    } else if (action == 'edit_details') {
+      await widget.onEditWorkDetails(work);
       await _refreshOffline();
     } else if (action == 'favorite') {
       await widget.onUpdateWork(work.copyWith(favorite: !work.favorite));
