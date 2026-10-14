@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/gallery.dart';
+import '../core/android_controls.dart';
 import '../core/reader_settings.dart';
 import '../core/work.dart';
 
@@ -33,7 +34,7 @@ class GalleryReader extends StatefulWidget {
   State<GalleryReader> createState() => _GalleryReaderState();
 }
 
-class _GalleryReaderState extends State<GalleryReader> {
+class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserver {
   late PageController _controller;
   late int _currentUnit;
   bool _vertical = false;
@@ -48,6 +49,10 @@ class _GalleryReaderState extends State<GalleryReader> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncAndroidControls();
+    });
     final initial = widget.work.currentPage
         .clamp(1, widget.archive.pageCount).toInt();
     _currentUnit = (initial - 1) ~/ _step;
@@ -60,6 +65,13 @@ class _GalleryReaderState extends State<GalleryReader> {
   @override
   void didUpdateWidget(covariant GalleryReader oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.settings.volumeKeyNavigation != widget.settings.volumeKeyNavigation ||
+        oldWidget.settings.forceLandscapeForSpreads != widget.settings.forceLandscapeForSpreads ||
+        oldWidget.settings.twoPageSpread != widget.settings.twoPageSpread) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _syncAndroidControls();
+      });
+    }
     if (oldWidget.settings.twoPageSpread != widget.settings.twoPageSpread) {
       final page = _currentUnit *
           (oldWidget.settings.twoPageSpread ? 2 : 1) + 1;
@@ -80,8 +92,24 @@ class _GalleryReaderState extends State<GalleryReader> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(AndroidReaderControls.deactivate());
     _controller.dispose();
     super.dispose();
+  }
+
+  void _syncAndroidControls() {
+    unawaited(AndroidReaderControls.activate(
+      volumeNavigation: widget.settings.volumeKeyNavigation,
+      forceLandscape: widget.settings.twoPageSpread &&
+          widget.settings.forceLandscapeForSpreads,
+      onTurn: (next) { if (mounted) _turn(next ? 1 : -1); },
+    ));
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _syncAndroidControls();
   }
 
   Future<Uint8List> _bytesAt(int index) =>
