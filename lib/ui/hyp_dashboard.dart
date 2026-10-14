@@ -331,21 +331,21 @@ class _HypDashboardState extends State<HypDashboard> {
     ));
   }
 
-  void _openBackupSettings() {
+  Future<void> _openBackupSettings() async {
     _navigate(HypPage.settings);
     _openBackupSectionRequested = true;
     final active = widget.readerSettings.expandedSettings.toSet()
       ..add('backup');
-    widget.onSaveReaderSettings(widget.readerSettings.copyWith(
+    await widget.onSaveReaderSettings(widget.readerSettings.copyWith(
       expandedSettings: active.toList()));
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || !_openBackupSectionRequested) return;
+      _openBackupSectionRequested = false;
       final target = _backupSectionKey.currentContext;
-      if (target != null && _openBackupSectionRequested) {
-        _openBackupSectionRequested = false;
+      if (target != null) {
         Scrollable.ensureVisible(target,
           duration: const Duration(milliseconds: 260),
-          alignment: 0.08);
+          alignment: 0.06);
       }
     });
   }
@@ -1530,6 +1530,32 @@ class _HypDashboardState extends State<HypDashboard> {
       widget.readerSettings.copyWith(preloadPages: pages));
   }
 
+  Widget _settingsPanel(String id, String title, Widget content) {
+    final expanded = widget.readerSettings.expandedSettings.contains(id);
+    return Container(
+      key: id == 'backup' ? _backupSectionKey : null,
+      child: HypPanel(child: ExpansionTile(
+        key: Key('settings-section-' + id + (expanded ? '-open' : '-closed')),
+        initiallyExpanded: expanded,
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 9),
+        title: HypText(title,
+            style: Theme.of(context).textTheme.titleMedium),
+        onExpansionChanged: (opening) {
+          final enabled = widget.readerSettings.expandedSettings.toSet();
+          if (opening) {
+            enabled.add(id);
+          } else {
+            enabled.remove(id);
+          }
+          widget.onSaveReaderSettings(widget.readerSettings.copyWith(
+              expandedSettings: enabled.toList()));
+        },
+        children: [content],
+      )),
+    );
+  }
+
   Widget _settingsContent() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -1539,7 +1565,7 @@ class _HypDashboardState extends State<HypDashboard> {
         subtitle: '뷰어 조작, 기본 표지, 추가 다운로드 소스와 앱 데이터를 관리해.',
       ),
       const SizedBox(height: 14),
-      HypPanel(child: Column(
+      _settingsPanel('general', '언어·일반', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('언어', style: Theme.of(context).textTheme.titleMedium),
@@ -1570,7 +1596,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 10),
-      HypPanel(child: Column(
+      _settingsPanel('hero', '홈 배너', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('홈 배너 일러스트',
@@ -1651,12 +1677,12 @@ class _HypDashboardState extends State<HypDashboard> {
           ]),
           const SizedBox(height: 7),
           const HypText('PNG · JPG · WebP (최대 12MB). 이미지 자체는 '
-              '이 기기에 저장되며 서재 JSON 백업에는 포함되지 않아.',
+              '이 기기에 저장되며 JSON 통합 백업에서 선택적으로 포함할 수 있어.',
               style: TextStyle(fontSize: 12, color: HypColors.muted)),
         ],
       )),
       const SizedBox(height: 10),
-      HypPanel(child: Column(
+      _settingsPanel('viewer', '뷰어·로딩 설정', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('이미지 뷰어 설정', style: Theme.of(context).textTheme.titleMedium),
@@ -1840,6 +1866,18 @@ class _HypDashboardState extends State<HypDashboard> {
               child: const HypText('적용'),
             ),
           ]),
+          const SizedBox(height: 12),
+          SwitchListTile.adaptive(
+            key: const Key('data-saver-setting'),
+            contentPadding: EdgeInsets.zero,
+            title: const HypText('데이터 절약 모드'),
+            subtitle: const HypText('켜면 -1 전체 로딩을 잠시 멈추고 '
+                '보이는 페이지와 다음 1장 위주로 요청해. '
+                '동시 네트워크 요청도 1개로 제한해.'),
+            value: widget.readerSettings.dataSaverMode,
+            onChanged: (v) => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(dataSaverMode: v)),
+          ),
           const SizedBox(height: 8),
           const HypText(
             '키보드(뷰어): ← / →, PageUp / PageDown, Space, Home / End, '
@@ -1849,7 +1887,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 10),
-      HypPanel(child: Column(
+      _settingsPanel('cover', '표지 관리', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('표지 자동 설정 및 편집', style: Theme.of(context).textTheme.titleMedium),
@@ -1880,7 +1918,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      HypPanel(child: Column(
+      _settingsPanel('android', 'Android 동작', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('Android 뷰어 동작', style: Theme.of(context).textTheme.titleMedium),
@@ -1911,7 +1949,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      HypPanel(child: Column(
+      _settingsPanel('notices', '공지', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('관리자 공지', style: Theme.of(context).textTheme.titleMedium),
@@ -1943,7 +1981,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      HypPanel(child: Column(
+      _settingsPanel('web', '기본 웹 리더', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('기본 웹 리더 (주소 고정)',
@@ -1966,7 +2004,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      HypPanel(child: Column(
+      _settingsPanel('source', '추가 이미지 소스', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('추가 JSON 이미지 소스 (선택)', style: Theme.of(context).textTheme.titleMedium),
@@ -1995,7 +2033,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      HypPanel(child: Column(
+      _settingsPanel('backup', '서재 데이터·백업', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('서재 데이터', style: Theme.of(context).textTheme.titleMedium),
@@ -2030,7 +2068,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      HypPanel(child: Column(
+      _settingsPanel('updates', '업데이트', Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HypText('업데이트', style: Theme.of(context).textTheme.titleMedium),
