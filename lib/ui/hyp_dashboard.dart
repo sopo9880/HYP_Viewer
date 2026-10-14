@@ -80,6 +80,7 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function(WorkEntry) onDownloadOnline;
   final Future<void> Function(WorkEntry) onDownloadJsonSource;
   final Future<void> Function(WorkEntry) onDeleteOffline;
+  final Future<void> Function(WorkEntry) onDeleteWork;
   final VoidCallback onToggleDownloadPause;
   final bool downloadPaused;
   final bool downloadCanPause;
@@ -136,6 +137,7 @@ class HypDashboard extends StatefulWidget {
     required this.onDownloadOnline,
     required this.onDownloadJsonSource,
     required this.onDeleteOffline,
+    required this.onDeleteWork,
     required this.onToggleDownloadPause,
     required this.downloadPaused,
     required this.downloadCanPause,
@@ -160,6 +162,7 @@ class _HypDashboardState extends State<HypDashboard> {
   final Set<String> _offlineKeys = <String>{};
   final Map<String, int> _pageCounts = <String, int>{};
   final Map<String, Uint8List> _coverImages = <String, Uint8List>{};
+  int _offlineRefreshEpoch = 0;
 
   @override
   void initState() {
@@ -205,6 +208,8 @@ class _HypDashboardState extends State<HypDashboard> {
       .join('|');
 
   Future<void> _refreshOffline() async {
+    // Discard out-of-order refreshes after a work was removed or re-added.
+    final epoch = ++_offlineRefreshEpoch;
     final offline = <String>{};
     final counts = <String, int>{};
     final images = <String, Uint8List>{};
@@ -242,7 +247,7 @@ class _HypDashboardState extends State<HypDashboard> {
     } catch (_) {
       // Flutter widget tests can run without platform file services.
     }
-    if (!mounted) return;
+    if (!mounted || epoch != _offlineRefreshEpoch) return;
     setState(() {
       _offlineKeys
         ..clear()
@@ -724,6 +729,9 @@ class _HypDashboardState extends State<HypDashboard> {
       await _refreshOffline();
     } else if (action == 'delete_offline') {
       await widget.onDeleteOffline(work);
+      await _refreshOffline();
+    } else if (action == 'delete_work') {
+      await widget.onDeleteWork(work);
       await _refreshOffline();
     } else if (action == 'import') {
       await widget.onImportGallery(work);

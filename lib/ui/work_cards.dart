@@ -179,6 +179,17 @@ class HypWorkCard extends StatelessWidget {
                         if (work.videoUrl.isNotEmpty)
                           const PopupMenuItem(
                               value: 'original', child: Text('원본 쇼츠')),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                          value: 'delete_work',
+                          child: Row(children: [
+                            Icon(Icons.delete_outline_rounded,
+                                size: 19, color: Colors.redAccent),
+                            SizedBox(width: 9),
+                            Text('서재에서 작품 삭제',
+                                style: TextStyle(color: Colors.redAccent)),
+                          ]),
+                        ),
                       ],
                     ),
                   ),

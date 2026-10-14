@@ -39,6 +39,27 @@ class CoverStore {
     String mode = 'auto', int page = 1,
   }) async => (await _imageFile(workId, mode, page)).exists();
 
+  /// Delete only this work's local previews, never another work's artwork.
+  /// Calling this is optional when removing an entry from the library.
+  Future<void> deleteAllForWork(String workId) async {
+    if (!_valid(workId)) {
+      throw const FormatException('표지 파일 경로가 유효하지 않아.');
+    }
+    final root = baseDirectory ?? await getApplicationSupportDirectory();
+    final dir = Directory(root.path + Platform.pathSeparator + 'covers');
+    if (!await dir.exists()) return;
+    final pagePattern = RegExp('^${workId}_page_[0-9]{1,7}[.]png' r'$');
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is! File) continue;
+      final name = entity.uri.pathSegments.last;
+      if (name == '${workId}_auto.png' ||
+          name == '${workId}_custom.png' ||
+          pagePattern.hasMatch(name)) {
+        await entity.delete();
+      }
+    }
+  }
+
   Future<Uint8List> save(String workId, Uint8List original, {
     String mode = 'auto', int page = 1,
   }) async {

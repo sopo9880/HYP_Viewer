@@ -887,6 +887,95 @@ class _LibraryHomeState extends State<LibraryHome> {
     if (mounted) setState(() => isReaderTransferPaused = active.isPaused);
   }
 
+
+  /// Explicitly distinguish removing a shelf entry from deleting files.
+  /// Always confirm because the library entry includes reading history.
+  Future<void> _deleteWork(WorkEntry work) async {
+    if (downloadingGalleryKey == work.key) {
+      _status('이 작품을 다운로드 중이야. 완료하거나 취소한 뒤 삭제해줘.');
+      return;
+    }
+    if (!library.works.any((entry) => entry.key == work.key)) {
+      _status('이미 서재에서 삭제된 작품이야.');
+      return;
+    }
+    if (!mounted) return;
+    var alsoDeleteFiles = false;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, updateDialog) => AlertDialog(
+          title: const Text('서재에서 작품 삭제'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(work.title.isNotEmpty
+                    ? work.title : '작품 ${work.workId}',
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text('작품 번호 ${work.workId}'),
+                const SizedBox(height: 12),
+                const Text('서재 목록에서 제거하면 이 작품의 즐겨찾기와 '
+                    '읽기 기록도 함께 제거돼. 다른 작품은 유지돼.'),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  key: const Key('delete-work-files-checkbox'),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: alsoDeleteFiles,
+                  onChanged: (checked) => updateDialog(
+                    () => alsoDeleteFiles = checked == true,
+                  ),
+                  title: const Text('로컬 파일도 함께 삭제'),
+                  subtitle: const Text('다운로드한 CBZ와 기기 내 표지 미리보기까지 삭제. '
+                      '선택하지 않으면 파일은 남아서 작품 재등록 시 다시 사용할 수 있어.'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('취소'),
+            ),
+            FilledButton.icon(
+              key: const Key('confirm-delete-work'),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const Text('서재에서 삭제'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (approved != true || !mounted) return;
+    if (downloadingGalleryKey == work.key) {
+      _status('다운로드가 진행 중이야. 완료 또는 취소 후 삭제해줘.');
+      return;
+    }
+    try {
+      await _commitLibrary((latest) => latest.withoutWork(work.workId));
+    } catch (error) {
+      _status('서재 작품 삭제 실패: $error');
+      return;
+    }
+    if (mounted) setState(() => coverEpoch++);
+    if (alsoDeleteFiles) {
+      try {
+        await galleryStore.delete(work.workId);
+        await coverStore.deleteAllForWork(work.workId);
+        _status('작품 ${work.workId}을 서재에서 제거하고 로컬 파일도 삭제했어.');
+      } catch (error) {
+        _status('서재 항목은 삭제했지만 로컬 파일 정리가 일부 실패했어: $error');
+      }
+    } else {
+      _status('작품 ${work.workId}을 서재에서 삭제했어. 로컬 파일은 유지했어.');
+    }
+  }
+
   Future<void> _deleteOffline(WorkEntry work) async {
     if (!await galleryStore.exists(work.workId) || !mounted) return;
     final approved = await showDialog<bool>(
@@ -1230,6 +1319,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     onDownloadOnline: _downloadOnline,
     onDownloadJsonSource: _downloadJsonSource,
     onDeleteOffline: _deleteOffline,
+    onDeleteWork: _deleteWork,
     onToggleDownloadPause: _pauseOrResumeReaderDownload,
     downloadPaused: isReaderTransferPaused,
     downloadCanPause: readerTransfer != null,
