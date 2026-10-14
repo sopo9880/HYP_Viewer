@@ -42,6 +42,7 @@ class HypDashboard extends StatefulWidget {
   final GalleryStore galleryStore;
   final CoverStore coverStore;
   final ReaderSettings readerSettings;
+  final Uint8List? heroArtwork;
   final int coverEpoch;
   final TextEditingController urlInput;
   final TextEditingController apiKeyInput;
@@ -63,6 +64,9 @@ class HypDashboard extends StatefulWidget {
   final VoidCallback onAnalyze;
   final Future<void> Function() onFetch;
   final Future<void> Function() onSaveWork;
+  final Future<void> Function(List<String> codes) onSaveSelectedWorks;
+  final Future<void> Function() onChooseHeroArtwork;
+  final Future<void> Function() onClearHeroArtwork;
   final Future<void> Function() onSaveOnlineSource;
   final Future<void> Function() onExportJson;
   final Future<void> Function() onExportExcel;
@@ -94,6 +98,7 @@ class HypDashboard extends StatefulWidget {
     required this.galleryStore,
     required this.coverStore,
     required this.readerSettings,
+    required this.heroArtwork,
     required this.coverEpoch,
     required this.urlInput,
     required this.apiKeyInput,
@@ -115,6 +120,9 @@ class HypDashboard extends StatefulWidget {
     required this.onAnalyze,
     required this.onFetch,
     required this.onSaveWork,
+    required this.onSaveSelectedWorks,
+    required this.onChooseHeroArtwork,
+    required this.onClearHeroArtwork,
     required this.onSaveOnlineSource,
     required this.onExportJson,
     required this.onExportExcel,
@@ -600,6 +608,7 @@ class _HypDashboardState extends State<HypDashboard> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       HypHeroBanner(
+        artwork: widget.heroArtwork,
         onOpenLibrary: () => _navigate(HypPage.library),
         onOpenDownloads: () => _navigate(HypPage.downloads),
       ),
@@ -617,6 +626,7 @@ class _HypDashboardState extends State<HypDashboard> {
         onFetch: widget.onFetch,
         onOpenYoutube: widget.onOpenShortsInput,
         onSave: widget.onSaveWork,
+        onSaveSelectedWorks: widget.onSaveSelectedWorks,
       ),
       const SizedBox(height: 24),
       HypSectionTitle(
@@ -849,6 +859,49 @@ class _HypDashboardState extends State<HypDashboard> {
       HypPanel(child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Text('홈 배너 일러스트',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 9),
+          const Text('첫 화면의 "좋아하는 이야기를, 언제 어디서나" '
+              '배경 일러스트를 직접 설정할 수 있어.',
+              style: TextStyle(fontSize: 12, color: HypColors.muted)),
+          const SizedBox(height: 11),
+          if (widget.heroArtwork != null) ...[
+            ClipRRect(
+              key: const Key('hero-artwork-preview'),
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(height: 130,
+                child: Image.memory(widget.heroArtwork!, fit: BoxFit.cover,
+                    width: double.infinity, gaplessPlayback: true)),
+            ),
+            const SizedBox(height: 9),
+          ],
+          Wrap(spacing: 10, runSpacing: 8, children: [
+            OutlinedButton.icon(
+              key: const Key('hero-artwork-upload'),
+              onPressed: widget.onChooseHeroArtwork,
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: Text(widget.heroArtwork == null
+                  ? '일러스트 업로드' : '일러스트 교체'),
+            ),
+            if (widget.heroArtwork != null)
+              TextButton.icon(
+                key: const Key('hero-artwork-reset'),
+                onPressed: widget.onClearHeroArtwork,
+                icon: const Icon(Icons.restore_rounded),
+                label: const Text('기본 배경으로 되돌리기'),
+              ),
+          ]),
+          const SizedBox(height: 7),
+          const Text('PNG · JPG · WebP (최대 12MB). 이미지 자체는 '
+              '이 기기에 저장되며 서재 JSON 백업에는 포함되지 않아.',
+              style: TextStyle(fontSize: 12, color: HypColors.muted)),
+        ],
+      )),
+      const SizedBox(height: 10),
+      HypPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Text('이미지 뷰어 설정', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           const Text('읽기 방향을 정하면 화면 스와이프와 방향키도 함께 적용돼.',
@@ -880,6 +933,21 @@ class _HypDashboardState extends State<HypDashboard> {
               value: widget.readerSettings.twoPageSpread,
               onChanged: (v) => widget.onSaveReaderSettings(
                 widget.readerSettings.copyWith(twoPageSpread: v)),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Material(
+            color: Colors.transparent,
+            child: SwitchListTile.adaptive(
+              key: const Key('reader-vertical-scroll-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('세로로 페이지 넘기기'),
+              subtitle: const Text('뷰어 오른쪽 위의 가로/세로 전환 버튼과 '
+                  '같은 설정이야. 종료 후에도 유지돼. '
+                  '2쪽 모아보기는 가로로 표시돼.'),
+              value: widget.readerSettings.verticalScrolling,
+              onChanged: (v) => widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(verticalScrolling: v)),
             ),
           ),
           const SizedBox(height: 9),
