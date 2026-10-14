@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../core/i18n.dart';
 import 'hyp_theme.dart';
 
 /// Functional three-slide product hero. The illustration is native Flutter
@@ -114,17 +115,17 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
                     const Icon(Icons.auto_stories_rounded,
                         color: HypColors.lightPurple, size: 19),
                     const SizedBox(width: 8),
-                    const Text('HYP Viewer',
+                    const HypText('HYP Viewer',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   ]),
                   const SizedBox(height: 11),
-                  Text(titles[_index], style: TextStyle(
+                  HypText(titles[_index], style: TextStyle(
                     fontSize: compact ? 23 : 31,
                     fontWeight: FontWeight.w900,
                     height: 1.15,
                   )),
                   const SizedBox(height: 9),
-                  Text(descriptions[_index], style: TextStyle(
+                  HypText(descriptions[_index], style: TextStyle(
                     fontSize: compact ? 11 : 13,
                     height: 1.4,
                     color: HypColors.text.withValues(alpha: 0.86),
@@ -157,7 +158,7 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
                             ? widget.onOpenLibrary : widget.onOpenDownloads,
                         iconAlignment: IconAlignment.end,
                         icon: const Icon(Icons.arrow_forward),
-                        label: Text(_index == 1 ? '서재 열기' : '다운로드 보기'),
+                        label: HypText(_index == 1 ? '서재 열기' : '다운로드 보기'),
                       ),
                   ]),
                 ],

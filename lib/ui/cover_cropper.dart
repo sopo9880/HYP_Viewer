@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import '../core/i18n.dart';
 import 'package:flutter/rendering.dart';
 
 /// All editing happens in a fixed portrait preview. The exact cropped
@@ -70,10 +71,10 @@ class _CropCoverDialogState extends State<_CropCoverDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('표지 자르기'),
+    title: const HypText('표지 자르기'),
     content: SingleChildScrollView(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Text('사진을 드래그하거나 두 손가락으로 확대·축소해 '
+        const HypText('사진을 드래그하거나 두 손가락으로 확대·축소해 '
             '사각형 안의 부분을 표지로 저장해.'),
         const SizedBox(height: 12),
         DecoratedBox(
@@ -102,7 +103,7 @@ class _CropCoverDialogState extends State<_CropCoverDialog> {
                     height: height,
                     fit: BoxFit.cover,
                     errorBuilder: (_, error, __) =>
-                        const Center(child: Text('이미지를 열지 못했어.')),
+                        const Center(child: HypText('이미지를 열지 못했어.')),
                   ),
                 ),
               ),
@@ -126,20 +127,20 @@ class _CropCoverDialogState extends State<_CropCoverDialog> {
         TextButton.icon(
           onPressed: _saving ? null : () => _changeZoom(1),
           icon: const Icon(Icons.restart_alt),
-          label: const Text('위치 및 확대 초기화'),
+          label: const HypText('위치 및 확대 초기화'),
         ),
         if (_error != null)
-          Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+          HypText(_error!, style: const TextStyle(color: Colors.redAccent)),
       ]),
     ),
     actions: [
       TextButton(onPressed: _saving ? null : () => Navigator.pop(context),
-          child: const Text('취소')),
+          child: const HypText('취소')),
       FilledButton.icon(
         key: const Key('cover-crop-save'),
         onPressed: _saving ? null : _save,
         icon: const Icon(Icons.crop),
-        label: Text(_saving ? '저장 중…' : '이 영역 저장'),
+        label: HypText(_saving ? '저장 중…' : '이 영역 저장'),
       ),
     ],
   );

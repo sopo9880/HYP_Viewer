@@ -248,9 +248,10 @@ abstract final class HypI18n {
   }
 
   static String t(BuildContext context, String text) {
-    final code = Localizations.maybeLocaleOf(context)?.languageCode ??
-        HypLanguage.selected.value;
-    return translate(text, code);
+    // Register a dependency on MaterialApp's locale for immediate rebuilds,
+    // but use the explicit app preference (not the device's system language).
+    Localizations.maybeLocaleOf(context);
+    return translate(text, HypLanguage.selected.value);
   }
 }
 
