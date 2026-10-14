@@ -76,8 +76,8 @@ class GalleryDiskCache implements GalleryPageSource {
 
   void warmAround(int page, int radius) {
     if (_disposed) return;
-    final first = (page - radius).clamp(0, pageCount);
-    final last = (page + radius + 1).clamp(0, pageCount);
+    final first = (page - radius).clamp(0, pageCount).toInt();
+    final last = (page + radius + 1).clamp(0, pageCount).toInt();
     _pending.addAll(List.generate(last - first, (i) => first + i));
     _ensurePump();
   }

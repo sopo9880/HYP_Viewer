@@ -11,10 +11,13 @@ void main() {
       verticalScrolling: true,
       showDownloadAction: false,
       showOrientationAction: false,
-      preloadPages: 3,
       openAfterSave: true,
       languageCode: 'ja',
       heroArtworkSource: 'random',
+      tapNavigation: true,
+      webtoonMode: true,
+      autoDownloadOnSave: true,
+      preloadPages: -1,
     );
     final output = ReaderSettings.fromJson(prefs.toJson());
     expect(output.reverse, true);
@@ -26,6 +29,10 @@ void main() {
     expect(output.openAfterSave, true);
     expect(output.languageCode, 'ja');
     expect(output.heroArtworkSource, 'random');
+    expect(output.tapNavigation, true);
+    expect(output.webtoonMode, true);
+    expect(output.autoDownloadOnSave, true);
+    expect(output.preloadPages, -1);
 
     final bad = ReaderSettings.fromJson({
       'nextDirection': 'nonsense',
@@ -43,6 +50,9 @@ void main() {
     expect(bad.openAfterSave, false);
     expect(bad.languageCode, 'ko');
     expect(bad.heroArtworkSource, 'custom');
+    expect(bad.tapNavigation, false);
+    expect(bad.webtoonMode, false);
+    expect(bad.autoDownloadOnSave, false);
   });
 
   test('persists reading preferences independently of the library', () async {

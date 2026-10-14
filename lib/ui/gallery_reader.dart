@@ -481,19 +481,16 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
               itemBuilder: (context, index) =>
                   _pageAt(index, webtoon: true),
             )
-          : GestureDetector(
+          : LayoutBuilder(builder: (context, constraints) => GestureDetector(
               key: const Key('reader-tap-zones'),
               behavior: HitTestBehavior.translucent,
               onTapUp: widget.settings.tapNavigation
                   ? (event) {
-                      final box = context.findRenderObject();
-                      final size = box is RenderBox ? box.size :
-                          MediaQuery.sizeOf(context);
                       final delta = readerTapDelta(
                         pointX: event.localPosition.dx,
                         pointY: event.localPosition.dy,
-                        width: size.width,
-                        height: size.height,
+                        width: constraints.maxWidth,
+                        height: constraints.maxHeight,
                         vertical: _vertical,
                         reverse: widget.settings.reverse,
                       );
@@ -516,7 +513,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 },
                 itemBuilder: (context, unit) => _spreadAt(unit),
               ),
-            ),
+            )),
         bottomNavigationBar: _controlsVisible
             ? SafeArea(top: false, child: SizedBox(
                 height: 64,
