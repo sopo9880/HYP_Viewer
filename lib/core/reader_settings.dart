@@ -42,7 +42,7 @@ class ReaderSettings {
     this.showWebReaderAction = true,
     this.showOrientationAction = true,
     this.preloadPages = -1,
-    this.tapNavigation = false,
+    this.tapNavigation = true,
     this.webtoonMode = false,
     this.autoDownloadOnSave = false,
     this.dataSaverMode = false,
@@ -161,7 +161,7 @@ class ReaderSettings {
         openAfterSave: data['openAfterSave'] == true,
         languageCode: {'ko', 'en', 'ja'}.contains(data['languageCode'])
             ? data['languageCode'] as String : 'ko',
-        tapNavigation: data['tapNavigation'] == true,
+        tapNavigation: data['tapNavigation'] != false,
         webtoonMode: data['webtoonMode'] == true,
         autoDownloadOnSave: data['autoDownloadOnSave'] == true,
         dataSaverMode: data['dataSaverMode'] == true,
