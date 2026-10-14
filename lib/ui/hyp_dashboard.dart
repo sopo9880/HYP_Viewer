@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import '../core/hero_cover_picker.dart';
@@ -79,6 +80,7 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function() onExportJson;
   final Future<void> Function() onExportExcel;
   final Future<void> Function() onImportJson;
+  final Future<void> Function() onRestorePreviousLibrary;
   final Future<void> Function() onCheckRelease;
   final Future<void> Function() onCheckAnnouncements;
   final Future<void> Function() onSecurityHelp;
@@ -86,6 +88,9 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function(WorkEntry) onReadOnline;
   final Future<void> Function(WorkEntry) onReadWebPage;
   final Future<void> Function(WorkEntry) onDownloadOnline;
+  final Future<void> Function() onDownloadAll;
+  final Future<void> Function(bool enabled) onSetAutoDownload;
+  final int queuedDownloadCount;
   final Future<void> Function(WorkEntry) onDownloadJsonSource;
   final Future<void> Function(WorkEntry) onDeleteOffline;
   final Future<void> Function(WorkEntry) onDeleteWork;
@@ -140,6 +145,7 @@ class HypDashboard extends StatefulWidget {
     required this.onExportJson,
     required this.onExportExcel,
     required this.onImportJson,
+    required this.onRestorePreviousLibrary,
     required this.onCheckRelease,
     required this.onCheckAnnouncements,
     required this.onSecurityHelp,
@@ -147,6 +153,9 @@ class HypDashboard extends StatefulWidget {
     required this.onReadOnline,
     required this.onReadWebPage,
     required this.onDownloadOnline,
+    required this.onDownloadAll,
+    required this.onSetAutoDownload,
+    required this.queuedDownloadCount,
     required this.onDownloadJsonSource,
     required this.onDeleteOffline,
     required this.onDeleteWork,
@@ -175,23 +184,51 @@ class _HypDashboardState extends State<HypDashboard> {
   final Map<String, int> _pageCounts = <String, int>{};
   final Map<String, Uint8List> _coverImages = <String, Uint8List>{};
   int _offlineRefreshEpoch = 0;
-  String? _randomBannerCoverKey;
+  final List<String?> _rotatingCoverKeys = [null, null, null];
+  Timer? _bannerTimer;
+  late final TextEditingController _preloadInput;
 
   void _shuffleBannerCover() {
-    setState(() => _randomBannerCoverKey = pickRandomLibraryCover(
-        _coverImages.keys, previous: _randomBannerCoverKey));
+    if (!mounted) return;
+    setState(() {
+      final keys = _coverImages.keys.toList();
+      final used = <String>{};
+      for (var slide = 0; slide < 3; slide++) {
+        final pool = keys.where((key) =>
+            key != _rotatingCoverKeys[slide] &&
+            (!used.contains(key) || keys.length < 3)).toList();
+        final next = pickRandomLibraryCover(
+            pool.isEmpty ? keys : pool,
+            previous: _rotatingCoverKeys[slide]);
+        _rotatingCoverKeys[slide] = next;
+        if (next != null) used.add(next);
+      }
+    });
   }
 
   @override
   void initState() {
     super.initState();
+    _preloadInput = TextEditingController(
+      text: widget.readerSettings.preloadPages.toString());
     _search.addListener(_changedSearch);
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshOffline());
+    _bannerTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (mounted && _page == HypPage.home &&
+          widget.readerSettings.heroArtworkSource == 'random' &&
+          _coverImages.isNotEmpty) {
+        _shuffleBannerCover();
+      }
+    });
   }
 
   @override
   void didUpdateWidget(covariant HypDashboard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.readerSettings.preloadPages !=
+        widget.readerSettings.preloadPages) {
+      _preloadInput.text = widget.readerSettings.preloadPages.toString();
+    }
     if (oldWidget.navigationEpoch != widget.navigationEpoch) {
       _page = HypPage.home;
       _search.clear();
@@ -209,6 +246,8 @@ class _HypDashboardState extends State<HypDashboard> {
 
   @override
   void dispose() {
+    _bannerTimer?.cancel();
+    _preloadInput.dispose();
     _search.removeListener(_changedSearch);
     _search.dispose();
     _searchFocus.dispose();
@@ -280,11 +319,12 @@ class _HypDashboardState extends State<HypDashboard> {
       _coverImages
         ..clear()
         ..addAll(images);
-      // Keep the same randomly chosen work during scrolling/navigation.
-      // Pick another only if it was removed from the library.
-      if (_randomBannerCoverKey == null ||
-          !images.containsKey(_randomBannerCoverKey)) {
-        _randomBannerCoverKey = pickRandomLibraryCover(images.keys);
+      for (var slide = 0; slide < 3; slide++) {
+        if (_rotatingCoverKeys[slide] == null ||
+            !images.containsKey(_rotatingCoverKeys[slide])) {
+          _rotatingCoverKeys[slide] = pickRandomLibraryCover(
+              images.keys, previous: _rotatingCoverKeys[slide]);
+        }
       }
     });
   }
@@ -634,9 +674,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ? _searchContent()
         : switch (_page) {
             HypPage.home => _homeContent(),
-            HypPage.library => _fullPage('내 서재',
-                '추가한 작품과 읽기 진행도를 관리하세요.',
-                HypPage.library.icon, _works),
+            HypPage.library => _libraryContent(),
             HypPage.favorites => _fullPage('즐겨찾기',
                 '하트를 누른 작품만 모아 보여줘.',
                 HypPage.favorites.icon, _favorites),
@@ -657,11 +695,11 @@ class _HypDashboardState extends State<HypDashboard> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       HypHeroBanner(
-        artwork: switch (widget.readerSettings.heroArtworkSource) {
-          'default' => null,
-          'random' => _coverImages[_randomBannerCoverKey],
-          _ => widget.heroArtwork,
-        },
+        artwork: widget.readerSettings.heroArtworkSource == 'custom'
+            ? widget.heroArtwork : null,
+        rotatingArtworks: widget.readerSettings.heroArtworkSource == 'random'
+            ? _rotatingCoverKeys.map((key) => _coverImages[key]).toList()
+            : null,
         onOpenLibrary: () => _navigate(HypPage.library),
         onOpenDownloads: () => _navigate(HypPage.downloads),
       ),
@@ -724,6 +762,32 @@ class _HypDashboardState extends State<HypDashboard> {
         works,
         emptyTitle: title + '에 표시할 작품이 없어',
         emptyMessage: '홈에서 번호를 찾아 저장하거나 서재에서 작품을 열어봐.',
+      ),
+    ],
+  );
+
+  Widget _libraryContent() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Row(children: [
+        Expanded(child: HypSectionTitle(
+          icon: Icons.library_books_rounded,
+          title: '내 서재',
+          subtitle: '추가한 작품과 읽기 진행도를 관리하세요.',
+        )),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          key: const Key('library-download-all'),
+          onPressed: widget.library.works.isEmpty
+              ? null : widget.onDownloadAll,
+          icon: const Icon(Icons.download_for_offline_outlined),
+          label: const HypText('전체 다운로드'),
+        ),
+      ]),
+      const SizedBox(height: 15),
+      _gridOrEmpty(_works,
+        emptyTitle: '내 서재에 작품이 없어',
+        emptyMessage: '홈에서 번호를 찾아 저장해줘.',
       ),
     ],
   );
@@ -805,6 +869,21 @@ class _HypDashboardState extends State<HypDashboard> {
         subtitle: '내 기기에 저장된 작품 ' + _downloaded.length.toString() + '개',
       ),
       const SizedBox(height: 15),
+      if (widget.queuedDownloadCount > 0) ...[
+        HypPanel(child: Row(children: [
+          Expanded(child: HypText(
+            '추가 다운로드 대기: ${widget.queuedDownloadCount}개 작품',
+            key: const Key('download-queue-count'),
+          )),
+          TextButton.icon(
+            key: const Key('cancel-download-queue'),
+            onPressed: widget.onCancelGalleryDownload,
+            icon: const Icon(Icons.close_rounded),
+            label: const HypText('대기열 취소'),
+          ),
+        ])),
+        const SizedBox(height: 12),
+      ],
       if (widget.downloadingGalleryKey != null) ...[
         HypPanel(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -905,6 +984,19 @@ class _HypDashboardState extends State<HypDashboard> {
     }
   }
 
+  void _applyPreloadSetting() {
+    final pages = int.tryParse(_preloadInput.text.trim());
+    if (pages == null || pages < -1 || pages > 1500) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const HypText('미리 로딩은 -1 또는 0~1500 사이 숫자로 입력해줘.'),
+      ));
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    widget.onSaveReaderSettings(
+      widget.readerSettings.copyWith(preloadPages: pages));
+  }
+
   Widget _settingsContent() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -974,11 +1066,11 @@ class _HypDashboardState extends State<HypDashboard> {
           ),
           if (widget.readerSettings.heroArtworkSource == 'random') ...[
             const SizedBox(height: 10),
-            if (_coverImages[_randomBannerCoverKey] != null)
+            if (_coverImages[_rotatingCoverKeys.first] != null)
               ClipRRect(
                 key: const Key('random-hero-preview'),
                 borderRadius: BorderRadius.circular(9),
-                child: Image.memory(_coverImages[_randomBannerCoverKey]!,
+                child: Image.memory(_coverImages[_rotatingCoverKeys.first]!,
                   height: 125, fit: BoxFit.cover, cacheWidth: 1000),
               )
             else
@@ -1072,6 +1164,47 @@ class _HypDashboardState extends State<HypDashboard> {
           Material(
             color: Colors.transparent,
             child: SwitchListTile.adaptive(
+              key: const Key('auto-download-on-save-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: const HypText('서재에 추가할 때 자동 다운로드'),
+              subtitle: const HypText('기본값은 꺼짐. 권한 확인 후 새 작품을 '
+                  '순서대로 다운로드하고 기존 CBZ는 건너뛰어.'),
+              value: widget.readerSettings.autoDownloadOnSave,
+              onChanged: widget.onSetAutoDownload,
+            ),
+          ),
+          const SizedBox(height: 9),
+          Material(
+            color: Colors.transparent,
+            child: SwitchListTile.adaptive(
+              key: const Key('reader-tap-navigation-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: const HypText('화면 좌우·상하 터치로 페이지 넘기기'),
+              subtitle: const HypText('왼쪽 터치는 왼쪽으로, 오른쪽은 오른쪽으로. '
+                  '세로 방향에서는 위/아래를 눌러 넘겨.'),
+              value: widget.readerSettings.tapNavigation,
+              onChanged: (v) => widget.onSaveReaderSettings(
+                  widget.readerSettings.copyWith(tapNavigation: v)),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Material(
+            color: Colors.transparent,
+            child: SwitchListTile.adaptive(
+              key: const Key('reader-webtoon-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: const HypText('웹툰형 연속 세로 보기'),
+              subtitle: const HypText('페이지 간 간격 없이 아래로 계속 스크롤해. '
+                  '켜면 2쪽 모아보기보다 우선 적용돼.'),
+              value: widget.readerSettings.webtoonMode,
+              onChanged: (v) => widget.onSaveReaderSettings(
+                  widget.readerSettings.copyWith(webtoonMode: v)),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Material(
+            color: Colors.transparent,
+            child: SwitchListTile.adaptive(
               key: const Key('reader-two-page-setting'),
               contentPadding: EdgeInsets.zero,
               title: const HypText('2쪽 모아보기'),
@@ -1154,21 +1287,26 @@ class _HypDashboardState extends State<HypDashboard> {
             ],
           )),
           const SizedBox(height: 9),
-          DropdownButtonFormField<int>(
-            key: const Key('reader-preload-setting'),
-            initialValue: widget.readerSettings.preloadPages,
-            decoration: InputDecoration(labelText: HypI18n.t(context, '앞뒤 미리 로딩 페이지')),
-            items: const [
-              DropdownMenuItem(value: 0, child: HypText('끄기')),
-              DropdownMenuItem(value: 1, child: HypText('1장씩')),
-              DropdownMenuItem(value: 2, child: HypText('2장씩 (추천)')),
-              DropdownMenuItem(value: 3, child: HypText('3장씩')),
-            ],
-            onChanged: (v) {
-              if (v != null) widget.onSaveReaderSettings(
-                widget.readerSettings.copyWith(preloadPages: v));
-            },
-          ),
+          Row(children: [
+            Expanded(child: TextField(
+              key: const Key('reader-preload-setting'),
+              controller: _preloadInput,
+              keyboardType: const TextInputType.numberWithOptions(
+                  signed: true),
+              decoration: InputDecoration(
+                labelText: HypI18n.t(context, '앞뒤 미리 로딩 페이지'),
+                helperText: HypI18n.t(context,
+                    '직접 입력: 0~1500 / -1은 전체 로딩 (임시 디스크 캐시)'),
+              ),
+              onSubmitted: (_) => _applyPreloadSetting(),
+            )),
+            const SizedBox(width: 8),
+            FilledButton(
+              key: const Key('reader-preload-apply'),
+              onPressed: _applyPreloadSetting,
+              child: const HypText('적용'),
+            ),
+          ]),
           const SizedBox(height: 8),
           const HypText(
             '키보드(뷰어): ← / →, PageUp / PageDown, Space, Home / End, '
@@ -1328,6 +1466,13 @@ class _HypDashboardState extends State<HypDashboard> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('서재 데이터', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const Key('library-restore-previous'),
+            onPressed: widget.onRestorePreviousLibrary,
+            icon: const Icon(Icons.restore_page_outlined),
+            label: const HypText('이전 서재 백업에서 복구'),
+          ),
           const SizedBox(height: 6),
           const HypText('JSON은 백업·기기 이전용, Excel은 확인용이야.',
             style: TextStyle(fontSize: 12, color: HypColors.muted)),

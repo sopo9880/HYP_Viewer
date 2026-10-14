@@ -157,21 +157,30 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.1.9:
-          - Rule-based multi-part number extraction: remove episode markers
-            (1편, 2편, 3편) from work IDs. Handle disguised IDs with
-            year/month/day, hour/minute/second, slash and Korean man notation.
-          - Verify up to 24 IDs using metadata only, with at most 3
-            concurrent checks. Distinguish verified, not found, unavailable.
-          - Edit candidate numbers and count, add and remove input slots,
-            select works, reverify edited IDs and save only selected works.
-            Show episode labels and original extraction evidence.
-          - Translate sidebar library/offline counts; language options always
-            display native names: 한국어 / English / 日本語.
-          - Home hero supports default art, custom uploaded illustrations
-            and random actual saved library-cover images with reshuffle.
-          - Preserve existing v0.1.8 quick-add, 3-language UI, notifications,
-            favorites, backups, reader settings and signed updates.
+          Changes in v0.1.10:
+          - Android sharing now uses a singleTask, non-document activity so
+            incoming Shorts URLs reuse the same recent-app task.
+          - Protect library JSON against a startup share/save race; recover
+            from previous or staged validated backups after interrupted saves
+            and refuse to overwrite unreadable library data.
+          - Optional physical screen-half tap navigation: horizontal
+            left/right or vertical top/bottom, honoring reading direction.
+          - Reader preload is a custom -1 or 0..1500 number. -1 warms
+            the whole work using a bounded, temporary DISK cache with at
+            most two speculative concurrent downloads; eviction keeps RAM
+            small, and cache is deleted on reader close.
+          - Optional auto-download when a work is saved, with up-front
+            rights confirmation; single-file existing downloads are skipped.
+          - Whole-library download button in Library, with explicit rights
+            confirmation, sequential downloads, queue count and cancel.
+            Restricted sources are never bypassed.
+          - Continuous width-fitted vertical webtoon reader with actual
+            scroll positions and no gaps between image pages.
+          - Random library covers now rotate automatically on all three
+            introduction slides; carousel advances on a timer and can
+            still be navigated manually.
+          - Keep existing v0.1.9 work editing, backups, reading preferences,
+            and signed Android update compatibility.
 
           Known limitations: Automated tests use mocked images and notices;
           actual remote sites, Android devices and Samsung firmware may

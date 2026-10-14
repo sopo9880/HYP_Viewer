@@ -14,7 +14,10 @@ class ReaderSettings {
   final bool showPageControlsAction;
   final bool showWebReaderAction;
   final bool showOrientationAction;
-  final int preloadPages;
+  final int preloadPages; // -1: whole gallery to bounded disk cache
+  final bool tapNavigation;
+  final bool webtoonMode;
+  final bool autoDownloadOnSave;
   final bool autoCoverEnabled;
   final bool volumeKeyNavigation;
   final bool forceLandscapeForSpreads;
@@ -33,6 +36,9 @@ class ReaderSettings {
     this.showWebReaderAction = true,
     this.showOrientationAction = true,
     this.preloadPages = 2,
+    this.tapNavigation = false,
+    this.webtoonMode = false,
+    this.autoDownloadOnSave = false,
     this.autoCoverEnabled = false,
     this.volumeKeyNavigation = false,
     this.forceLandscapeForSpreads = false,
@@ -54,6 +60,9 @@ class ReaderSettings {
     bool? showWebReaderAction,
     bool? showOrientationAction,
     int? preloadPages,
+    bool? tapNavigation,
+    bool? webtoonMode,
+    bool? autoDownloadOnSave,
     bool? autoCoverEnabled,
     bool? volumeKeyNavigation,
     bool? forceLandscapeForSpreads,
@@ -71,6 +80,9 @@ class ReaderSettings {
     showWebReaderAction: showWebReaderAction ?? this.showWebReaderAction,
     showOrientationAction: showOrientationAction ?? this.showOrientationAction,
     preloadPages: preloadPages ?? this.preloadPages,
+    tapNavigation: tapNavigation ?? this.tapNavigation,
+    webtoonMode: webtoonMode ?? this.webtoonMode,
+    autoDownloadOnSave: autoDownloadOnSave ?? this.autoDownloadOnSave,
     autoCoverEnabled: autoCoverEnabled ?? this.autoCoverEnabled,
     volumeKeyNavigation: volumeKeyNavigation ?? this.volumeKeyNavigation,
     forceLandscapeForSpreads: forceLandscapeForSpreads ?? this.forceLandscapeForSpreads,
@@ -90,6 +102,9 @@ class ReaderSettings {
     'showWebReaderAction': showWebReaderAction,
     'showOrientationAction': showOrientationAction,
     'preloadPages': preloadPages,
+    'tapNavigation': tapNavigation,
+    'webtoonMode': webtoonMode,
+    'autoDownloadOnSave': autoDownloadOnSave,
     'autoCoverEnabled': autoCoverEnabled,
     'volumeKeyNavigation': volumeKeyNavigation,
     'forceLandscapeForSpreads': forceLandscapeForSpreads,
@@ -116,11 +131,14 @@ class ReaderSettings {
         openAfterSave: data['openAfterSave'] == true,
         languageCode: {'ko', 'en', 'ja'}.contains(data['languageCode'])
             ? data['languageCode'] as String : 'ko',
+        tapNavigation: data['tapNavigation'] == true,
+        webtoonMode: data['webtoonMode'] == true,
+        autoDownloadOnSave: data['autoDownloadOnSave'] == true,
         heroArtworkSource: {'default', 'custom', 'random'}
                 .contains(data['heroArtworkSource'])
             ? data['heroArtworkSource'] as String : 'custom',
         preloadPages: data['preloadPages'] is num
-            ? (data['preloadPages'] as num).toInt().clamp(0, 3).toInt()
+            ? (data['preloadPages'] as num).toInt().clamp(-1, 1500).toInt()
             : 2,
       );
 }

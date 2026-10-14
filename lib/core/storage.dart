@@ -22,16 +22,47 @@ class LibraryStorage {
 
   Future<LibraryBackup> load() async {
     final target = await file;
-    if (await target.exists()) {
-      return LibraryBackup.decode(await target.readAsString());
-    }
     final previous = File(target.path + '.previous');
-    // Recover from a crash between renaming the old file and committing
-    // the new staged file. Do not mutate the original rollback copy here.
-    if (await previous.exists()) {
-      return LibraryBackup.decode(await previous.readAsString());
+    final candidates = <File>[target, previous];
+    // Include recently staged, fully flushed copies from an interrupted
+    // rename. Only syntactically valid JSON backups can be recovered.
+    final dir = target.parent;
+    if (await dir.exists()) {
+      final staged = await dir.list(followLinks: false)
+          .where((entity) => entity is File &&
+              entity.path.startsWith(target.path + '.tmp.'))
+          .cast<File>()
+          .toList();
+      staged.sort((a, b) => b.path.compareTo(a.path));
+      candidates.addAll(staged.take(6));
+    }
+    var foundData = false;
+    Object? lastError;
+    for (final candidate in candidates) {
+      if (!await candidate.exists()) continue;
+      foundData = true;
+      try {
+        final contents = await candidate.readAsString();
+        final backup = LibraryBackup.decode(contents);
+        // The previous backup is never deleted or modified during reading.
+        return backup;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (foundData) {
+      // Never turn a corrupted/non-readable library into an empty one:
+      // otherwise the next save could destroy the only recoverable copy.
+      throw StateError('서재 저장 파일을 복구하지 못했어: $lastError');
     }
     return const LibraryBackup(works: [], collections: []);
+  }
+
+  /// Preview last recoverable snapshot without mutating the active library.
+  Future<LibraryBackup?> readPrevious() async {
+    final backup = File((await file).path + '.previous');
+    if (!await backup.exists()) return null;
+    return LibraryBackup.decode(await backup.readAsString());
   }
 
   Future<void> save(LibraryBackup backup) {

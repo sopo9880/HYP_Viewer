@@ -204,6 +204,23 @@ abstract final class HypI18n {
     '작품 미존재 (404)': ['Not Found (404)', '作品が見つかりません（404）'],
     '서버 확인 실패 · 직접 확인': ['Could Not Verify · Check Manually', '確認できません・手動で確認'],
     '실제 존재하는 번호라도 댓글의 의도와 다를 수 있어. 사용자가 선택한 번호만 서재에 저장돼.': ['Even existing IDs may be unrelated to the comment. Only selected IDs are saved.', '実在する番号でもコメントの意図とは異なる場合があります。選択した番号のみ保存します。'],
+    '전체 다운로드': ['Download All', 'すべてダウンロード'],
+    '서재 전체 다운로드': ['Download Entire Library', '本棚をすべてダウンロード'],
+    '새 작품 자동 다운로드': ['Auto-download New Works', '新しい作品を自動ダウンロード'],
+    '서재에 추가할 때 자동 다운로드': ['Download on Library Add', '本棚追加時に自動ダウンロード'],
+    '기본값은 꺼짐. 권한 확인 후 새 작품을 순서대로 다운로드하고 기존 CBZ는 건너뛰어.': ['Off by default. Once authorized, download added works sequentially and skip existing CBZ files.', '初期設定はオフ。許可を確認した後、追加作品を順番に保存し、既存のCBZはスキップします。'],
+    '화면 좌우·상하 터치로 페이지 넘기기': ['Tap Left/Right or Top/Bottom to Turn Pages', '画面の左右・上下をタップしてページ送り'],
+    '왼쪽 터치는 왼쪽으로, 오른쪽은 오른쪽으로. 세로 방향에서는 위/아래를 눌러 넘겨.': ['Left taps turn left; right taps turn right. In vertical mode tap the upper/lower half.', '左タップで左、右タップで右へ。縦方向では画面の上下をタップします。'],
+    '웹툰형 연속 세로 보기': ['Continuous Webtoon Scrolling', '縦スクロールのウェブトゥーン表示'],
+    '페이지 간 간격 없이 아래로 계속 스크롤해. 켜면 2쪽 모아보기보다 우선 적용돼.': ['Scroll vertically through full-width pages without gaps. Overrides two-page spreads.', 'ページを隙間なく縦に連続表示します。見開き設定より優先されます。'],
+    '직접 입력: 0~1500 / -1은 전체 로딩 (임시 디스크 캐시)': ['Enter 0–1500; -1 caches the whole work to temporary disk', '0～1500を入力。-1は全ページを一時ディスクに読み込み'],
+    '적용': ['Apply', '適用'],
+    '미리 로딩은 -1 또는 0~1500 사이 숫자로 입력해줘.': ['Enter -1 or a number from 0 to 1500.', '-1または0～1500の数字を入力してください。'],
+    '이전 서재 백업에서 복구': ['Restore Previous Library Backup', '以前の本棚バックアップから復元'],
+    '이전 서재 백업 복구': ['Restore Previous Library', '以前の本棚を復元'],
+    '대기열 취소': ['Cancel Queue', '待機リストをキャンセル'],
+    '이 콘텐츠를 저장할 권한이 있어': ['I Have Permission to Save This Content', 'このコンテンツを保存する権利があります'],
+    '기본값은 꺼짐.': ['Off by default.', '初期設定はオフ。'],
     '한국어': ['Korean', '韓国語'],
     '영어': ['English', '英語'],
     '일본어': ['Japanese', '日本語'],
@@ -256,6 +273,20 @@ abstract final class HypI18n {
     if (version != null) {
       return (language == 'ja' ? '現在のバージョン: ' : 'Current Version: ') +
           version.group(1)!;
+    }
+    final queued = RegExp(
+      r'^추가 다운로드 대기:\s*(\d+)개 작품$').firstMatch(text);
+    if (queued != null) {
+      return language == 'ja'
+          ? 'ダウンロード待機: ${queued.group(1)}作品'
+          : 'Queued downloads: ${queued.group(1)} works';
+    }
+    final queueStatus = RegExp(
+      r'^다운로드 대기:\s*(\d+)개 작품[.]').firstMatch(text);
+    if (queueStatus != null) {
+      return language == 'ja'
+          ? 'ダウンロード待機: ${queueStatus.group(1)}作品。'
+          : 'Downloads queued: ${queueStatus.group(1)} works.';
     }
     final count = RegExp(r'^발견된 번호 후보: (\d+)개$').firstMatch(text);
     if (count != null) {
