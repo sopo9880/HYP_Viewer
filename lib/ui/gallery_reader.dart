@@ -191,37 +191,43 @@ class _GalleryReaderState extends State<GalleryReader> {
       ),
       bottomNavigationBar: _controlsVisible
           ? SafeArea(
-              child: ColoredBox(
-                color: Colors.black,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    children: [
-                      Text('$_currentPage / $total',
-                          style: const TextStyle(color: Colors.white)),
-                      Expanded(
-                        child: Slider(
-                          value: _currentPage.toDouble(),
-                          min: 1,
-                          max: total.toDouble(),
-                          divisions: total > 1 ? total - 1 : null,
-                          onChanged: (value) {
-                            final page = value.round().clamp(1, total).toInt();
-                            _controller.jumpToPage(page - 1);
-                          },
+              top: false,
+              // A Row containing Slider can otherwise expand to the entire
+              // Scaffold height, covering the pages and intercepting taps.
+              child: SizedBox(
+                height: 64,
+                child: ColoredBox(
+                  color: Colors.black,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        Text('$_currentPage / $total',
+                            style: const TextStyle(color: Colors.white)),
+                        Expanded(
+                          child: Slider(
+                            value: _currentPage.toDouble(),
+                            min: 1,
+                            max: total.toDouble(),
+                            divisions: total > 1 ? total - 1 : null,
+                            onChanged: (value) {
+                              final page = value.round().clamp(1, total).toInt();
+                              _controller.jumpToPage(page - 1);
+                            },
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        tooltip: '다음 페이지',
-                        color: Colors.white,
-                        onPressed: _currentPage < total
-                            ? () => _controller.nextPage(
-                                duration: const Duration(milliseconds: 170),
-                                curve: Curves.easeOut)
-                            : null,
-                        icon: const Icon(Icons.chevron_right),
-                      ),
-                    ],
+                        IconButton(
+                          tooltip: '다음 페이지',
+                          color: Colors.white,
+                          onPressed: _currentPage < total
+                              ? () => _controller.nextPage(
+                                  duration: const Duration(milliseconds: 170),
+                                  curve: Curves.easeOut)
+                              : null,
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
