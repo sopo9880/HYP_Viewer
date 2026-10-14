@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/export.dart';
 import 'core/app_backup.dart';
+import 'core/cbz_exporter.dart';
 import 'core/gallery.dart';
 import 'core/cover_store.dart';
 import 'core/hero_artwork_store.dart';
@@ -27,6 +28,7 @@ import 'ui/gallery_reader.dart';
 import 'ui/cover_picker.dart';
 import 'ui/cover_cropper.dart';
 import 'ui/work_editor.dart';
+import 'ui/work_info.dart';
 import 'ui/hyp_dashboard.dart';
 import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
@@ -627,6 +629,120 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
+  Future<void> _showWorkInfo(WorkEntry work) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => WorkInfoDialog(
+        work: work,
+        fetchInfo: () async {
+          final client = http.Client();
+          try {
+            return await HitomiGalleryProvider(client).fetchInfo(work.workId);
+          } finally {
+            client.close();
+          }
+        },
+        onCacheInfo: (info) async {
+          await _commitLibrary((latest) => LibraryBackup(
+            works: latest.works.map((w) {
+              if (w.workId != work.workId) return w;
+              return w.copyWith(
+                author: w.author.isEmpty ? info.author : w.author,
+                totalPages: info.pageCount > 0 ? info.pageCount : w.totalPages,
+                tags: info.tags,
+                sourceLanguage: info.language,
+                sourceType: info.type,
+                sourceSeries: info.series,
+                sourceGroup: info.group,
+                sourceDate: info.date,
+              );
+            }).toList(),
+            collections: latest.collections,
+          ));
+        },
+        onEdit: () => _editWorkDetails(work),
+      ),
+    );
+  }
+
+  Future<void> _groupWorks(List<String> workIds, String title) async {
+    final selected = workIds.toSet();
+    final name = title.trim();
+    if (selected.length < 2 || name.isEmpty || name.length > 200) {
+      _status('묶음은 서로 다른 작품 2개 이상과 이름이 필요해.');
+      return;
+    }
+    final id = 'series_' +
+        DateTime.now().microsecondsSinceEpoch.toString();
+    try {
+      await _commitLibrary((latest) {
+        final members = latest.works
+            .where((work) => selected.contains(work.workId)).toList();
+        if (members.length != selected.length ||
+            members.any((work) => work.groupId.isNotEmpty)) {
+          throw StateError('이미 묶인 작품은 Auto/수동 묶기로 바꿀 수 없어. '
+              '먼저 기존 묶음을 해제해줘.');
+        }
+        return LibraryBackup(
+          works: latest.works.map((work) {
+            final index = workIds.indexOf(work.workId);
+            return index < 0 ? work : work.copyWith(
+              groupId: id, groupTitle: name, groupOrder: index + 1);
+          }).toList(), collections: latest.collections);
+      });
+      _status('작품 ' + selected.length.toString() + '개를 묶었어.');
+    } catch (error) {
+      _status('묶음 만들기 실패: ' + error.toString());
+    }
+  }
+
+  Future<void> _ungroupWorks(String groupId) async {
+    await _commitLibrary((latest) => LibraryBackup(
+      works: latest.works.map((w) => w.groupId == groupId
+          ? w.copyWith(groupId: '', groupTitle: '', groupOrder: 0) : w)
+          .toList(),
+      collections: latest.collections,
+    ));
+    _status('작품을 삭제하지 않고 묶음만 해제했어.');
+  }
+
+  Future<void> _renameGroup(String groupId, String title) async {
+    if (title.trim().isEmpty) return;
+    await _commitLibrary((latest) => LibraryBackup(
+      works: latest.works.map((w) => w.groupId == groupId
+          ? w.copyWith(groupTitle: title.trim()) : w).toList(),
+      collections: latest.collections,
+    ));
+  }
+
+  Future<void> _reorderGroup(String groupId, List<String> orderedIds) async {
+    await _commitLibrary((latest) => LibraryBackup(
+      works: latest.works.map((w) {
+        if (w.groupId != groupId) return w;
+        final position = orderedIds.indexOf(w.workId);
+        return position < 0 ? w : w.copyWith(groupOrder: position + 1);
+      }).toList(),
+      collections: latest.collections,
+    ));
+  }
+
+  Future<void> _exportSelectedDownloads(List<String> ids) async {
+    final idsSet = ids.toSet();
+    final selected = library.works.where(
+        (work) => idsSet.contains(work.workId)).toList();
+    if (selected.isEmpty) return;
+    try {
+      final report = await SelectedCbzExporter.export(galleryStore, selected);
+      if (report.cancelled) return;
+      _status(report.saved.toString() + '개 CBZ를 선택한 폴더로 내보냈어. ' +
+          (report.failed > 0
+              ? report.failed.toString() + '개는 실패했어.' : '원본 파일은 유지했어.'));
+    } catch (e) {
+      _status('CBZ 내보내기 실패: ' + e.toString());
+    }
+  }
+
   Future<void> _updateWork(WorkEntry work) async {
     try {
       await _commitLibrary((latest) => LibraryBackup(
@@ -637,6 +753,12 @@ class _LibraryHomeState extends State<LibraryHome> {
           return work.copyWith(
             currentPage: w.currentPage,
             lastOpenedAt: w.lastOpenedAt,
+            openCount: w.openCount,
+            totalPages: w.totalPages,
+            addedAt: w.addedAt,
+            groupId: w.groupId,
+            groupTitle: w.groupTitle,
+            groupOrder: w.groupOrder,
           );
         }).toList(),
         collections: latest.collections,
@@ -646,13 +768,17 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
-  Future<void> _touchRead(WorkEntry work, {int? page}) async {
+  Future<void> _touchRead(WorkEntry work, {int? page, int? pageCount}) async {
     try {
       await _commitLibrary((latest) => LibraryBackup(
         works: latest.works.map((w) => w.key == work.key
             ? w.copyWith(
                 currentPage: page ?? w.currentPage,
-                lastOpenedAt: DateTime.now().toUtc().toIso8601String(),
+                lastOpenedAt: page == null
+                    ? DateTime.now().toUtc().toIso8601String()
+                    : w.lastOpenedAt,
+                openCount: page == null ? w.openCount + 1 : w.openCount,
+                totalPages: pageCount ?? w.totalPages,
               )
             : w).toList(),
         collections: latest.collections,
@@ -1145,7 +1271,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     try {
       final remote = await HitomiGalleryProvider(client).load(work.workId);
       if (!mounted) return;
-      await _touchRead(work);
+      await _touchRead(work, pageCount: remote.pageCount);
       final missingTitle =
           work.title.isEmpty || work.title == '작품 ${work.workId}';
       if (missingTitle && remote.title.trim().isNotEmpty) {
@@ -1775,7 +1901,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     try {
       final book = archive ?? await galleryStore.read(work.workId);
       if (!mounted) return;
-      await _touchRead(work);
+      await _touchRead(work, pageCount: book.pageCount);
       await Navigator.push<void>(
         context,
         MaterialPageRoute(builder: (ctx) => GalleryReader(
@@ -2004,6 +2130,12 @@ class _LibraryHomeState extends State<LibraryHome> {
     onDeleteWork: _deleteWork,
     onDeleteSelectedWorks: _deleteSelectedWorks,
     onEditWorkDetails: _editWorkDetails,
+    onShowWorkInfo: _showWorkInfo,
+    onGroupWorks: _groupWorks,
+    onUngroupWorks: _ungroupWorks,
+    onRenameGroup: _renameGroup,
+    onReorderGroup: _reorderGroup,
+    onExportSelectedDownloads: _exportSelectedDownloads,
     onToggleDownloadPause: _pauseOrResumeReaderDownload,
     downloadPaused: isReaderTransferPaused,
     downloadCanPause: readerTransfer != null,
