@@ -26,6 +26,7 @@ import 'core/hitomi_gallery.dart';
 import 'ui/gallery_reader.dart';
 import 'ui/cover_picker.dart';
 import 'ui/cover_cropper.dart';
+import 'ui/work_editor.dart';
 import 'ui/hyp_dashboard.dart';
 import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
@@ -558,6 +559,71 @@ class _LibraryHomeState extends State<LibraryHome> {
       } else {
         await _readOnline(entry);
       }
+    }
+  }
+
+  Future<void> _editWorkDetails(WorkEntry current) async {
+    if (!mounted || downloadingGalleryKey == current.key) return;
+    final draft = await showDialog<WorkEditDraft>(
+      context: context,
+      builder: (ctx) => WorkEditorDialog(
+        work: current,
+        checkWorkId: (id) async {
+          final found = await _verifyCandidateCodes([id]);
+          return found[id] ??
+              const CandidateVerification(CandidateCheck.unavailable);
+        },
+      ),
+    );
+    if (draft == null || !mounted) return;
+    final changedId = draft.workId != current.workId;
+    final duplicate = changedId &&
+        library.works.any((w) => w.workId == draft.workId);
+    if (duplicate) {
+      final approved = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const HypText('중복 작품 번호 발견'),
+          content: const HypText('새 번호가 이미 서재에 있어. '
+              '기존 즐겨찾기·진행도·컬렉션을 합치고 두 작품을 병합할까? '
+              'CBZ와 표지 파일은 자동으로 옮기지 않아.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const HypText('취소')),
+            FilledButton(
+              key: const Key('edit-work-approve-merge'),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const HypText('두 작품 병합')),
+          ],
+        ),
+      );
+      if (approved != true || !mounted) return;
+    }
+    final resetCover = changedId && !duplicate &&
+        current.coverMode != 'preset';
+    final edited = current.copyWith(
+      workId: draft.workId, title: draft.title,
+      author: draft.author, originalComment: draft.originalComment,
+      coverMode: resetCover
+          ? (readerSettings.autoCoverEnabled ? 'auto' : 'preset')
+          : current.coverMode,
+      coverPage: resetCover ? 1 : current.coverPage,
+    );
+    try {
+      await _commitLibrary((latest) => latest.editWork(
+        originalWorkId: current.workId,
+        edited: edited, mergeDuplicate: duplicate,
+      ));
+      if (!mounted) return;
+      setState(() => coverEpoch++);
+      if (changedId && !duplicate && readerSettings.autoCoverEnabled) {
+        unawaited(_prepareAutomaticCover(edited));
+      }
+      _status(changedId
+          ? '번호를 변경했어. 기존 CBZ·표지는 원래 번호에 보존했어.'
+          : '작품 정보를 수정했어.');
+    } catch (error) {
+      _status('작품 정보 수정 실패: ' + error.toString());
     }
   }
 
@@ -1849,6 +1915,8 @@ class _LibraryHomeState extends State<LibraryHome> {
     onDownloadJsonSource: _downloadJsonSource,
     onDeleteOffline: _deleteOffline,
     onDeleteWork: _deleteWork,
+    onDeleteSelectedWorks: _deleteSelectedWorks,
+    onEditWorkDetails: _editWorkDetails,
     onToggleDownloadPause: _pauseOrResumeReaderDownload,
     downloadPaused: isReaderTransferPaused,
     downloadCanPause: readerTransfer != null,
