@@ -12,6 +12,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/export.dart';
+import 'core/app_backup.dart';
 import 'core/gallery.dart';
 import 'core/cover_store.dart';
 import 'core/hero_artwork_store.dart';
@@ -626,20 +627,107 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   Future<void> _export(bool excel) async {
     try {
-      final data = excel ? LibraryExport.xlsx(library) : LibraryExport.json(library);
+      Uint8List data;
+      if (excel) {
+        data = LibraryExport.xlsx(library);
+      } else {
+        var includeLibrary = true;
+        var includeSettings = true;
+        var includeImages = false;
+        final choices = await showDialog<List<bool>>(
+          context: context,
+          builder: (dialog) => StatefulBuilder(
+            builder: (ctx, update) => AlertDialog(
+              title: const HypText('JSON 통합 백업'),
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 470),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const HypText('서재와 앱 설정을 하나의 JSON으로 저장할 수 있어. '
+                    'API 키, 기기 권한, 다운로드한 CBZ는 포함되지 않아.'),
+                  CheckboxListTile(
+                    key: const Key('backup-export-library'),
+                    value: includeLibrary,
+                    contentPadding: EdgeInsets.zero,
+                    title: const HypText('서재·즐겨찾기·읽기 기록 포함'),
+                    onChanged: (v) => update(() => includeLibrary = v == true),
+                  ),
+                  CheckboxListTile(
+                    key: const Key('backup-export-settings'),
+                    value: includeSettings,
+                    contentPadding: EdgeInsets.zero,
+                    title: const HypText('앱 설정 포함'),
+                    onChanged: (v) => update(() => includeSettings = v == true),
+                  ),
+                  CheckboxListTile(
+                    key: const Key('backup-export-images'),
+                    value: includeImages,
+                    contentPadding: EdgeInsets.zero,
+                    title: const HypText('표지·배너 이미지 포함 (선택)'),
+                    subtitle: const HypText('크기가 커질 수 있어 (최대 22MB). '
+                        '표지·배너 이미지가 없는 경우 원본 파일을 복사하지 않아.'),
+                    onChanged: (v) => update(() => includeImages = v == true),
+                  ),
+                ]),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dialog),
+                    child: const HypText('취소')),
+                FilledButton(
+                  key: const Key('backup-export-confirm'),
+                  onPressed: includeLibrary || includeSettings
+                    ? () => Navigator.pop(dialog, [
+                        includeLibrary, includeSettings, includeImages])
+                    : null,
+                  child: const HypText('JSON 백업 생성'),
+                ),
+              ],
+            ),
+          ),
+        );
+        if (choices == null || !mounted) return;
+        final covers = <BackupCover>[];
+        Uint8List? banner;
+        if (choices[2]) {
+          if (choices[1]) banner = await heroArtworkStore.read();
+          if (choices[0]) {
+            for (final work in library.works) {
+              if (work.coverMode == 'preset') continue;
+              if (covers.length >= AppBackup.maxCovers) {
+                throw const FormatException(
+                    '이미지 표지가 500개를 넘었어. 이미지 포함을 끄고 다시 백업해줘.');
+              }
+              final page = work.coverMode == 'page' ? work.coverPage : 1;
+              final bytes = await coverStore.read(work.workId,
+                  mode: work.coverMode, page: page);
+              if (bytes != null) {
+                covers.add(BackupCover(workId: work.workId,
+                  mode: work.coverMode, page: page, bytes: bytes));
+              }
+            }
+          }
+        }
+        data = AppBackup(
+          library: library,
+          settings: choices[1] ? readerSettings : null,
+          includesLibrary: choices[0],
+          bannerImage: banner,
+          covers: covers,
+        ).encode();
+      }
       final extension = excel ? 'xlsx' : 'json';
-      final filename = 'HYP_Library_' +
-          DateTime.now().toIso8601String().substring(0, 10) + '.' + extension;
-      final path = await FilePicker.platform.saveFile(
+      final filename = (excel ? 'HYP_Library_' : 'HYP_Backup_') +
+          DateTime.now().toIso8601String().substring(0, 10) +
+          '.' + extension;
+      final saved = await FilePicker.platform.saveFile(
         dialogTitle: excel ? 'Excel로 내보내기' : 'JSON으로 내보내기',
         fileName: filename,
         type: FileType.custom,
         allowedExtensions: [extension],
         bytes: data,
       );
-      if (path != null) _status('내보내기 완료');
-    } catch (e) {
-      _status('내보내기 실패: ' + e.toString());
+      if (saved != null) _status('내보내기 완료');
+    } catch (error) {
+      _status('내보내기 실패: $error');
     }
   }
 
@@ -690,26 +778,189 @@ class _LibraryHomeState extends State<LibraryHome> {
         type: FileType.custom, allowedExtensions: ['json'], withData: true,
       );
       if (picked == null) return;
-      final bytes = picked.files.single.bytes;
+      final file = picked.files.single;
+      if (file.size > AppBackup.maxJsonBytes) {
+        throw const FormatException('JSON 백업은 최대 40MB까지 지원해.');
+      }
+      final bytes = file.bytes ??
+          (file.path != null ? await File(file.path!).readAsBytes() : null);
       if (bytes == null) throw Exception('파일을 읽지 못했어.');
-      final incoming = LibraryBackup.decode(utf8.decode(bytes));
+      final incoming = AppBackup.decode(utf8.decode(bytes));
       if (!mounted) return;
-      final mode = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
-        title: const HypText('JSON 서재 복원'),
-        content: HypText('작품 ' + incoming.works.length.toString() + '개를 가져왔어.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const HypText('취소')),
-          TextButton(onPressed: () => Navigator.pop(ctx, 'merge'), child: const HypText('병합')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, 'replace'), child: const HypText('전체 복원')),
-        ],
-      ));
-      if (mode == null) return;
-      await _commitLibrary((latest) =>
-          mode == 'replace' ? incoming : LibraryBackup.merge(latest, incoming));
-      _status('서재 가져오기 완료');
-    } catch (e) {
-      _status('복원 실패: ' + e.toString());
+
+      var mode = incoming.includesLibrary
+          ? AppRestoreMode.addWorks : AppRestoreMode.replaceSettings;
+      var destructiveApproved = false;
+      final selected = await showDialog<AppRestoreMode>(
+        context: context,
+        builder: (dialog) => StatefulBuilder(
+          builder: (ctx, update) => AlertDialog(
+            title: const HypText('JSON 백업 복원'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 530),
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  HypText('백업 작품: ' +
+                      incoming.library.works.length.toString() + '개'),
+                  HypText(incoming.hasSettings
+                      ? '앱 설정 포함됨' : '앱 설정 없음 (기존 형식)'),
+                  if (incoming.hasImages)
+                    const HypText('표지·배너 이미지 포함됨'),
+                  const SizedBox(height: 10),
+                  ListTile(
+                    key: const Key('backup-mode-add'),
+                    enabled: incoming.includesLibrary,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(mode == AppRestoreMode.addWorks
+                        ? Icons.radio_button_checked : Icons.radio_button_off),
+                    title: const HypText('① 작품 추가'),
+                    subtitle: const HypText('기존 서재와 설정을 유지하고 작품만 병합'),
+                    onTap: incoming.includesLibrary ? () => update(() {
+                      mode = AppRestoreMode.addWorks;
+                      destructiveApproved = false;
+                    }) : null,
+                  ),
+                  ListTile(
+                    key: const Key('backup-mode-settings'),
+                    enabled: incoming.hasSettings,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(mode == AppRestoreMode.replaceSettings
+                        ? Icons.radio_button_checked : Icons.radio_button_off),
+                    title: const HypText('② 설정 덮어쓰기'),
+                    subtitle: const HypText('작품 목록은 유지하고 앱 설정만 교체'),
+                    onTap: incoming.hasSettings ? () => update(() {
+                      mode = AppRestoreMode.replaceSettings;
+                      destructiveApproved = false;
+                    }) : null,
+                  ),
+                  ListTile(
+                    key: const Key('backup-mode-all'),
+                    enabled: incoming.includesLibrary && incoming.hasSettings,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(mode == AppRestoreMode.replaceEverything
+                        ? Icons.radio_button_checked : Icons.radio_button_off),
+                    title: const HypText('③ 작품 + 설정 덮어쓰기'),
+                    subtitle: const HypText('PC에만 있는 작품이 사라질 수 있어. '
+                        '실행 전 현재 서재가 .previous에 보존돼.'),
+                    onTap: incoming.includesLibrary && incoming.hasSettings
+                        ? () => update(() {
+                          mode = AppRestoreMode.replaceEverything;
+                          destructiveApproved = false;
+                        }) : null,
+                  ),
+                  if (mode == AppRestoreMode.replaceEverything)
+                    CheckboxListTile(
+                      key: const Key('backup-overwrite-confirm'),
+                      contentPadding: EdgeInsets.zero,
+                      title: const HypText('현재 서재를 교체한다는 점을 확인했어'),
+                      value: destructiveApproved,
+                      onChanged: (v) => update(
+                          () => destructiveApproved = v == true),
+                    ),
+                  const HypText('자동 다운로드·공지 수신은 복원 후 다시 동의해야 해. '
+                      'CBZ와 기기별 권한 및 API 키는 복원하지 않아.',
+                      style: TextStyle(fontSize: 12)),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog),
+                  child: const HypText('취소')),
+              FilledButton(
+                key: const Key('backup-import-confirm'),
+                onPressed: mode != AppRestoreMode.replaceEverything ||
+                        destructiveApproved
+                    ? () => Navigator.pop(dialog, mode) : null,
+                child: const HypText('선택한 방식으로 복원'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (selected == null || !mounted) return;
+      await _initialLibraryRead.future;
+      await _libraryWrites;
+      if (_libraryReadFailed) {
+        throw StateError('서재 복구가 필요해. 현재 백업을 안전하게 읽을 때까지 '
+            'JSON 덮어쓰기를 차단했어.');
+      }
+      final previousLibrary = library;
+      final previousSettings = readerSettings;
+      final plan = AppRestorePlan.build(
+          library, readerSettings, incoming, selected);
+
+      // First write new settings, then commit library atomically. If a
+      // library write fails, roll the settings back; library storage itself
+      // preserves .previous during a completed replacement.
+      if (plan.settings != null) {
+        await readerSettingsStorage.save(plan.settings!);
+      }
+      try {
+        if (plan.changesLibrary) {
+          await _commitLibrary((latest) => AppRestorePlan.build(
+              latest, previousSettings, incoming, selected).library);
+        }
+      } catch (_) {
+        if (plan.settings != null) {
+          await readerSettingsStorage.save(previousSettings);
+        }
+        rethrow;
+      }
+      if (plan.settings != null) {
+        setState(() => readerSettings = plan.settings!);
+        HypLanguage.selected.value = plan.settings!.languageCode;
+        _syncNoticesTimer();
+      }
+      final imageErrors = await _restoreBackupImages(
+          incoming, selected, previousLibrary);
+      if (mounted && plan.changesLibrary) {
+        setState(() => libraryNavigationEpoch++);
+      }
+      if (mounted) setState(() => coverEpoch++);
+      _status(imageErrors == 0
+          ? 'JSON 복원이 완료됐어.'
+          : '서재·설정 복원 완료. 이미지 $imageErrors개는 복원에 실패했어.');
+    } catch (error) {
+      _status('복원 실패: $error');
     }
+  }
+
+  Future<int> _restoreBackupImages(AppBackup incoming,
+      AppRestoreMode mode, LibraryBackup before) async {
+    if (!incoming.hasImages) return 0;
+    var failures = 0;
+    if (mode != AppRestoreMode.addWorks && incoming.bannerImage != null) {
+      try {
+        await heroArtworkStore.save(incoming.bannerImage!);
+        if (mounted) setState(() => heroArtwork = incoming.bannerImage);
+      } catch (_) {
+        failures++;
+      }
+    }
+    if (mode == AppRestoreMode.replaceSettings) return failures;
+    final existingIds = before.works.map((w) => w.workId).toSet();
+    for (final cover in incoming.covers) {
+      final work = library.works.where(
+          (w) => w.workId == cover.workId).firstOrNull;
+      if (work == null || work.coverMode != cover.mode ||
+          (work.coverMode == 'page' && work.coverPage != cover.page)) {
+        continue;
+      }
+      try {
+        if (mode == AppRestoreMode.addWorks &&
+            existingIds.contains(work.workId) &&
+            await coverStore.exists(cover.workId,
+                mode: cover.mode, page: cover.page)) {
+          continue;
+        }
+        await coverStore.save(cover.workId, cover.bytes,
+            mode: cover.mode, page: cover.page);
+      } catch (_) {
+        failures++;
+      }
+    }
+    return failures;
   }
 
   Future<void> _prepareAutomaticCover(WorkEntry work) async {
