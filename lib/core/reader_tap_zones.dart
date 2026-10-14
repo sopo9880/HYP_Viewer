@@ -1,5 +1,6 @@
-/// Side 30% taps turn pages, center 40% returns zero for immersive UI toggle.
-/// On horizontal pages the physical gesture follows the reading direction.
+/// Side taps navigate by page index, not by animation direction:
+/// left = previous (-1), right = next (+1), center = chrome (0).
+/// Reverse mode controls how PageView slides, not which page is selected.
 int readerTapDelta({
   required double pointX,
   required double pointY,
@@ -11,8 +12,5 @@ int readerTapDelta({
   if (width <= 0 || height <= 0 || pointX < 0 || pointX > width ||
       pointY < 0 || pointY > height) return 0;
   if (pointX >= width * 0.3 && pointX <= width * 0.7) return 0;
-  if (vertical) return pointX < width * 0.3 ? -1 : 1;
-  return pointX < width * 0.3
-      ? (reverse ? -1 : 1)
-      : (reverse ? 1 : -1);
+  return pointX < width * 0.3 ? -1 : 1;
 }

@@ -445,7 +445,7 @@ class _LibraryHomeState extends State<LibraryHome> {
       // titles are fetched individually when the user saves the codes.
       titleInput.clear();
       commentInput.text = [data.description, ...data.comments]
-          .where((s) => s.trim().isNotEmpty).join('\n');
+          .where((s) => s.trim().isNotEmpty).join('\n\n');
       _analyze();
       if (data.comments.isEmpty) {
         _status('영상 설명란은 읽었지만 공개 댓글을 가져오지 못했어. '
@@ -459,6 +459,10 @@ class _LibraryHomeState extends State<LibraryHome> {
       if (mounted) setState(() => busy = false);
     }
   }
+
+  List<NumberCandidate> _crossLineFallback() =>
+      NumberExtractor.extract(commentInput.text, source: 'comment',
+        allowCrossLine: true, crossLineOnly: true, maxCandidates: 160);
 
   Future<Map<String, CandidateVerification>> _verifyCandidateCodes(
       List<String> codes) async {
@@ -708,6 +712,42 @@ class _LibraryHomeState extends State<LibraryHome> {
     } catch (error) {
       _status('묶음 만들기 실패: ' + error.toString());
     }
+  }
+
+  /// Append only ungrouped works without disturbing existing order,
+  /// covers, progress, downloads or favorites.
+  Future<void> _addWorksToGroup(String groupId, List<String> orderedIds) async {
+    if (groupId.isEmpty || orderedIds.isEmpty ||
+        orderedIds.toSet().length != orderedIds.length) {
+      throw StateError('잘못된 묶음 추가 요청이야.');
+    }
+    await _commitLibrary((latest) {
+      final old = latest.works.where((w) => w.groupId == groupId).toList();
+      if (old.isEmpty) throw StateError('기존 묶음을 찾지 못했어.');
+      final newcomers = latest.works.where(
+          (w) => orderedIds.contains(w.workId)).toList();
+      if (newcomers.length != orderedIds.length ||
+          newcomers.any((w) => w.groupId.isNotEmpty)) {
+        throw StateError('이미 다른 묶음에 속한 작품은 추가하지 않아.');
+      }
+      var maxOrder = 0;
+      for (final member in old) {
+        if (member.groupOrder > maxOrder) maxOrder = member.groupOrder;
+      }
+      final targetOrder = <String, int>{
+        for (var i = 0; i < orderedIds.length; i++)
+          orderedIds[i]: maxOrder + i + 1
+      };
+      return LibraryBackup(
+        works: latest.works.map((w) =>
+          targetOrder.containsKey(w.workId)
+            ? w.copyWith(groupId: groupId,
+                groupTitle: old.first.groupTitle,
+                groupOrder: targetOrder[w.workId]) : w).toList(),
+        collections: latest.collections,
+      );
+    });
+    _status('기존 묶음에 ' + orderedIds.length.toString() + '개 작품을 추가했어.');
   }
 
   Future<void> _ungroupWorks(String groupId) async {
@@ -2183,6 +2223,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     onQuickAddNumber: _quickAddNumber,
     onSaveSelectedWorks: _saveSelectedWorks,
     onVerifyCandidateCodes: _verifyCandidateCodes,
+    onCrossLineFallback: _crossLineFallback,
     onChooseHeroArtwork: _chooseHeroArtwork,
     onClearHeroArtwork: _clearHeroArtwork,
     onSaveOnlineSource: _saveOnlineSource,
@@ -2207,6 +2248,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     onEditWorkDetails: _editWorkDetails,
     onShowWorkInfo: _showWorkInfo,
     onGroupWorks: _groupWorks,
+    onAddWorksToGroup: _addWorksToGroup,
     onUngroupWorks: _ungroupWorks,
     onRenameGroup: _renameGroup,
     onReorderGroup: _reorderGroup,

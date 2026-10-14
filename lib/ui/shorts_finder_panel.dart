@@ -23,6 +23,7 @@ class ShortsFinderPanel extends StatefulWidget {
   final Future<void> Function(String code)? onQuickAddNumber;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
   final CandidateBatchVerify? onVerifyCandidateCodes;
+  final List<NumberCandidate> Function()? onCrossLineFallback;
 
   const ShortsFinderPanel({
     super.key,
@@ -41,6 +42,7 @@ class ShortsFinderPanel extends StatefulWidget {
     this.onQuickAddNumber,
     required this.onSaveSelectedWorks,
     this.onVerifyCandidateCodes,
+    this.onCrossLineFallback,
   });
 
   @override
@@ -336,6 +338,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             key: _editorKey,
             suggestions: widget.candidates,
             onVerify: widget.onVerifyCandidateCodes,
+            onCrossLineFallback: widget.onCrossLineFallback,
             onSave: widget.onSaveSelectedWorks,
             busy: widget.busy,
           ),

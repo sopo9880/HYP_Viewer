@@ -157,7 +157,33 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.2.1:
+          Changes in v0.2.2:
+          - Auto grouping now reads each work's title/episode instead of the
+            same batch-wide Shorts comment, which previously made different
+            episodes all look like "Part 1".
+          - The wizard shows suggested groups with individual member covers,
+            titles, IDs, review reasons and a heuristic confidence tier.
+            Users may expand, exclude works, edit group titles and reorder
+            chapters before approving; nothing is silently grouped.
+          - Similar series titles can match across different Shorts, even
+            without numbered chapters. Existing groups can receive new
+            chapters without resetting previous order, history or covers.
+          - Physical left 30% of reader goes to previous page; physical right
+            30% goes to next page. The center toggles chrome, independent of
+            right-to-left reading or slide animation. Webtoon supports the
+            same zones while retaining continuous scrolling.
+          - Tap navigation defaults to ON for new installations, while
+            existing explicit user settings are preserved.
+          - Gallery IDs are gathered from all contiguous digit windows on
+            each line, while separating explicitly numbered episodes.
+            Duplicates are removed and up to 160 candidates are verified in
+            bounded batches (up to 3 simultaneous metadata requests).
+          - Only when the first pass definitely finds no existing gallery
+            may an optional second pass combine adjacent lines in one
+            comment. Blank lines separate imported commenters. Network
+            outages never masquerade as "no matches".
+
+          Previous v0.2.1 features retained:
           - Published-date sorting and site popularity ranks with daily,
             weekly, monthly and yearly periods; unknown ranks remain unknown.
           - Series displayed as stacked covers in the same grid as singles;

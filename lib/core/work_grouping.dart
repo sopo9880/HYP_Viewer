@@ -2,37 +2,133 @@ import 'work.dart';
 
 class WorkGroupSuggestion {
   final String title;
+  /// Only ungrouped works eligible to add/create, ordered as chapters.
   final List<String> workIds;
   final String reason;
-  const WorkGroupSuggestion(this.title, this.workIds, this.reason);
+  /// Existing groups are never overwritten; candidates can be appended.
+  final String existingGroupId;
+  final int confidence;
+
+  const WorkGroupSuggestion(this.title, this.workIds, this.reason,
+      {this.existingGroupId = '', this.confidence = 70});
 }
 
-/// Conservative, confirmation-only recommendations for numbered episodes.
-/// Works already grouped by a user are NEVER edited or proposed again.
+/// A conservative series recommender based on each work's OWN metadata.
+/// Shared Shorts comments are not valid per-work episode numbers.
 class WorkGrouping {
-  static final _episode = RegExp(
-      r'(?:^|[\s\-\[_（(])(?:제\s*)?(\d{1,3})\s*(?:편|화|부|권|episode|ep\.?|part)(?=$|[\s\-\]）):])',
+  static final _chapter = RegExp(
+      r'(?:제\s*)?(\d{1,3})\s*(?:편|화|부|권|회|episode|ep\.?|part)(?!\d)',
       caseSensitive: false);
-  static final _suffix = RegExp(
-      r'(?:\s|[-_])(?:\d{1,3})\s*(?:편|화|부|권)?\s*$',
+  static final _prefixChapter = RegExp(
+      r'(?:episode|ep\.?|chapter|ch\.?|part|vol(?:ume)?\.?)\s*#?\s*(\d{1,3})(?!\d)',
       caseSensitive: false);
+  static final _japaneseChapter = RegExp(r'第\s*(\d{1,3})\s*[話巻部]');
+  static final _trailingNumber = RegExp(r'(?:[\s\-_.#]+)(\d{1,3})\s*$');
 
-  static int? episodeNumber(WorkEntry w) {
-    for (final input in [w.originalComment, w.title]) {
-      final match = _episode.firstMatch(input);
-      if (match != null) return int.tryParse(match.group(1)!);
+  static int? _chapterInText(String text) {
+    for (final pattern in [_chapter, _prefixChapter, _japaneseChapter]) {
+      final m = pattern.firstMatch(text);
+      if (m != null) return int.tryParse(m.group(1)!);
     }
     return null;
   }
 
-  static String normalizedSeries(String title) {
-    return title.replaceAll(_episode, ' ')
-        .replaceAll(_suffix, '').replaceAll(RegExp(r'\s+'), ' ')
-        .trim().toLowerCase();
+  static int? episodeNumber(WorkEntry work) {
+    // A saved Shorts batch keeps the same originalComment for EVERY work.
+    // Reading the first "1편" in that shared block assigns 1 to all works.
+    final titleChapter = _chapterInText(work.title);
+    if (titleChapter != null) return titleChapter;
+    // Only use comment evidence if the line points to this work specifically.
+    for (final line in work.originalComment.split(RegExp(r'[\r\n]+'))) {
+      final chapter = _chapterInText(line);
+      if (chapter == null) continue;
+      if (RegExp('(?<![0-9])' + RegExp.escape(work.workId) + '(?![0-9])')
+          .hasMatch(line)) return chapter;
+      final match = _chapter.firstMatch(line) ??
+          _prefixChapter.firstMatch(line) ?? _japaneseChapter.firstMatch(line);
+      if (match == null) continue;
+      // Accept the number mnemonic AFTER the chapter marker on the same line.
+      final encoded = RegExp(r'\d+').allMatches(line.substring(match.end))
+          .map((m) => m.group(0)!).join();
+      if (encoded == work.workId) return chapter;
+    }
+    return null;
   }
 
-  /// Episode numbers beat approximate upload dates. Dates beat gallery IDs.
-  /// Explicit groupOrder is persisted by the caller after the user confirms.
+  static String normalizedSeries(String rawTitle) {
+    var s = rawTitle.toLowerCase().trim();
+    // Metadata titles often start with a circle or artist in brackets.
+    s = s.replaceFirst(RegExp(r'^(?:\[[^\]]{1,75}\]\s*)+'), '');
+    s = s.replaceAll(_chapter, ' ')
+        .replaceAll(_prefixChapter, ' ')
+        .replaceAll(_japaneseChapter, ' ')
+        .replaceAll(_trailingNumber, ' ')
+        .replaceAll(RegExp(r'[\[\](){}【】［］「」『』\-_.:：#]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return s;
+  }
+
+  static bool _usableTitle(WorkEntry work) {
+    final title = normalizedSeries(work.title);
+    return title.length >= 4 &&
+        !RegExp(r'^(?:작품|work|gallery)\s*\d+$', caseSensitive: false)
+            .hasMatch(title);
+  }
+
+  static bool _sameKnownCreator(WorkEntry a, WorkEntry b) {
+    final sameAuthor = a.author.trim().isNotEmpty &&
+        a.author.trim().toLowerCase() == b.author.trim().toLowerCase();
+    final sameCircle = a.sourceGroup.trim().isNotEmpty &&
+        a.sourceGroup.trim().toLowerCase() ==
+            b.sourceGroup.trim().toLowerCase();
+    return sameAuthor || sameCircle;
+  }
+
+  static bool _creatorConflict(WorkEntry a, WorkEntry b) {
+    return a.author.trim().isNotEmpty && b.author.trim().isNotEmpty &&
+        a.author.trim().toLowerCase() != b.author.trim().toLowerCase() &&
+        a.sourceGroup.trim().isNotEmpty &&
+        b.sourceGroup.trim().isNotEmpty &&
+        a.sourceGroup.trim().toLowerCase() !=
+            b.sourceGroup.trim().toLowerCase();
+  }
+
+  static double _similarity(String a, String b) {
+    if (a == b) return 1;
+    if (a.isEmpty || b.isEmpty) return 0;
+    if (a.length > 150 || b.length > 150) return 0;
+    // Character-level edit distance, bounded by plausible title lengths.
+    var previous = List<int>.generate(b.length + 1, (i) => i);
+    for (var i = 1; i <= a.length; i++) {
+      final current = List<int>.filled(b.length + 1, 0)..[0] = i;
+      for (var j = 1; j <= b.length; j++) {
+        final cost = a.codeUnitAt(i - 1) == b.codeUnitAt(j - 1) ? 0 : 1;
+        final d = previous[j] + 1;
+        final insert = current[j - 1] + 1;
+        final substitute = previous[j - 1] + cost;
+        current[j] = d < insert
+            ? (d < substitute ? d : substitute)
+            : (insert < substitute ? insert : substitute);
+      }
+      previous = current;
+    }
+    final length = a.length > b.length ? a.length : b.length;
+    return 1 - previous.last / length;
+  }
+
+  static bool _sameSeries(WorkEntry a, WorkEntry b) {
+    if (!_usableTitle(a) || !_usableTitle(b) ||
+        _creatorConflict(a, b)) return false;
+    final first = normalizedSeries(a.title);
+    final second = normalizedSeries(b.title);
+    if (first == second) return true;
+    // A fuzzy title match MUST have independent creator evidence.
+    return _sameKnownCreator(a, b) &&
+        _similarity(first, second) >= 0.88;
+  }
+
+  /// Original chapter order can still be explicitly overridden by groupOrder.
   static int compareChapters(WorkEntry a, WorkEntry b) {
     final ae = episodeNumber(a), be = episodeNumber(b);
     if (ae != null && be != null && ae != be) return ae.compareTo(be);
@@ -42,45 +138,79 @@ class WorkGrouping {
         a.sourceDate != b.sourceDate) {
       return a.sourceDate.compareTo(b.sourceDate);
     }
-    final ai = BigInt.tryParse(a.workId);
-    final bi = BigInt.tryParse(b.workId);
+    final ai = BigInt.tryParse(a.workId), bi = BigInt.tryParse(b.workId);
     if (ai != null && bi != null) return ai.compareTo(bi);
     return a.workId.compareTo(b.workId);
   }
 
   static List<WorkGroupSuggestion> suggest(List<WorkEntry> works) {
-    final ungrouped = works.where((w) => w.groupId.isEmpty).toList();
-    final buckets = <String, List<WorkEntry>>{};
-    for (final work in ungrouped) {
-      final ep = episodeNumber(work);
-      if (ep == null) continue;
-      final name = normalizedSeries(work.title);
-      final id = work.videoId.trim();
-      if (id.isEmpty && name.length < 5) continue;
-      // A shared Shorts source (with numbered episodes) is stronger
-      // evidence than a merely similar artist name.
-      final key = id.isNotEmpty ? 'short:$id' : 'title:$name';
-      buckets.putIfAbsent(key, () => []).add(work);
+    final groups = <String, List<WorkEntry>>{};
+    final sorted = [...works]..sort((a, b) => a.workId.compareTo(b.workId));
+    final clusters = <List<WorkEntry>>[];
+
+    // Existing series may receive new works, but are never recreated/changed.
+    for (final work in sorted.where((w) => w.groupId.isNotEmpty)) {
+      groups.putIfAbsent(work.groupId, () => []).add(work);
     }
-    final suggestions = <WorkGroupSuggestion>[];
-    for (final group in buckets.values) {
-      final episodeNumbers = group.map(episodeNumber).toList();
-      if (group.length < 2 ||
-          episodeNumbers.any((ep) => ep == null) ||
-          episodeNumbers.toSet().length != group.length) continue;
-      group.sort(compareChapters);
-      final longestName = group.map((w) => normalizedSeries(w.title))
-          .where((name) => name.length > 3)
-          .fold<String>('', (a, name) => name.length > a.length ? name : a);
-      suggestions.add(WorkGroupSuggestion(
-        longestName.isEmpty ? '작품 시리즈' : longestName,
-        group.map((w) => w.workId).toList(),
-        group.first.videoId.isNotEmpty
-            ? '같은 소개 쇼츠의 서로 다른 회차' : '번호가 다른 동일 제목의 회차',
+    for (final members in groups.values) {
+      clusters.add([...members]);
+    }
+    for (final work in sorted.where((w) => w.groupId.isEmpty)) {
+      if (!_usableTitle(work)) continue;
+      final matches = <List<WorkEntry>>[];
+      for (final group in clusters) {
+        if (group.any((other) => _sameSeries(other, work))) {
+          matches.add(group);
+        }
+      }
+      // Do not guess between several already-existing user groups.
+      if (matches.length == 1) {
+        matches.single.add(work);
+      } else if (matches.isEmpty) {
+        clusters.add([work]);
+      }
+    }
+
+    final result = <WorkGroupSuggestion>[];
+    for (final cluster in clusters) {
+      final newcomers = cluster.where((w) => w.groupId.isEmpty).toList()
+        ..sort(compareChapters);
+      final existing = cluster.where((w) => w.groupId.isNotEmpty).toList();
+      if (existing.isEmpty && newcomers.length < 2) continue;
+      if (existing.isNotEmpty && newcomers.isEmpty) continue;
+      final base = existing.isEmpty ? newcomers.first : existing.first;
+      final reference = cluster.first;
+      final chapters = cluster.map(episodeNumber).whereType<int>().toList();
+      final uniqueChapters = chapters.toSet().length == chapters.length;
+      final matchingCreators = cluster.every(
+          (w) => w.workId == reference.workId ||
+              _sameKnownCreator(w, reference));
+      final exactNames = cluster.every((w) =>
+          normalizedSeries(w.title) == normalizedSeries(reference.title));
+      final confidence = exactNames && chapters.length >= 2 && uniqueChapters
+          ? 95 : exactNames && matchingCreators ? 89 : exactNames ? 77 : 70;
+      final title = existing.isNotEmpty && base.groupTitle.isNotEmpty
+          ? base.groupTitle : normalizedSeries(base.title);
+      final reason = existing.isNotEmpty
+          ? '기존 시리즈와 제목·제작 정보가 일치하는 새 작품'
+          : exactNames && chapters.length >= 2 && uniqueChapters
+          ? '같은 제목의 서로 다른 회차'
+          : exactNames && matchingCreators
+          ? '작품 제목과 제작자가 일치'
+          : exactNames ? '작품 제목 일치 · 회차 정보 확인 필요'
+          : '유사한 제목과 동일한 제작자 · 확인 필요';
+      result.add(WorkGroupSuggestion(
+        title, newcomers.map((w) => w.workId).toList(), reason,
+        existingGroupId: existing.isEmpty ? '' : existing.first.groupId,
+        confidence: confidence,
       ));
     }
-    suggestions.sort((a, b) => b.workIds.length.compareTo(a.workIds.length));
-    return suggestions;
+    result.sort((a, b) {
+      final byConfidence = b.confidence.compareTo(a.confidence);
+      return byConfidence != 0 ? byConfidence :
+          b.workIds.length.compareTo(a.workIds.length);
+    });
+    return result;
   }
 }
 

@@ -81,4 +81,72 @@ void main() {
     await tester.pump();
     expect(saved, ['2900756']);
   });
+  testWidgets('second-pass adjacent-line checks run only after 404',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1300));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var fallbackCalls = 0;
+    final checked = <String>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(child: CandidateEditor(
+        busy: false,
+        suggestions: const [
+          NumberCandidate(code: '623112', source: 'comment',
+              evidence: '초6~중2 중3 고1 12시간',
+              score: 60, rule: 'line-window'),
+        ],
+        onCrossLineFallback: () {
+          fallbackCalls++;
+          return const [NumberCandidate(code: '4036355',
+              evidence: '4036년\n3월 55일',
+              rule: 'cross-line', source: 'comment', score: 30)];
+        },
+        onVerify: (codes) async {
+          checked.addAll(codes);
+          return {
+            for (final code in codes)
+              code: CandidateVerification(
+                code == '4036355'
+                    ? CandidateCheck.verified : CandidateCheck.notFound,
+                title: 'Test work',
+              )
+          };
+        },
+        onSave: (_) async {},
+      ))),
+    ));
+    await tester.pumpAndSettle();
+    expect(fallbackCalls, 1);
+    expect(checked, ['623112', '4036355']);
+    expect(find.text('Test work'), findsOneWidget);
+  });
+
+  testWidgets('an unavailable server never triggers cross-line fallback',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var fallbackCalls = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(child: CandidateEditor(
+        busy: false,
+        suggestions: const [
+          NumberCandidate(code: '623112', source: 'comment',
+              evidence: 'numbers', score: 40, rule: 'line-window'),
+        ],
+        onCrossLineFallback: () {
+          fallbackCalls++;
+          return const [];
+        },
+        onVerify: (codes) async => {
+          for (final code in codes)
+            code: const CandidateVerification(CandidateCheck.unavailable),
+        },
+        onSave: (_) async {},
+      ))),
+    ));
+    await tester.pumpAndSettle();
+    expect(fallbackCalls, 0);
+    expect(find.textContaining('2차 확장은 보류'), findsOneWidget);
+  });
+
 }
