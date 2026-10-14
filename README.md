@@ -2,7 +2,7 @@
 
 Local-first **Windows setup.exe + Android APK** app for finding and organizing references from YouTube Shorts. No AI service, login, or cloud library required.
 
-**Status:** v0.1.1 release candidate; v0.1.0 remains available. The user-facing workflow is **release → update → live test → fix in the next 0.x release**. See [v0.1.1 smoke test](docs/SMOKE_TEST_V0.1.1.md).
+**Status:** v0.1.2 reader hotfix preview; earlier 0.x releases remain available. The workflow is **release → update → live test → fix in the next 0.x release**. See [v0.1.2 smoke test](docs/SMOKE_TEST_V0.1.2.md).
 
 ## Features implemented in the MVP
 
