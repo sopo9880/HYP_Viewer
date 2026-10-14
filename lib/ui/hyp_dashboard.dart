@@ -838,6 +838,11 @@ class _HypDashboardState extends State<HypDashboard> {
             OutlinedButton(
               key: const Key('library-select-visible'),
               onPressed: visible.isEmpty ? null : () => setState(() {
+                // When searching, select ONLY current matching results;
+                // never silently include previously selected hidden works.
+                if (_search.text.trim().isNotEmpty) {
+                  _selectedWorkIds.clear();
+                }
                 _selectedWorkIds.addAll(visible.map((w) => w.workId));
               }),
               child: const HypText('전체 선택'),
