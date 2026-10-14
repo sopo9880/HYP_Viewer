@@ -13,6 +13,9 @@ class GalleryDiskCache implements GalleryPageSource {
   final Directory? parent;
   final int maxBytes;
   final int concurrency;
+  // Allows deterministic in-memory widget tests without asynchronous dart:io.
+  // Production readers retain the bounded on-disk cache by default.
+  final bool cacheToDisk;
   final Map<int, Completer<Uint8List>> _requests = {};
   final Queue<int> _foreground = Queue<int>();
   final Queue<int> _background = Queue<int>();
@@ -30,6 +33,7 @@ class GalleryDiskCache implements GalleryPageSource {
     this.parent,
     this.maxBytes = 750 * 1024 * 1024,
     this.concurrency = 2,
+    this.cacheToDisk = true,
   }) : assert(concurrency > 0 && concurrency <= 4);
 
   @override int get pageCount => source.pageCount;
@@ -111,16 +115,19 @@ class GalleryDiskCache implements GalleryPageSource {
   }
 
   Future<Uint8List> _fetch(int index) async {
-    final dir = await _getDir();
-    final file = File(dir.path + Platform.pathSeparator +
-        'page_' + index.toString() + '.bin');
-    if (await file.exists()) {
-      final size = await file.length();
-      if (size > 0 && size <= GalleryArchive.maxSingleImageBytes) {
-        _finishedOnDisk.add(index);
-        return file.readAsBytes();
+    File? file;
+    if (cacheToDisk) {
+      final dir = await _getDir();
+      file = File(dir.path + Platform.pathSeparator +
+          'page_' + index.toString() + '.bin');
+      if (await file.exists()) {
+        final size = await file.length();
+        if (size > 0 && size <= GalleryArchive.maxSingleImageBytes) {
+          _finishedOnDisk.add(index);
+          return file.readAsBytes();
+        }
+        await file.delete();
       }
-      await file.delete();
     }
 
     Object? lastError;
@@ -131,10 +138,13 @@ class GalleryDiskCache implements GalleryPageSource {
       if (delay > Duration.zero) await Future<void>.delayed(delay);
       try {
         final bytes = await source.loadPage(index);
-        if (!_disposed && !_capacityReached && bytes.isNotEmpty &&
+        if (!cacheToDisk) {
+          // The reader's own Future cache retains these bytes in tests.
+          _finishedOnDisk.add(index);
+        } else if (!_disposed && !_capacityReached && bytes.isNotEmpty &&
             _writtenBytes + bytes.length <= maxBytes) {
           try {
-            await file.writeAsBytes(bytes, flush: true);
+            await file!.writeAsBytes(bytes, flush: true);
             _writtenBytes += bytes.length;
             _finishedOnDisk.add(index);
           } on FileSystemException {

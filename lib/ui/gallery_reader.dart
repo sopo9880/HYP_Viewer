@@ -19,6 +19,8 @@ class GalleryReader extends StatefulWidget {
   final GalleryPageSource archive;
   final ValueChanged<int> onPageChanged;
   final ReaderSettings settings;
+  // Test seam: production always uses the on-disk reader cache.
+  final bool diskCacheEnabled;
   final Future<void> Function(int page)? onOpenInBrowser;
   final Future<void> Function()? onDownloadOffline;
   final void Function(int page, Uint8List bytes)? onPageLoaded;
@@ -31,6 +33,7 @@ class GalleryReader extends StatefulWidget {
     required this.archive,
     required this.onPageChanged,
     this.settings = const ReaderSettings(),
+    this.diskCacheEnabled = true,
     this.onOpenInBrowser,
     this.onDownloadOffline,
     this.onPageLoaded,
@@ -69,7 +72,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     // ALL visible and background requests share this same bounded queue.
     // Data saver uses one request at a time, regardless of preload setting.
     _diskCache = GalleryDiskCache(widget.archive,
-        concurrency: widget.settings.dataSaverMode ? 1 : 2);
+        concurrency: widget.settings.dataSaverMode ? 1 : 2,
+        cacheToDisk: widget.diskCacheEnabled);
     _webtoonPositions.itemPositions.addListener(_onWebtoonPosition);
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -95,10 +99,12 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       });
     }
     if (oldWidget.archive != widget.archive ||
-        oldWidget.settings.dataSaverMode != widget.settings.dataSaverMode) {
+        oldWidget.settings.dataSaverMode != widget.settings.dataSaverMode ||
+        oldWidget.diskCacheEnabled != widget.diskCacheEnabled) {
       final oldDisk = _diskCache;
       _diskCache = GalleryDiskCache(widget.archive,
-          concurrency: widget.settings.dataSaverMode ? 1 : 2);
+          concurrency: widget.settings.dataSaverMode ? 1 : 2,
+        cacheToDisk: widget.diskCacheEnabled);
       _imageCache.clear();
       if (oldDisk != null) unawaited(oldDisk.dispose());
     }

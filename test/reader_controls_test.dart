@@ -40,6 +40,7 @@ void main() {
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759').copyWith(currentPage: 2),
         archive: pages,
+        diskCacheEnabled: false,
         settings: const ReaderSettings(preloadPages: 2),
         onPageChanged: (_) {},
       ),
@@ -62,6 +63,7 @@ void main() {
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759'),
         archive: _Pages(),
+        diskCacheEnabled: false,
         settings: const ReaderSettings(
             nextDirection: 'right', verticalScrolling: true),
         onPageChanged: (_) {},
@@ -89,6 +91,7 @@ void main() {
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759'),
         archive: _Pages(),
+        diskCacheEnabled: false,
         settings: const ReaderSettings(
           showPageControlsAction: false,
           showOrientationAction: false,
@@ -114,6 +117,7 @@ void main() {
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759'),
         archive: pages,
+        diskCacheEnabled: false,
         settings: const ReaderSettings(
             nextDirection: 'right', twoPageSpread: true, preloadPages: 1),
         onPageChanged: (_) {},

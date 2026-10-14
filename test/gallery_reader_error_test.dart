@@ -33,6 +33,7 @@ void main() {
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759'),
         archive: archive,
+        diskCacheEnabled: false,
         settings: const ReaderSettings(preloadPages: 0),
         onPageChanged: (_) {},
         onOpenInBrowser: (page) async { browserPage = page; },

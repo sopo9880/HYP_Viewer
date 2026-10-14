@@ -1623,7 +1623,9 @@ class _HypDashboardState extends State<HypDashboard> {
     final expanded = widget.readerSettings.expandedSettings.contains(id);
     return Container(
       key: id == 'backup' ? _backupSectionKey : null,
-      child: HypPanel(child: ExpansionTile(
+      child: HypPanel(child: Material(
+        color: Colors.transparent,
+        child: ExpansionTile(
         key: Key('settings-section-' + id + (expanded ? '-open' : '-closed')),
         initiallyExpanded: expanded,
         tilePadding: EdgeInsets.zero,
@@ -1641,7 +1643,7 @@ class _HypDashboardState extends State<HypDashboard> {
               expandedSettings: enabled.toList()));
         },
         children: [content],
-      )),
+      ))),
     );
   }
 
