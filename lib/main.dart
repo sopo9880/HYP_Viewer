@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -90,6 +91,10 @@ class _LibraryHomeState extends State<LibraryHome> {
   CancelDownload? galleryDownloadToken;
   GalleryTransfer? readerTransfer;
   bool isReaderTransferPaused = false;
+  final Queue<WorkEntry> _downloadQueue = Queue<WorkEntry>();
+  final Set<String> _queuedDownloadIds = {};
+  bool _downloadQueueRunning = false;
+  bool _downloadQueueCancelled = false;
   Timer? _noticesTimer;
   String? downloadingGalleryKey;
   int downloadedGalleryPages = 0;
@@ -532,6 +537,9 @@ class _LibraryHomeState extends State<LibraryHome> {
           unawaited(_prepareAutomaticCover(work));
         }
       }
+      if (readerSettings.autoDownloadOnSave) {
+        unawaited(_enqueueDownloads(works));
+      }
       _status('작품 ${works.length}개를 서재에 저장했어.' +
           (unknownTitles > 0
               ? ' 제목을 찾지 못한 $unknownTitles개는 임시 이름으로 저장했어.'
@@ -874,19 +882,136 @@ class _LibraryHomeState extends State<LibraryHome> {
     await _openWebReader(work, page: page);
   }
 
+  /// A bulk/auto action requires a separate rights-consent action at the
+  /// time it is enabled. No download starts merely because a work is viewed.
+  Future<void> _setAutoDownload(bool enabled) async {
+    if (!enabled) {
+      await _saveReaderSettings(
+          readerSettings.copyWith(autoDownloadOnSave: false));
+      return;
+    }
+    if (!mounted) return;
+    final accepted = await _confirmDownloadRights(
+      title: '새 작품 자동 다운로드',
+      message: '앞으로 서재에 추가하는 작품을 자동으로 오프라인 저장해. '
+          '저장 권한이 있는 콘텐츠에만 사용해줘. '
+          '이미 저장된 파일은 다시 다운로드하지 않고, '
+          '다운로드는 앱이 실행 중인 동안 순서대로 진행돼.',
+    );
+    if (accepted) {
+      await _saveReaderSettings(
+          readerSettings.copyWith(autoDownloadOnSave: true));
+    }
+  }
+
+  Future<bool> _confirmDownloadRights({
+    required String title, required String message,
+  }) async {
+    var permitted = false;
+    return await showDialog<bool>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (ctx, update) => AlertDialog(
+          title: HypText(title),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            HypText(message),
+            CheckboxListTile(
+              key: const Key('bulk-download-rights'),
+              value: permitted,
+              contentPadding: EdgeInsets.zero,
+              title: const HypText('이 콘텐츠를 저장할 권한이 있어'),
+              onChanged: (v) => update(() => permitted = v == true),
+            ),
+          ]),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: const HypText('취소')),
+            FilledButton(
+              onPressed: permitted ? () => Navigator.pop(dialog, true) : null,
+              child: const HypText('확인')),
+          ],
+        ),
+      ),
+    ) == true;
+  }
+
+  Future<void> _downloadAllLibrary() async {
+    await _initialLibraryRead.future;
+    if (_libraryReadFailed || !mounted || library.works.isEmpty) return;
+    final approved = await _confirmDownloadRights(
+      title: '서재 전체 다운로드',
+      message: '서재의 작품 ${library.works.length}개를 차례대로 다운로드할까? '
+          '이미 로컬 파일이 있는 작품은 건너뛰고, 다운로드 제한이나 '
+          '네트워크 오류는 우회하지 않아. 아래 확인이 필요해.',
+    );
+    if (!approved || !mounted) return;
+    await _enqueueDownloads(library.works);
+  }
+
+  Future<void> _enqueueDownloads(Iterable<WorkEntry> works) async {
+    _downloadQueueCancelled = false;
+    for (final work in works) {
+      if (_queuedDownloadIds.add(work.workId)) _downloadQueue.add(work);
+    }
+    if (mounted) {
+      setState(() {});
+      _status('다운로드 대기: ${_downloadQueue.length}개 작품. '
+          '앱 실행 중 순서대로 다운로드해.');
+    }
+    unawaited(_runDownloadQueue());
+  }
+
+  Future<void> _runDownloadQueue() async {
+    if (_downloadQueueRunning || galleryDownloadToken != null) return;
+    _downloadQueueRunning = true;
+    try {
+      while (_downloadQueue.isNotEmpty && !_downloadQueueCancelled) {
+        if (galleryDownloadToken != null) break;
+        final work = _downloadQueue.removeFirst();
+        _queuedDownloadIds.remove(work.workId);
+        if (mounted) setState(() {});
+        // A queued work might have been removed from the library.
+        if (!library.works.any((w) => w.workId == work.workId)) continue;
+        try {
+          if (await galleryStore.exists(work.workId)) continue;
+          await _downloadOnlineInternal(work, rightsApproved: true);
+        } catch (error) {
+          _status('작품 ${work.workId} 다운로드 실패: $error');
+        }
+      }
+    } finally {
+      _downloadQueueRunning = false;
+    }
+  }
+
+  void _cancelAllDownloads() {
+    _downloadQueueCancelled = true;
+    _downloadQueue.clear();
+    _queuedDownloadIds.clear();
+    galleryDownloadToken?.cancel();
+    if (mounted) setState(() {});
+  }
+
   Future<void> _downloadOnline(WorkEntry work) async {
+    await _downloadOnlineInternal(work);
+  }
+
+  Future<bool> _downloadOnlineInternal(
+      WorkEntry work, {bool rightsApproved = false}) async {
     if (galleryDownloadToken != null) {
       _status('이미 진행 중인 다운로드가 있어. 먼저 완료하거나 취소해줘.');
-      return;
+      return false;
     }
     final client = http.Client();
     GalleryTransfer? transfer;
     try {
       final remote = await HitomiGalleryProvider(client).load(work.workId);
-      if (!mounted) return;
+      if (!mounted) return false;
       final existing = await galleryStore.exists(work.workId);
+      if (rightsApproved && existing) return true;
       var confirmedRights = false;
-      final accepted = await showDialog<bool>(
+      final accepted = rightsApproved ? true : await showDialog<bool>(
         context: context,
         builder: (dialog) => StatefulBuilder(
           builder: (context, update) => AlertDialog(
@@ -922,7 +1047,7 @@ class _LibraryHomeState extends State<LibraryHome> {
           ),
         ),
       );
-      if (accepted != true || !mounted) return;
+      if (accepted != true || !mounted) return false;
       transfer = GalleryTransfer();
       setState(() {
         galleryDownloadToken = transfer;
@@ -949,10 +1074,13 @@ class _LibraryHomeState extends State<LibraryHome> {
       if (mounted) setState(() => coverEpoch++);
       _status('오프라인 저장 완료! ' +
           downloaded.pageCount.toString() + '페이지를 인터넷 없이 읽을 수 있어.');
+      return true;
     } on DownloadCancelled {
       _status('다운로드가 취소됐어. 기존 오프라인 파일은 유지했어.');
+      return false;
     } catch (e) {
       _status('오프라인 저장 실패: ' + e.toString());
+      return false;
     } finally {
       client.close();
       if (mounted && transfer != null) {
@@ -962,6 +1090,10 @@ class _LibraryHomeState extends State<LibraryHome> {
           downloadingGalleryKey = null;
           isReaderTransferPaused = false;
         });
+        if (!_downloadQueueRunning && _downloadQueue.isNotEmpty &&
+            !_downloadQueueCancelled) {
+          unawaited(_runDownloadQueue());
+        }
       }
     }
   }
@@ -1411,6 +1543,9 @@ class _LibraryHomeState extends State<LibraryHome> {
     onReadOnline: _readOnline,
     onReadWebPage: _chooseWebPage,
     onDownloadOnline: _downloadOnline,
+    onDownloadAll: _downloadAllLibrary,
+    onSetAutoDownload: _setAutoDownload,
+    queuedDownloadCount: _downloadQueue.length,
     onDownloadJsonSource: _downloadJsonSource,
     onDeleteOffline: _deleteOffline,
     onDeleteWork: _deleteWork,
@@ -1423,7 +1558,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     onSaveReaderSettings: _saveReaderSettings,
     onOpenOriginal: _openOriginal,
     onOpenShortsInput: _openShortsInput,
-    onCancelGalleryDownload: () => galleryDownloadToken?.cancel(),
+    onCancelGalleryDownload: _cancelAllDownloads,
     onDismissMessage: () => setState(() => message = ''),
   );
 }
