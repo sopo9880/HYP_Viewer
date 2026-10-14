@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/gallery.dart';
 import '../core/cover_store.dart';
@@ -132,6 +133,7 @@ class HypDashboard extends StatefulWidget {
 
 class _HypDashboardState extends State<HypDashboard> {
   final TextEditingController _search = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
   HypPage _page = HypPage.home;
   final Set<String> _offlineKeys = <String>{};
   final Map<String, int> _pageCounts = <String, int>{};
@@ -162,6 +164,7 @@ class _HypDashboardState extends State<HypDashboard> {
   void dispose() {
     _search.removeListener(_changedSearch);
     _search.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -254,8 +257,34 @@ class _HypDashboardState extends State<HypDashboard> {
     }).toList();
   }
 
+  KeyEventResult _onKeyboardShortcut(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        !HardwareKeyboard.instance.isControlPressed) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.digit1) {
+      _navigate(HypPage.home);
+    } else if (event.logicalKey == LogicalKeyboardKey.digit2) {
+      _navigate(HypPage.library);
+    } else if (event.logicalKey == LogicalKeyboardKey.digit3) {
+      _navigate(HypPage.favorites);
+    } else if (event.logicalKey == LogicalKeyboardKey.digit4) {
+      _navigate(HypPage.downloads);
+    } else if (event.logicalKey == LogicalKeyboardKey.digit5) {
+      _navigate(HypPage.settings);
+    } else if (event.logicalKey == LogicalKeyboardKey.keyF) {
+      _searchFocus.requestFocus();
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
+  }
+
   @override
-  Widget build(BuildContext context) => LayoutBuilder(builder: (context, size) {
+  Widget build(BuildContext context) => Focus(
+    autofocus: true,
+    onKeyEvent: _onKeyboardShortcut,
+    child: LayoutBuilder(builder: (context, size) {
     final desktop = size.maxWidth >= 940;
     return Scaffold(
       backgroundColor: HypColors.background,
@@ -333,7 +362,8 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       ),
     );
-  });
+  }),
+  );
 
   Widget _sidebar({required bool closeDrawer}) => Container(
     margin: const EdgeInsets.all(12),
@@ -497,6 +527,7 @@ class _HypDashboardState extends State<HypDashboard> {
 
   Widget _searchField() => TextField(
     key: const Key('library-search-input'),
+    focusNode: _searchFocus,
     controller: _search,
     decoration: const InputDecoration(
       hintText: '작품 제목, 작가, 번호, 목록으로 검색하세요...',
@@ -781,7 +812,7 @@ class _HypDashboardState extends State<HypDashboard> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '키보드: ← / → 방향키, PageUp / PageDown, Space, Home / End, '
+            '키보드(뷰어): ← / →, PageUp / PageDown, Space, Home / End, '
             'Esc(닫기). 서재의 작품 메뉴에서 표지 선택 가능.',
             style: TextStyle(fontSize: 12, color: HypColors.muted),
           ),
