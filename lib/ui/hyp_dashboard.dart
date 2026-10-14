@@ -8,6 +8,7 @@ import '../core/cover_store.dart';
 import '../core/reader_settings.dart';
 import '../core/i18n.dart';
 import '../core/number_extractor.dart';
+import 'candidate_editor.dart';
 import '../core/work.dart';
 import 'hero_banner.dart';
 import 'hyp_theme.dart';
@@ -69,6 +70,7 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function() onSaveWork;
   final Future<void> Function(String code) onQuickAddNumber;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
+  final CandidateBatchVerify onVerifyCandidateCodes;
   final Future<void> Function() onChooseHeroArtwork;
   final Future<void> Function() onClearHeroArtwork;
   final Future<void> Function() onSaveOnlineSource;
@@ -129,6 +131,7 @@ class HypDashboard extends StatefulWidget {
     required this.onSaveWork,
     required this.onQuickAddNumber,
     required this.onSaveSelectedWorks,
+    required this.onVerifyCandidateCodes,
     required this.onChooseHeroArtwork,
     required this.onClearHeroArtwork,
     required this.onSaveOnlineSource,
@@ -660,6 +663,7 @@ class _HypDashboardState extends State<HypDashboard> {
         onSave: widget.onSaveWork,
         onQuickAddNumber: widget.onQuickAddNumber,
         onSaveSelectedWorks: widget.onSaveSelectedWorks,
+        onVerifyCandidateCodes: widget.onVerifyCandidateCodes,
       ),
       const SizedBox(height: 24),
       HypSectionTitle(

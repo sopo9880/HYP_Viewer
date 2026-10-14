@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/i18n.dart';
 
 import '../core/number_extractor.dart';
+import 'candidate_editor.dart';
 import 'hyp_theme.dart';
 
 /// The existing Shorts parser and YouTube client stay in the parent controller.
@@ -21,6 +22,7 @@ class ShortsFinderPanel extends StatefulWidget {
   final Future<void> Function() onSave;
   final Future<void> Function(String code)? onQuickAddNumber;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
+  final CandidateBatchVerify? onVerifyCandidateCodes;
 
   const ShortsFinderPanel({
     super.key,
@@ -38,6 +40,7 @@ class ShortsFinderPanel extends StatefulWidget {
     required this.onSave,
     this.onQuickAddNumber,
     required this.onSaveSelectedWorks,
+    this.onVerifyCandidateCodes,
   });
 
   @override
@@ -47,16 +50,9 @@ class ShortsFinderPanel extends StatefulWidget {
 class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
   bool _showDetails = false;
   bool _revealApiKey = false;
-  final Set<String> _selectedCodes = <String>{};
   final GlobalKey _quickCandidateAnchor = GlobalKey();
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.candidates.length <= 2) {
-      _selectedCodes.addAll(widget.candidates.map((e) => e.code));
-    }
-  }
+  final GlobalKey<CandidateEditorState> _editorKey =
+      GlobalKey<CandidateEditorState>();
 
   @override
   void didUpdateWidget(covariant ShortsFinderPanel oldWidget) {
@@ -64,12 +60,6 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
     final before = oldWidget.candidates.map((e) => e.code).join(',');
     final after = widget.candidates.map((e) => e.code).join(',');
     if (before != after) {
-      _selectedCodes.clear();
-      // Two explicit entries can be registered with one click; with many
-      // ambiguous candidates require the user to select them individually.
-      if (widget.candidates.length <= 2) {
-        _selectedCodes.addAll(widget.candidates.map((e) => e.code));
-      }
       if (widget.candidates.isNotEmpty) {
         _showDetails = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -244,11 +234,13 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
                             key: Key('shorts-quick-candidate-${candidate.code}'),
                             avatar: const Icon(Icons.tag, size: 15),
                             label: HypText('#${candidate.code}'),
-                            onPressed: () => setState(() {
+                            onPressed: () {
                               widget.workId.text = candidate.code;
-                              _selectedCodes.add(candidate.code);
-                              _showDetails = true;
-                            }),
+                              setState(() => _showDetails = true);
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                _editorKey.currentState?.addSuggestion(candidate);
+                              });
+                            },
                           ),
                         ),
                       ).toList(),
@@ -339,52 +331,14 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               label: const HypText('원문에서 번호 추출'),
             ),
           ),
-          if (widget.candidates.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            HypText('추출된 후보 · 여러 작품은 체크 후 함께 저장해줘',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 7),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: widget.candidates.take(20).map((candidate) {
-                return Tooltip(
-                  message: candidate.evidence,
-                  child: FilterChip(
-                    key: Key('shorts-candidate-' + candidate.code),
-                    label: HypText(candidate.code),
-                    selected: _selectedCodes.contains(candidate.code),
-                    avatar: const Icon(Icons.numbers, size: 15),
-                    onSelected: (selected) => setState(() {
-                      if (selected) {
-                        _selectedCodes.add(candidate.code);
-                        widget.workId.text = candidate.code;
-                      } else {
-                        _selectedCodes.remove(candidate.code);
-                      }
-                    }),
-                  ),
-                );
-              }).toList(),
-            ),
-            if (widget.candidates.length > 1) ...[
-              const SizedBox(height: 9),
-              FilledButton.icon(
-                key: const Key('save-selected-works'),
-                onPressed: widget.busy || _selectedCodes.isEmpty
-                    ? null : () => widget.onSaveSelectedWorks(
-                        widget.candidates
-                            .where((e) => _selectedCodes.contains(e.code))
-                            .map((e) => e.code).toList()),
-                icon: const Icon(Icons.library_add_outlined),
-                label: HypText('선택한 작품 ${_selectedCodes.length}개 한 번에 저장'),
-              ),
-              const SizedBox(height: 4),
-              const HypText('추출된 모든 숫자가 실제 작품 번호는 아니야. '
-                  '선택된 번호를 확인하고 저장해줘.',
-                  style: TextStyle(fontSize: 12, color: HypColors.muted)),
-            ],
-          ],
+          const SizedBox(height: 10),
+          CandidateEditor(
+            key: _editorKey,
+            suggestions: widget.candidates,
+            onVerify: widget.onVerifyCandidateCodes,
+            onSave: widget.onSaveSelectedWorks,
+            busy: widget.busy,
+          ),
           const SizedBox(height: 12),
           LayoutBuilder(builder: (context, constraints) {
             final code = TextField(

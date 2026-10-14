@@ -272,6 +272,36 @@ class CandidateEditorState extends State<CandidateEditor> {
           Text(_slots.length.toString(),
               style: Theme.of(context).textTheme.bodySmall),
         ]),
+        if (widget.suggestions.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(spacing: 7, runSpacing: 7, children:
+            widget.suggestions.take(24).map((candidate) {
+              final rows = _slots.where((s) =>
+                  s.controller.text.trim() == candidate.code).toList();
+              final selected = rows.isNotEmpty && rows.first.selected;
+              return Tooltip(
+                message: candidate.evidence,
+                child: FilterChip(
+                  key: Key('shorts-candidate-' + candidate.code),
+                  label: HypText(candidate.episode.isEmpty
+                      ? '#' + candidate.code
+                      : candidate.episode + ' · #' + candidate.code),
+                  selected: selected,
+                  onSelected: (value) => setState(() {
+                    if (rows.isNotEmpty) {
+                      rows.first.touched = true;
+                      rows.first.selected = value;
+                    } else if (value) {
+                      _slots.add(_Slot(
+                          _nextId++, candidate.code, candidate.episode,
+                          candidate.evidence, candidate.rule, selected: true));
+                    }
+                  }),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
         const SizedBox(height: 8),
         for (final slot in _slots) _slotCard(slot),
         const SizedBox(height: 10),

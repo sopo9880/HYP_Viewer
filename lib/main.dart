@@ -27,6 +27,7 @@ import 'ui/cover_cropper.dart';
 import 'ui/hyp_dashboard.dart';
 import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
+import 'core/candidate_verifier.dart';
 import 'core/online_gallery.dart';
 import 'core/shares.dart';
 import 'core/storage.dart';
@@ -102,6 +103,7 @@ class _LibraryHomeState extends State<LibraryHome> {
   final apiKeyInput = TextEditingController();
   LibraryBackup library = const LibraryBackup(works: [], collections: []);
   List<NumberCandidate> candidates = [];
+  final Map<String, CandidateVerification> _candidateCache = {};
   bool busy = false;
   String message = '';
 
@@ -427,6 +429,17 @@ class _LibraryHomeState extends State<LibraryHome> {
     } finally {
       client.close();
       if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<Map<String, CandidateVerification>> _verifyCandidateCodes(
+      List<String> codes) async {
+    final client = http.Client();
+    try {
+      return await GalleryCandidateVerifier(client, cache: _candidateCache)
+          .verifyBatch(codes);
+    } finally {
+      client.close();
     }
   }
 
@@ -1360,6 +1373,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     onSaveWork: _saveWork,
     onQuickAddNumber: _quickAddNumber,
     onSaveSelectedWorks: _saveSelectedWorks,
+    onVerifyCandidateCodes: _verifyCandidateCodes,
     onChooseHeroArtwork: _chooseHeroArtwork,
     onClearHeroArtwork: _clearHeroArtwork,
     onSaveOnlineSource: _saveOnlineSource,
