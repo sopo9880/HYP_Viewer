@@ -16,6 +16,7 @@ class GalleryReader extends StatefulWidget {
   final ValueChanged<int> onPageChanged;
   final ReaderSettings settings;
   final Future<void> Function(int page)? onOpenInBrowser;
+  final Future<void> Function()? onDownloadOffline;
   final void Function(int page, Uint8List bytes)? onPageLoaded;
   final Future<void> Function(int page, Uint8List bytes)? onChooseCover;
 
@@ -26,6 +27,7 @@ class GalleryReader extends StatefulWidget {
     required this.onPageChanged,
     this.settings = const ReaderSettings(),
     this.onOpenInBrowser,
+    this.onDownloadOffline,
     this.onPageLoaded,
     this.onChooseCover,
   });
@@ -324,6 +326,13 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
               ? widget.work.workId : widget.work.title,
               overflow: TextOverflow.ellipsis),
           actions: [
+            if (widget.onDownloadOffline != null)
+              IconButton(
+                key: const Key('reader-download-offline'),
+                tooltip: '온라인 이미지를 CBZ로 저장',
+                onPressed: () { widget.onDownloadOffline?.call(); },
+                icon: const Icon(Icons.download_for_offline_outlined),
+              ),
             if (widget.onChooseCover != null)
               IconButton(
                 tooltip: '현재 페이지를 서재 표지로 지정',
