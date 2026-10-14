@@ -20,12 +20,17 @@ Future<Uint8List> _testPng() async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late Uint8List png;
+  // Picture.toImage is an engine async operation. Preparing it inside a
+  // testWidgets fake-async zone deadlocks before the first frame is pumped.
+  setUpAll(() async {
+    png = await _testPng();
+  });
 
   testWidgets('cropping returns exactly an image preview, not raw source',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1024, 820));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final png = await _testPng();
     Uint8List? cropped;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: Builder(builder: (context) => ElevatedButton(
