@@ -64,7 +64,7 @@ class _CoverPickerDialogState extends State<_CoverPickerDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('기본 디자인 6종이나 작품 내 원하는 페이지를 표지로 지정할 수 있어.'),
+            const Text('기본 디자인 6종, 작품 내 원하는 페이지, 내 사진 중에서 표지를 선택할 수 있어.'),
             const SizedBox(height: 12),
             ListTile(
               title: const Text('자동: 작품 첫 페이지'),
@@ -101,6 +101,15 @@ class _CoverPickerDialogState extends State<_CoverPickerDialog> {
               }),
             ),
             const SizedBox(height: 12),
+            ListTile(
+              key: const Key('cover-upload'),
+              title: const Text('내 이미지 업로드'),
+              subtitle: const Text('사진 파일을 선택한 뒤 드래그·확대해서 자르기'),
+              leading: Icon(_mode == 'upload'
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_off),
+              onTap: () => setState(() => _mode = 'upload'),
+            ),
             ListTile(
               title: const Text('작품 내 페이지 선택'),
               subtitle: const Text('이미지 한 장을 축소해 저장 (네트워크 필요)'),
