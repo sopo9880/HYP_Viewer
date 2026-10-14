@@ -906,6 +906,258 @@ class _HypDashboardState extends State<HypDashboard> {
     ],
   );
 
+  Widget _groupedLibraryGrid(List<WorkEntry> works) {
+    if (works.isEmpty) {
+      return _gridOrEmpty(works,
+        emptyTitle: '내 서재에 작품이 없어',
+        emptyMessage: '홈에서 작품을 저장해줘.');
+    }
+    final groups = <String, List<WorkEntry>>{};
+    for (final work in works) {
+      if (work.groupId.isNotEmpty) {
+        groups.putIfAbsent(work.groupId, () => []).add(work);
+      }
+    }
+    final singles = works.where((w) => w.groupId.isEmpty).toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final entry in groups.entries) ...[
+          HypPanel(child: ExpansionTile(
+            key: Key('work-group-' + entry.key),
+            title: HypText(entry.value.first.groupTitle.isEmpty
+                ? '작품 묶음' : entry.value.first.groupTitle),
+            subtitle: HypText(entry.value.length.toString() + '개 작품 · '
+                '작품별 읽기 기록 독립 유지'),
+            leading: const Icon(Icons.library_books_outlined),
+            trailing: PopupMenuButton<String>(
+              tooltip: '묶음 관리',
+              key: Key('work-group-menu-' + entry.key),
+              onSelected: (action) => _groupAction(action,
+                  entry.key, entry.value),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'rename', child: HypText('묶음 이름 수정')),
+                PopupMenuItem(value: 'reorder', child: HypText('회차 순서 변경')),
+                PopupMenuItem(value: 'ungroup', child: HypText('묶음만 해제')),
+              ],
+            ),
+            childrenPadding: const EdgeInsets.only(bottom: 12),
+            children: [
+              _gridOrEmpty(
+                [...entry.value]..sort((a, b) =>
+                    a.groupOrder.compareTo(b.groupOrder)),
+                emptyTitle: '묶음이 비어 있어',
+                emptyMessage: '다른 작품을 선택해서 추가해줘.',
+              ),
+            ],
+          )),
+          const SizedBox(height: 12),
+        ],
+        if (singles.isNotEmpty) _gridOrEmpty(singles,
+          emptyTitle: '서재 작품이 없어',
+          emptyMessage: '서재에 작품을 추가해줘.'),
+      ],
+    );
+  }
+
+  Future<void> _groupSelectedWorks() async {
+    final selected = _works.where((w) =>
+        _selectedWorkIds.contains(w.workId) && w.groupId.isEmpty).toList();
+    if (selected.length < 2) return;
+    selected.sort((a, b) {
+      final one = WorkGrouping.episodeNumber(a) ?? 10000;
+      final two = WorkGrouping.episodeNumber(b) ?? 10000;
+      return one.compareTo(two);
+    });
+    final input = TextEditingController(
+        text: WorkGrouping.normalizedSeries(selected.first.title));
+    String? title;
+    try {
+      title = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const HypText('선택한 작품 묶기'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(selected.length.toString() + '개 작품을 하나의 세트로 묶어.'),
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('group-name-input'),
+              controller: input,
+              decoration: const InputDecoration(labelText: '묶음 이름')),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx),
+                child: const HypText('취소')),
+            FilledButton(
+              key: const Key('group-confirm'),
+              onPressed: () => Navigator.pop(ctx, input.text.trim()),
+              child: const HypText('묶음 만들기')),
+          ],
+        ),
+      );
+    } finally {
+      input.dispose();
+    }
+    if (title == null || title.isEmpty || !mounted) return;
+    await widget.onGroupWorks(
+        selected.map((w) => w.workId).toList(), title);
+    if (!mounted) return;
+    setState(() {
+      _selectedWorkIds.clear();
+      _selectingWorks = false;
+    });
+  }
+
+  Future<void> _showAutoGroupWizard() async {
+    final suggestions = WorkGrouping.suggest(widget.library.works);
+    if (suggestions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: HypText('자동으로 묶을 만한 미분류 회차가 없어. '
+            '이미 묶인 작품은 변경하지 않아.')));
+      return;
+    }
+    final chosen = <int>{};
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (ctx, update) => AlertDialog(
+          title: const HypText('Auto 묶기 마법사'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520, maxHeight: 500),
+            child: SingleChildScrollView(child: Column(
+              mainAxisSize: MainAxisSize.min, children: [
+                const HypText('이미 묶인 작품은 유지해. 제안은 자동으로 '
+                    '적용되지 않으며 직접 체크한 세트만 생성돼.'),
+                for (var i = 0; i < suggestions.length; i++)
+                  CheckboxListTile(
+                    key: Key('auto-group-' + i.toString()),
+                    value: chosen.contains(i),
+                    title: Text(suggestions[i].title),
+                    subtitle: Text(suggestions[i].workIds.length.toString() +
+                        '개 작품 · ' + suggestions[i].reason),
+                    onChanged: (enabled) => update(() {
+                      if (enabled == true) {
+                        chosen.add(i);
+                      } else {
+                        chosen.remove(i);
+                      }
+                    }),
+                  ),
+              ]),
+            )),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog, false),
+                child: const HypText('취소')),
+            FilledButton(
+              key: const Key('auto-group-confirm'),
+              onPressed: chosen.isEmpty ? null
+                  : () => Navigator.pop(dialog, true),
+              child: const HypText('선택한 묶음 생성')),
+          ],
+        ),
+      ),
+    );
+    if (approved != true || !mounted) return;
+    for (final index in chosen.toList()..sort()) {
+      final item = suggestions[index];
+      await widget.onGroupWorks(item.workIds, item.title);
+    }
+  }
+
+  Future<void> _groupAction(String action, String id,
+      List<WorkEntry> members) async {
+    if (action == 'ungroup') {
+      final approve = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const HypText('묶음만 해제'),
+          content: const HypText('작품·CBZ·읽기 기록은 그대로 두고 '
+              '그룹 표시만 해제할까?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+                child: const HypText('취소')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true),
+                child: const HypText('묶음 해제')),
+          ],
+        ),
+      );
+      if (approve == true) await widget.onUngroupWorks(id);
+    } else if (action == 'rename') {
+      final input = TextEditingController(text: members.first.groupTitle);
+      try {
+        final result = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const HypText('묶음 이름 수정'),
+            content: TextField(
+              key: const Key('group-rename-input'),
+              controller: input),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx),
+                  child: const HypText('취소')),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, input.text.trim()),
+                child: const HypText('저장')),
+            ],
+          ),
+        );
+        if (result != null && result.isNotEmpty) {
+          await widget.onRenameGroup(id, result);
+        }
+      } finally {
+        input.dispose();
+      }
+    } else if (action == 'reorder') {
+      final ordered = [...members]..sort((a,b) =>
+          a.groupOrder.compareTo(b.groupOrder));
+      final result = await showDialog<List<String>>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (dialog, update) => AlertDialog(
+            title: const HypText('회차 순서 변경'),
+            content: SizedBox(width: 440, height: 300,
+              child: ListView.builder(
+                itemCount: ordered.length,
+                itemBuilder: (_, index) => ListTile(
+                  title: Text((index + 1).toString() + '. ' +
+                      ordered[index].title),
+                  subtitle: Text('#' + ordered[index].workId),
+                  trailing: Wrap(mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: '위로',
+                        onPressed: index == 0 ? null : () => update(() {
+                          final item = ordered.removeAt(index);
+                          ordered.insert(index - 1, item);
+                        }),
+                        icon: const Icon(Icons.arrow_upward)),
+                      IconButton(
+                        tooltip: '아래로',
+                        onPressed: index == ordered.length - 1
+                            ? null : () => update(() {
+                          final item = ordered.removeAt(index);
+                          ordered.insert(index + 1, item);
+                        }),
+                        icon: const Icon(Icons.arrow_downward)),
+                    ]),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog),
+                  child: const HypText('취소')),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialog,
+                    ordered.map((w) => w.workId).toList()),
+                child: const HypText('순서 저장')),
+            ],
+          ),
+        ),
+      );
+      if (result != null) await widget.onReorderGroup(id, result);
+    }
+  }
+
   Widget _selectionControls(List<WorkEntry> visible) =>
       !_selectingWorks ? const SizedBox.shrink() : Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
