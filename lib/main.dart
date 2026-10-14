@@ -20,6 +20,7 @@ import 'core/hero_artwork_store.dart';
 import 'core/reader_settings.dart';
 import 'core/i18n.dart';
 import 'core/reader_downloader.dart';
+import 'core/reader_cache_pruner.dart';
 import 'core/announcements.dart';
 import 'core/android_controls.dart';
 import 'core/hitomi_reader_link.dart';
@@ -1320,7 +1321,21 @@ class _LibraryHomeState extends State<LibraryHome> {
   Future<void> _readOnline(WorkEntry work) async {
     final client = http.Client();
     try {
-      final remote = await HitomiGalleryProvider(client).load(work.workId);
+      final remote = await HitomiGalleryProvider(client).load(work.workId,
+          dataSaver: readerSettings.dataSaverMode);
+      Directory? persistentCache;
+      try {
+        final base = await getApplicationCacheDirectory();
+        final root = Directory(base.path + Platform.pathSeparator +
+            'hyp_reader_pages');
+        unawaited(ReaderCachePruner.prune(root,
+            activeWorkId: work.workId));
+        persistentCache = Directory(root.path + Platform.pathSeparator +
+            work.workId + Platform.pathSeparator +
+            (readerSettings.dataSaverMode ? 'preview' : 'original'));
+      } catch (_) {
+        // Unavailable OS cache directory: continue with temporary caching.
+      }
       if (!mounted) return;
       await _touchRead(work, pageCount: remote.pageCount);
       final missingTitle =
@@ -1339,6 +1354,7 @@ class _LibraryHomeState extends State<LibraryHome> {
         MaterialPageRoute(builder: (ctx) => GalleryReader(
           work: readerWork,
           archive: remote,
+          persistentCacheDirectory: persistentCache,
           onPageChanged: (page) { _touchRead(work, page: page); },
           onFinishedReading: (total) {
             unawaited(_touchRead(work, page: total,
