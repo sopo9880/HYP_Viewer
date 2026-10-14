@@ -159,6 +159,13 @@ class LibraryBackup {
   final List<String> collections;
   const LibraryBackup({required this.works, required this.collections});
 
+  /// Remove only the requested work from the saved library. Other entries,
+  /// their reading progress, favorites and collection definitions stay intact.
+  LibraryBackup withoutWork(String workId) => LibraryBackup(
+    works: works.where((work) => work.workId != workId).toList(),
+    collections: collections,
+  );
+
   Map<String, Object?> toJson() => {
     'app': 'HYP Viewer',
     'schemaVersion': currentSchemaVersion,
