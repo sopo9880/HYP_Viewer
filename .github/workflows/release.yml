@@ -157,19 +157,18 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.1.2:
-          - Fix full-size WebP/AVIF image URLs (remove the incorrect
-            /webp/ and /avif/ path segments). Preserve the image-host
-            routing and strict HTTPS source checks.
-          - If a preferred WebP image fails, try the publicly available
-            original JPEG/PNG where the metadata declares it.
-          - Constrain the reader's bottom page slider so it no longer
-            fills the whole window and hides the page contents.
-          - Replace a failed page with a visible error explanation,
-            retry action and an external web-reader fallback.
-          - Keep v0.1.1 keyless YouTube Shorts extraction, fixed web
-            reader fragments (#1-, #2-3, etc.), and existing local
-            library / backup features.
+          Changes in v0.1.3:
+          - Use the current public Hitomi WebP image routing
+            (w1/w2.gold-usergeneratedcontent.net) and validate gg.js values.
+          - Remove the obsolete numeric-host original JPEG retry, which
+            masked the true failure with a DNS error on hosts such as
+            2.gold-usergeneratedcontent.net.
+          - Show the actual WebP host, request error and DNS guidance
+            if the network or site does not resolve the image server.
+          - Preserve the fixed bottom-page slider, visible retry button
+            and direct external web-reader fallback from v0.1.2.
+          - Retain keyless YouTube Shorts public comment lookup, local
+            library, backups, and existing offline reading.
 
           Known limitations: YouTube web-client comment collection and Hitomi
           image access are experimental and may fail due to source website
