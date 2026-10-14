@@ -51,6 +51,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   bool _vertical = false;
   bool get _verticalReading => _vertical || widget.settings.webtoonMode;
   bool _controlsVisible = true;
+  void _toggleChrome() => setState(() => _controlsVisible = !_controlsVisible);
   int _reloadGeneration = 0;
   final Map<int, Future<Uint8List>> _imageCache = {};
   GalleryDiskCache? _diskCache;
@@ -278,6 +279,10 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.space) {
+      _toggleChrome();
+      return KeyEventResult.handled;
+    }
     if (_verticalReading && key == LogicalKeyboardKey.arrowUp) {
       _turn(-1);
     } else if (_verticalReading && key == LogicalKeyboardKey.arrowDown) {
@@ -286,8 +291,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       _turn(!_verticalReading && widget.settings.reverse ? 1 : -1);
     } else if (key == LogicalKeyboardKey.arrowRight) {
       _turn(!_verticalReading && widget.settings.reverse ? -1 : 1);
-    } else if (key == LogicalKeyboardKey.pageDown ||
-               key == LogicalKeyboardKey.space) {
+    } else if (key == LogicalKeyboardKey.pageDown) {
       _turn(1);
     } else if (key == LogicalKeyboardKey.pageUp) {
       _turn(-1);
@@ -475,7 +479,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       onKeyEvent: _onKey,
       child: Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(
+        appBar: _controlsVisible ? AppBar(
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
           title: HypText(widget.work.title.isEmpty
@@ -519,7 +523,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 onPressed: _toggleVertical,
               ),
           ],
-        ),
+        ) : null,
         body: widget.settings.webtoonMode
           ? ScrollablePositionedList.builder(
               key: const Key('webtoon-continuous-reader'),
@@ -545,7 +549,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                         vertical: _vertical,
                         reverse: !_verticalReading && widget.settings.reverse,
                       );
-                      if (delta != 0) _turn(delta);
+                      if (delta == 0) _toggleChrome();
+                      else _turn(delta);
                     }
                   : null,
               child: PageView.builder(
