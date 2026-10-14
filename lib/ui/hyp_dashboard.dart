@@ -80,6 +80,7 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function() onExportJson;
   final Future<void> Function() onExportExcel;
   final Future<void> Function() onImportJson;
+  final Future<void> Function() onRestorePreviousLibrary;
   final Future<void> Function() onCheckRelease;
   final Future<void> Function() onCheckAnnouncements;
   final Future<void> Function() onSecurityHelp;
@@ -144,6 +145,7 @@ class HypDashboard extends StatefulWidget {
     required this.onExportJson,
     required this.onExportExcel,
     required this.onImportJson,
+    required this.onRestorePreviousLibrary,
     required this.onCheckRelease,
     required this.onCheckAnnouncements,
     required this.onSecurityHelp,
@@ -1456,6 +1458,13 @@ class _HypDashboardState extends State<HypDashboard> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('서재 데이터', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const Key('library-restore-previous'),
+            onPressed: widget.onRestorePreviousLibrary,
+            icon: const Icon(Icons.restore_page_outlined),
+            label: const HypText('이전 서재 백업에서 복구'),
+          ),
           const SizedBox(height: 6),
           const HypText('JSON은 백업·기기 이전용, Excel은 확인용이야.',
             style: TextStyle(fontSize: 12, color: HypColors.muted)),

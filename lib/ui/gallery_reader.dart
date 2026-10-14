@@ -136,7 +136,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   void _syncAndroidControls() {
     unawaited(AndroidReaderControls.activate(
       volumeNavigation: widget.settings.volumeKeyNavigation,
-      forceLandscape: widget.settings.twoPageSpread &&
+      forceLandscape: !widget.settings.webtoonMode &&
+          widget.settings.twoPageSpread &&
           widget.settings.forceLandscapeForSpreads,
       onTurn: (next) { if (mounted) _turn(next ? 1 : -1); },
     ));

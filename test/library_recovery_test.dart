@@ -19,6 +19,7 @@ void main() {
     // Loading must not destroy the damaged primary or the rollback copy.
     expect(await main.readAsString(), '{corrupted-json');
     expect(await File(main.path + '.previous').exists(), true);
+    expect((await store.readPrevious())!.works.single.workId, '2900756');
   });
 
   test('both damaged backups fail closed rather than returning empty library',

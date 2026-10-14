@@ -58,6 +58,13 @@ class LibraryStorage {
     return const LibraryBackup(works: [], collections: []);
   }
 
+  /// Preview last recoverable snapshot without mutating the active library.
+  Future<LibraryBackup?> readPrevious() async {
+    final backup = File((await file).path + '.previous');
+    if (!await backup.exists()) return null;
+    return LibraryBackup.decode(await backup.readAsString());
+  }
+
   Future<void> save(LibraryBackup backup) {
     // The returned task reports its own error, but it never poisons the queue:
     // even if one save fails, a later save gets another chance.

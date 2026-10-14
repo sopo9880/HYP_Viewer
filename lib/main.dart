@@ -643,6 +643,47 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
+  Future<void> _restorePreviousLibrary() async {
+    await _initialLibraryRead.future;
+    if (!mounted) return;
+    try {
+      final previous = await storage.readPrevious();
+      if (previous == null) {
+        _status('이전에 저장된 서재 백업(.previous)이 없어.');
+        return;
+      }
+      final approved = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const HypText('이전 서재 백업 복구'),
+          content: HypText('이전 저장본에 작품 ${previous.works.length}개가 있어. '
+              '현재 서재를 이 저장본으로 교체할까? 복구 전에 현재 '
+              '서재를 JSON으로 내보내 두는 걸 추천해.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+                child: const HypText('취소')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true),
+                child: const HypText('이전 서재 복구')),
+          ],
+        ),
+      );
+      if (approved != true || !mounted) return;
+      // This is the only explicit recovery path that re-enables a load
+      // failure. A previous file must have decoded successfully above.
+      if (_libraryReadFailed) {
+        await storage.save(previous);
+        _libraryReadFailed = false;
+        if (mounted) setState(() => library = previous);
+      } else {
+        await _commitLibrary((_) => previous);
+      }
+      if (mounted) setState(() => libraryNavigationEpoch++);
+      _status('이전 저장본에서 ${previous.works.length}개 작품을 복구했어.');
+    } catch (error) {
+      _status('이전 서재 복구 실패: $error');
+    }
+  }
+
   Future<void> _import() async {
     try {
       final picked = await FilePicker.platform.pickFiles(
@@ -1294,6 +1335,10 @@ class _LibraryHomeState extends State<LibraryHome> {
           galleryDownloadToken = null;
           downloadingGalleryKey = null;
         });
+        if (_downloadQueue.isNotEmpty && !_downloadQueueRunning &&
+            !_downloadQueueCancelled) {
+          unawaited(_runDownloadQueue());
+        }
       }
     }
   }
@@ -1536,6 +1581,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     onExportJson: () => _export(false),
     onExportExcel: () => _export(true),
     onImportJson: _import,
+    onRestorePreviousLibrary: _restorePreviousLibrary,
     onCheckRelease: () => _checkRelease(),
     onCheckAnnouncements: () => _checkAnnouncements(),
     onSecurityHelp: _showSecurityHelp,
