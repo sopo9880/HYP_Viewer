@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 class ReaderSettings {
   final String nextDirection; // left or right
   final bool twoPageSpread;
+  final bool verticalScrolling;
   final int preloadPages;
   final bool autoCoverEnabled;
   final bool volumeKeyNavigation;
@@ -17,6 +18,7 @@ class ReaderSettings {
   const ReaderSettings({
     this.nextDirection = 'left',
     this.twoPageSpread = false,
+    this.verticalScrolling = false,
     this.preloadPages = 2,
     this.autoCoverEnabled = false,
     this.volumeKeyNavigation = false,
@@ -29,6 +31,7 @@ class ReaderSettings {
   ReaderSettings copyWith({
     String? nextDirection,
     bool? twoPageSpread,
+    bool? verticalScrolling,
     int? preloadPages,
     bool? autoCoverEnabled,
     bool? volumeKeyNavigation,
@@ -37,6 +40,7 @@ class ReaderSettings {
   }) => ReaderSettings(
     nextDirection: nextDirection ?? this.nextDirection,
     twoPageSpread: twoPageSpread ?? this.twoPageSpread,
+    verticalScrolling: verticalScrolling ?? this.verticalScrolling,
     preloadPages: preloadPages ?? this.preloadPages,
     autoCoverEnabled: autoCoverEnabled ?? this.autoCoverEnabled,
     volumeKeyNavigation: volumeKeyNavigation ?? this.volumeKeyNavigation,
@@ -47,6 +51,7 @@ class ReaderSettings {
   Map<String, Object> toJson() => {
     'nextDirection': nextDirection,
     'twoPageSpread': twoPageSpread,
+    'verticalScrolling': verticalScrolling,
     'preloadPages': preloadPages,
     'autoCoverEnabled': autoCoverEnabled,
     'volumeKeyNavigation': volumeKeyNavigation,
@@ -58,6 +63,7 @@ class ReaderSettings {
       ReaderSettings(
         nextDirection: data['nextDirection'] == 'right' ? 'right' : 'left',
         twoPageSpread: data['twoPageSpread'] == true,
+        verticalScrolling: data['verticalScrolling'] == true,
         autoCoverEnabled: data['autoCoverEnabled'] == true,
         volumeKeyNavigation: data['volumeKeyNavigation'] == true,
         forceLandscapeForSpreads: data['forceLandscapeForSpreads'] == true,
