@@ -34,4 +34,37 @@ void main() {
     final c = NumberExtractor.extract('271만 59시간');
     expect(c.any((e) => e.code == '2710059'), true);
   });
+  test('extracts arbitrary same-line number groups without relying on hints', () {
+    final input = '초6~중2까지 못 가고 중3 때도, 고1 때 하루 12시간';
+    final extracted = NumberExtractor.extract(input);
+    expect(extracted.any((candidate) => candidate.code == '623112'), true);
+  });
+
+  test('suspicious background date is not dropped', () {
+    final extracted = NumberExtractor.extract(
+        '시대적 배경은 4036년 3월 55일 입니다.');
+    expect(extracted.any((c) => c.code == '4036355'), true);
+  });
+
+  test('line-first extraction never combines two adjacent lines', () {
+    final text = '4036년\n3월 55일';
+    expect(NumberExtractor.extract(text).any((c) => c.code == '4036355'),
+        false);
+    expect(NumberExtractor.extract(text, allowCrossLine: true)
+        .any((c) => c.code == '4036355'), true);
+  });
+
+  test('fallback never joins across a blank comment boundary', () {
+    const text = '4036년\n\n3월 55일';
+    expect(NumberExtractor.extract(text, allowCrossLine: true)
+        .any((c) => c.code == '4036355'), false);
+  });
+
+  test('direct ID is not contaminated by episode and date numbers', () {
+    final found = NumberExtractor.extract(
+        '1화: 3172801 (4036년 3월 55일)');
+    expect(found.any((c) => c.code == '3172801'), true);
+    expect(found.any((c) => c.code == '13172801'), false);
+  });
+
 }

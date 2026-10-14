@@ -5,127 +5,131 @@ class NumberCandidate {
   final int score;
   final String episode;
   final String rule;
-
   const NumberCandidate({
-    required this.code,
-    required this.evidence,
-    required this.source,
-    required this.score,
-    this.episode = '',
-    this.rule = '',
+    required this.code, required this.evidence,
+    required this.source, required this.score,
+    this.episode = '', this.rule = '',
   });
 }
 
-/// Deterministic, AI-free candidate generation. A candidate is NOT verified:
-/// the metadata verifier must confirm existence independently.
+/// Deterministic, broad candidate gathering. Candidates are untrusted until
+/// checked against remote gallery metadata. Never treat existence as proof
+/// that the gallery is the one discussed in the video.
 class NumberExtractor {
-  static final RegExp _groups = RegExp(r'\d+');
+  static final RegExp _digits = RegExp(r'\d+');
   static final RegExp _complete = RegExp(r'(?<!\d)\d{6,9}(?!\d)');
   static final RegExp _links = RegExp(
     r'https?://(?:www\.)?hitomi\.la/(?:reader|galleries)/(\d{6,9})(?:\.html)?',
     caseSensitive: false,
   );
-  static final RegExp _episode = RegExp(
-    r'(\d{1,3})\s*(편|화|부|권|part|episode|ep)\s*(?:[-–—:=：]\s*)?',
+  static final RegExp _episodes = RegExp(
+    r'(\d{1,3})\s*(?:편|화|부|권|part|episode|ep)\b?',
     caseSensitive: false,
   );
   static final RegExp _tenThousands =
       RegExp(r'(\d{1,4})\s*만\s*(\d{1,4})');
-  static final RegExp _hint = RegExp(
-    r'(번호|품번|코드|날짜|시간|방문|갱생|년|월|일|만|컬렉션|작품|편|파트)',
-    caseSensitive: false,
-  );
-  static final RegExp _background = RegExp(
-    r'(시대적\s*배경|시대\s*배경|작품\s*배경|배경\s*(?:은|:|：))',
+  static final RegExp _hints = RegExp(
+    r'(번호|품번|코드|날짜|시간|년|월|일|만|컬렉션|작품|편|파트)',
     caseSensitive: false,
   );
 
+  /// First attempt always stays on one physical line. Cross-line mode adds
+  /// adjacent lines in the same paragraph ONLY for a second, explicit pass.
+  /// Blank lines form comment boundaries (automatic YouTube imports use
+  /// double newlines between separate comments).
   static List<NumberCandidate> extract(
     String text, {
     String source = 'manual',
     bool creatorComment = false,
+    bool allowCrossLine = false,
+    int maxCandidates = 160,
   }) {
     final found = <String, NumberCandidate>{};
-    final lines = text.split(RegExp(r'[\r\n;。]+'));
+    final cap = maxCandidates.clamp(1, 500).toInt();
 
     void add(String code, String evidence, String episode, String rule,
         int points) {
       if (!RegExp(r'^\d{6,9}$').hasMatch(code)) return;
-      final score = points + (episode.isNotEmpty ? 30 : 0) +
-          (_hint.hasMatch(evidence) ? 12 : 0) +
-          (creatorComment ? 30 : 0);
-      final result = NumberCandidate(
-        code: code, evidence: evidence.trim(), episode: episode,
-        source: source, score: score, rule: rule,
+      final bonus = (_hints.hasMatch(evidence) ? 8 : 0) +
+          (creatorComment ? 20 : 0);
+      final candidate = NumberCandidate(
+        code: code, evidence: evidence.trim(), source: source,
+        score: points + bonus, rule: rule, episode: episode,
       );
-      if (!found.containsKey(code) || found[code]!.score < score) {
-        found[code] = result;
+      if (!found.containsKey(code) || found[code]!.score < candidate.score) {
+        found[code] = candidate;
       }
     }
 
-    void parseSegment(String segment, String original, String episode) {
-      var s = segment.trim();
-      if (s.isEmpty) return;
-      // All URLs are removed before joining digit groups. Only known
-      // gallery links can contribute an ID.
-      for (final link in _links.allMatches(s)) {
-        add(link.group(1)!, original, episode, 'gallery-url', 95);
-      }
-      s = s.replaceAll(RegExp(r'https?://\S+'), ' ').trim();
-      if (s.isEmpty) return;
-      final direct = _complete.allMatches(s).map((m) => m.group(0)!).toList();
-      for (final code in direct) {
-        add(code, original, episode, 'complete-id', 65);
-      }
-      // Standalone complete IDs should not be rejoined with a timestamp,
-      // episode number, or an unrelated account/year.
-      if (direct.isNotEmpty) return;
+    void parseLine(String raw, {bool crossLine = false}) {
+      final line = raw.trim();
+      if (line.isEmpty) return;
+      final episode = _episodes.firstMatch(line)?.group(0) ?? '';
 
-      final groups = _groups.allMatches(s).map((m) => m.group(0)!).toList();
-      if (groups.length < 2 || groups.length > 5) return;
-      if (_background.hasMatch(original) && episode.isEmpty) return;
-      final hasUnits = RegExp(r'(년|월|일|시간|분|초|만|[/／])').hasMatch(s);
-      final hasHint = RegExp(r'(번호|품번|코드|날짜|교제|시간)').hasMatch(original);
-      if (episode.isEmpty && !hasUnits && !hasHint) return;
-      final joined = groups.join();
-      add(joined, original, episode, 'split-number', 50);
+      var withoutLinks = line;
+      for (final match in _links.allMatches(line)) {
+        add(match.group(1)!, line, episode, 'gallery-url', 150);
+      }
+      withoutLinks = withoutLinks.replaceAll(RegExp(r'https?://\S+'), ' ');
+      if (withoutLinks.trim().isEmpty) return;
 
-      // Korean '만' has two common readings: concatenated groups and
-      // place-value spelling. Retain both for existence verification.
-      for (final match in _tenThousands.allMatches(s)) {
-        final major = int.tryParse(match.group(1)!);
-        final minor = int.tryParse(match.group(2)!);
+      // A complete gallery number must never be joined to surrounding dates.
+      final complete = _complete.allMatches(withoutLinks).toList();
+      for (final m in complete) {
+        add(m.group(0)!, line, episode,
+            crossLine ? 'cross-line-complete' : 'complete-id',
+            crossLine ? 65 : 125);
+      }
+      final withoutComplete = withoutLinks.replaceAll(_complete, ' ');
+      final groups = _digits.allMatches(withoutComplete)
+          .map((m) => m.group(0)!).toList();
+
+      // Every contiguous window of numbers within the same line may encode
+      // an ID. No jumping over unrelated groups and no exponential subsets.
+      for (var i = 0; i < groups.length; i++) {
+        var joined = '';
+        for (var j = i; j < groups.length && j < i + 7; j++) {
+          joined += groups[j];
+          if (joined.length > 9) break;
+          if (j > i && joined.length >= 6) {
+            add(joined, line, episode,
+                crossLine ? 'cross-line' : 'line-window',
+                crossLine ? 30 : 65);
+          }
+        }
+      }
+
+      // Korean "271만 59" is also encoded as 2710059, not just 27159.
+      for (final m in _tenThousands.allMatches(withoutComplete)) {
+        final major = int.tryParse(m.group(1)!);
+        final minor = int.tryParse(m.group(2)!);
         if (major == null || minor == null) continue;
-        add((major * 10000 + minor).toString(),
-            original, episode, 'ten-thousands', 46);
+        add((major * 10000 + minor).toString(), line, episode,
+            crossLine ? 'cross-line-ten-thousands' : 'ten-thousands',
+            crossLine ? 35 : 64);
       }
     }
 
-    for (final rawLine in lines) {
-      final line = rawLine.trim();
-      if (line.isEmpty) continue;
-      final episodeMatches = _episode.allMatches(line).toList();
-      if (episodeMatches.isEmpty) {
-        parseSegment(line, line, '');
-        continue;
-      }
-
-      // Prefix text still may contain a standalone ID or a gallery URL.
-      if (episodeMatches.first.start > 0) {
-        parseSegment(line.substring(0, episodeMatches.first.start), line, '');
-      }
-      for (var i = 0; i < episodeMatches.length; i++) {
-        final marker = episodeMatches[i];
-        final end = i + 1 < episodeMatches.length
-            ? episodeMatches[i + 1].start : line.length;
-        final part = marker.group(1)! + marker.group(2)!;
-        parseSegment(line.substring(marker.end, end), line, part);
+    for (final rawLine in text.split(RegExp(r'\r\n|\r|\n'))) {
+      parseLine(rawLine);
+    }
+    if (allowCrossLine) {
+      // A blank line separates comments. NEVER combine two users' comments.
+      final paragraphs = text.split(RegExp(r'(?:\r?\n)\s*(?:\r?\n)'));
+      for (final paragraph in paragraphs) {
+        final lines = paragraph.split(RegExp(r'\r\n|\r|\n'));
+        for (var i = 0; i + 1 < lines.length; i++) {
+          if (!_digits.hasMatch(lines[i]) || !_digits.hasMatch(lines[i + 1])) {
+            continue;
+          }
+          parseLine(lines[i] + ' ' + lines[i + 1], crossLine: true);
+        }
       }
     }
     return (found.values.toList()
       ..sort((a, b) {
-        final byScore = b.score.compareTo(a.score);
-        return byScore != 0 ? byScore : a.code.compareTo(b.code);
-      })).take(30).toList();
+        final score = b.score.compareTo(a.score);
+        return score != 0 ? score : a.code.compareTo(b.code);
+      })).take(cap).toList();
   }
 }
