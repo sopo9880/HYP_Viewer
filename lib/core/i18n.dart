@@ -221,6 +221,50 @@ abstract final class HypI18n {
     '대기열 취소': ['Cancel Queue', '待機リストをキャンセル'],
     '이 콘텐츠를 저장할 권한이 있어': ['I Have Permission to Save This Content', 'このコンテンツを保存する権利があります'],
     '기본값은 꺼짐.': ['Off by default.', '初期設定はオフ。'],
+    'JSON 통합 백업': ['Unified JSON Backup', '統合JSONバックアップ'],
+    '서재와 앱 설정을 하나의 JSON으로 저장할 수 있어. API 키, 기기 권한, 다운로드한 CBZ는 포함되지 않아.': ['Store your library and settings in one JSON. API keys, device permissions, and CBZ files are excluded.', '本棚と設定を1つのJSONに保存。APIキー、端末権限、CBZは含まれません。'],
+    '서재·즐겨찾기·읽기 기록 포함': ['Include Library, Favorites & Reading History', '本棚・お気に入り・読書履歴を含める'],
+    '앱 설정 포함': ['Include App Settings', 'アプリ設定を含める'],
+    '표지·배너 이미지 포함 (선택)': ['Include Cover & Banner Images (optional)', '表紙とバナー画像を含める（任意）'],
+    '크기가 커질 수 있어 (최대 22MB). 표지·배너 이미지가 없는 경우 원본 파일을 복사하지 않아.': ['May increase size (22 MB max for images). Missing images are skipped.', 'サイズが増えます（画像は最大22MB）。未保存の画像は除外します。'],
+    'JSON 백업 생성': ['Create JSON Backup', 'JSONバックアップを作成'],
+    'JSON 백업 복원': ['Restore JSON Backup', 'JSONバックアップを復元'],
+    '앱 설정 포함됨': ['App Settings Included', 'アプリ設定あり'],
+    '앱 설정 없음 (기존 형식)': ['No App Settings (legacy backup)', 'アプリ設定なし（旧形式）'],
+    '표지·배너 이미지 포함됨': ['Cover & Banner Images Included', '表紙・バナー画像あり'],
+    '① 작품 추가': ['① Add Works', '① 作品を追加'],
+    '기존 서재와 설정을 유지하고 작품만 병합': ['Merge works; keep current library and settings', '本棚と設定を維持し、作品だけを統合'],
+    '② 설정 덮어쓰기': ['② Replace Settings', '② 設定を上書き'],
+    '작품 목록은 유지하고 앱 설정만 교체': ['Keep existing works, replace app settings only', '作品は保持し、アプリ設定のみ変更'],
+    '③ 작품 + 설정 덮어쓰기': ['③ Replace Works & Settings', '③ 作品と設定を上書き'],
+    'PC에만 있는 작품이 사라질 수 있어. 실행 전 현재 서재가 .previous에 보존돼.': ['PC-only works may be removed; current library is backed up to .previous first.', 'PCにしかない作品は消える可能性があります。現在の本棚は.previousに保存されます。'],
+    '현재 서재를 교체한다는 점을 확인했어': ['I understand my current library will be replaced', '現在の本棚が置き換わることを理解しました'],
+    '자동 다운로드·공지 수신은 복원 후 다시 동의해야 해. CBZ와 기기별 권한 및 API 키는 복원하지 않아.': ['Auto-download and notices need consent again. CBZ, device permissions and API keys are not restored.', '自動ダウンロード・通知は再同意が必要。CBZ、端末権限、APIキーは復元しません。'],
+    '선택한 방식으로 복원': ['Restore with Selected Mode', '選択した方法で復元'],
+    '선택 종료': ['Exit Selection', '選択を終了'],
+    '선택': ['Select', '選択'],
+    '전체 선택': ['Select All Visible', '表示作品をすべて選択'],
+    '선택 해제': ['Clear Selection', '選択を解除'],
+    '정보 수정': ['Edit Details', '作品情報を編集'],
+    '선택 삭제': ['Delete Selected', '選択した作品を削除'],
+    '작품 정보 수정': ['Edit Work Details', '作品情報を編集'],
+    '기존 번호': ['Original ID', '元の番号'],
+    '작품 번호': ['Work ID', '作品番号'],
+    '번호 변경 시 기존 CBZ/표지는 원래 번호에 남겨두고 연결하지 않아.': ['When changing IDs, old CBZ/cover files remain linked only to their previous ID.', '番号変更後、元のCBZ・表紙は旧番号のまま保存されます。'],
+    '번호 존재 검증': ['Verify Work ID', '作品番号を検証'],
+    '번호 확인 중…': ['Verifying ID…', '番号を確認中…'],
+    '새 번호를 저장하기 전에 검증을 권장해.': ['Verify a new ID before saving.', '新しい番号は保存前に検証してください。'],
+    '확인된 제목 적용': ['Use Verified Title', '確認したタイトルを適用'],
+    '작품 제목': ['Work Title', '作品タイトル'],
+    '원본 댓글': ['Original Comment', '元のコメント'],
+    '수정 내용 저장': ['Save Changes', '変更を保存'],
+    '번호 확인 필요': ['ID Needs Verification', '番号を確認してください'],
+    '새 작품 번호의 존재 여부를 확인하지 못했어. 번호가 잘못된 채로 저장될 수 있어. 그래도 저장할까?': ['This ID could not be verified. Save it anyway?', '番号を確認できませんでした。このまま保存しますか？'],
+    '중복 작품 번호 발견': ['Duplicate Work ID', '作品番号が重複しています'],
+    '두 작품 병합': ['Merge Both Works', '2作品を統合'],
+    '선택한 작품 삭제': ['Delete Selected Works', '選択した作品を削除'],
+    '선택한 작품의 즐겨찾기와 읽기 기록도 제거돼. 다른 작품과 컬렉션은 유지해.': ['Favorites and reading history for selected works will be removed; other works remain.', '選択作品のお気に入りと読書履歴も削除。他の作品は保持します。'],
+    '기본 OFF. 켜면 이 작품들의 다운로드 파일과 표지 미리보기도 삭제해.': ['Off by default. Also delete selected local CBZs and cover previews.', '初期設定はオフ。選択作品のCBZ・表紙画像も削除します。'],
     '한국어': ['Korean', '韓国語'],
     '영어': ['English', '英語'],
     '일본어': ['Japanese', '日本語'],
@@ -287,6 +331,24 @@ abstract final class HypI18n {
       return language == 'ja'
           ? 'ダウンロード待機: ${queueStatus.group(1)}作品。'
           : 'Downloads queued: ${queueStatus.group(1)} works.';
+    }
+    final selectedCount = RegExp(r'^선택됨:\s*(\d+)개$').firstMatch(text);
+    if (selectedCount != null) {
+      return language == 'ja'
+          ? '選択: ' + selectedCount.group(1)! + '件'
+          : 'Selected: ' + selectedCount.group(1)! + ' works';
+    }
+    final backupCount = RegExp(r'^백업 작품:\s*(\d+)개$').firstMatch(text);
+    if (backupCount != null) {
+      return language == 'ja'
+          ? 'バックアップ作品: ' + backupCount.group(1)! + '件'
+          : 'Works in Backup: ' + backupCount.group(1)!;
+    }
+    final deleteCount = RegExp(r'^선택된 작품:\s*(\d+)개$').firstMatch(text);
+    if (deleteCount != null) {
+      return language == 'ja'
+          ? '選択した作品: ' + deleteCount.group(1)! + '件'
+          : 'Selected Works: ' + deleteCount.group(1)!;
     }
     final count = RegExp(r'^발견된 번호 후보: (\d+)개$').firstMatch(text);
     if (count != null) {

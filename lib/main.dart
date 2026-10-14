@@ -12,6 +12,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/export.dart';
+import 'core/app_backup.dart';
 import 'core/gallery.dart';
 import 'core/cover_store.dart';
 import 'core/hero_artwork_store.dart';
@@ -25,6 +26,7 @@ import 'core/hitomi_gallery.dart';
 import 'ui/gallery_reader.dart';
 import 'ui/cover_picker.dart';
 import 'ui/cover_cropper.dart';
+import 'ui/work_editor.dart';
 import 'ui/hyp_dashboard.dart';
 import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
@@ -560,6 +562,71 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
+  Future<void> _editWorkDetails(WorkEntry current) async {
+    if (!mounted || downloadingGalleryKey == current.key) return;
+    final draft = await showDialog<WorkEditDraft>(
+      context: context,
+      builder: (ctx) => WorkEditorDialog(
+        work: current,
+        checkWorkId: (id) async {
+          final found = await _verifyCandidateCodes([id]);
+          return found[id] ??
+              const CandidateVerification(CandidateCheck.unavailable);
+        },
+      ),
+    );
+    if (draft == null || !mounted) return;
+    final changedId = draft.workId != current.workId;
+    final duplicate = changedId &&
+        library.works.any((w) => w.workId == draft.workId);
+    if (duplicate) {
+      final approved = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const HypText('중복 작품 번호 발견'),
+          content: const HypText('새 번호가 이미 서재에 있어. '
+              '기존 즐겨찾기·진행도·컬렉션을 합치고 두 작품을 병합할까? '
+              'CBZ와 표지 파일은 자동으로 옮기지 않아.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const HypText('취소')),
+            FilledButton(
+              key: const Key('edit-work-approve-merge'),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const HypText('두 작품 병합')),
+          ],
+        ),
+      );
+      if (approved != true || !mounted) return;
+    }
+    final resetCover = changedId && !duplicate &&
+        current.coverMode != 'preset';
+    final edited = current.copyWith(
+      workId: draft.workId, title: draft.title,
+      author: draft.author, originalComment: draft.originalComment,
+      coverMode: resetCover
+          ? (readerSettings.autoCoverEnabled ? 'auto' : 'preset')
+          : current.coverMode,
+      coverPage: resetCover ? 1 : current.coverPage,
+    );
+    try {
+      await _commitLibrary((latest) => latest.editWork(
+        originalWorkId: current.workId,
+        edited: edited, mergeDuplicate: duplicate,
+      ));
+      if (!mounted) return;
+      setState(() => coverEpoch++);
+      if (changedId && !duplicate && readerSettings.autoCoverEnabled) {
+        unawaited(_prepareAutomaticCover(edited));
+      }
+      _status(changedId
+          ? '번호를 변경했어. 기존 CBZ·표지는 원래 번호에 보존했어.'
+          : '작품 정보를 수정했어.');
+    } catch (error) {
+      _status('작품 정보 수정 실패: ' + error.toString());
+    }
+  }
+
   Future<void> _updateWork(WorkEntry work) async {
     try {
       await _commitLibrary((latest) => LibraryBackup(
@@ -626,20 +693,107 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   Future<void> _export(bool excel) async {
     try {
-      final data = excel ? LibraryExport.xlsx(library) : LibraryExport.json(library);
+      Uint8List data;
+      if (excel) {
+        data = LibraryExport.xlsx(library);
+      } else {
+        var includeLibrary = true;
+        var includeSettings = true;
+        var includeImages = false;
+        final choices = await showDialog<List<bool>>(
+          context: context,
+          builder: (dialog) => StatefulBuilder(
+            builder: (ctx, update) => AlertDialog(
+              title: const HypText('JSON 통합 백업'),
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 470),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const HypText('서재와 앱 설정을 하나의 JSON으로 저장할 수 있어. '
+                    'API 키, 기기 권한, 다운로드한 CBZ는 포함되지 않아.'),
+                  CheckboxListTile(
+                    key: const Key('backup-export-library'),
+                    value: includeLibrary,
+                    contentPadding: EdgeInsets.zero,
+                    title: const HypText('서재·즐겨찾기·읽기 기록 포함'),
+                    onChanged: (v) => update(() => includeLibrary = v == true),
+                  ),
+                  CheckboxListTile(
+                    key: const Key('backup-export-settings'),
+                    value: includeSettings,
+                    contentPadding: EdgeInsets.zero,
+                    title: const HypText('앱 설정 포함'),
+                    onChanged: (v) => update(() => includeSettings = v == true),
+                  ),
+                  CheckboxListTile(
+                    key: const Key('backup-export-images'),
+                    value: includeImages,
+                    contentPadding: EdgeInsets.zero,
+                    title: const HypText('표지·배너 이미지 포함 (선택)'),
+                    subtitle: const HypText('크기가 커질 수 있어 (최대 22MB). '
+                        '표지·배너 이미지가 없는 경우 원본 파일을 복사하지 않아.'),
+                    onChanged: (v) => update(() => includeImages = v == true),
+                  ),
+                ]),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dialog),
+                    child: const HypText('취소')),
+                FilledButton(
+                  key: const Key('backup-export-confirm'),
+                  onPressed: includeLibrary || includeSettings
+                    ? () => Navigator.pop(dialog, [
+                        includeLibrary, includeSettings, includeImages])
+                    : null,
+                  child: const HypText('JSON 백업 생성'),
+                ),
+              ],
+            ),
+          ),
+        );
+        if (choices == null || !mounted) return;
+        final covers = <BackupCover>[];
+        Uint8List? banner;
+        if (choices[2]) {
+          if (choices[1]) banner = await heroArtworkStore.read();
+          if (choices[0]) {
+            for (final work in library.works) {
+              if (work.coverMode == 'preset') continue;
+              if (covers.length >= AppBackup.maxCovers) {
+                throw const FormatException(
+                    '이미지 표지가 500개를 넘었어. 이미지 포함을 끄고 다시 백업해줘.');
+              }
+              final page = work.coverMode == 'page' ? work.coverPage : 1;
+              final bytes = await coverStore.read(work.workId,
+                  mode: work.coverMode, page: page);
+              if (bytes != null) {
+                covers.add(BackupCover(workId: work.workId,
+                  mode: work.coverMode, page: page, bytes: bytes));
+              }
+            }
+          }
+        }
+        data = AppBackup(
+          library: library,
+          settings: choices[1] ? readerSettings : null,
+          includesLibrary: choices[0],
+          bannerImage: banner,
+          covers: covers,
+        ).encode();
+      }
       final extension = excel ? 'xlsx' : 'json';
-      final filename = 'HYP_Library_' +
-          DateTime.now().toIso8601String().substring(0, 10) + '.' + extension;
-      final path = await FilePicker.platform.saveFile(
+      final filename = (excel ? 'HYP_Library_' : 'HYP_Backup_') +
+          DateTime.now().toIso8601String().substring(0, 10) +
+          '.' + extension;
+      final saved = await FilePicker.platform.saveFile(
         dialogTitle: excel ? 'Excel로 내보내기' : 'JSON으로 내보내기',
         fileName: filename,
         type: FileType.custom,
         allowedExtensions: [extension],
         bytes: data,
       );
-      if (path != null) _status('내보내기 완료');
-    } catch (e) {
-      _status('내보내기 실패: ' + e.toString());
+      if (saved != null) _status('내보내기 완료');
+    } catch (error) {
+      _status('내보내기 실패: $error');
     }
   }
 
@@ -690,26 +844,189 @@ class _LibraryHomeState extends State<LibraryHome> {
         type: FileType.custom, allowedExtensions: ['json'], withData: true,
       );
       if (picked == null) return;
-      final bytes = picked.files.single.bytes;
+      final file = picked.files.single;
+      if (file.size > AppBackup.maxJsonBytes) {
+        throw const FormatException('JSON 백업은 최대 40MB까지 지원해.');
+      }
+      final bytes = file.bytes ??
+          (file.path != null ? await File(file.path!).readAsBytes() : null);
       if (bytes == null) throw Exception('파일을 읽지 못했어.');
-      final incoming = LibraryBackup.decode(utf8.decode(bytes));
+      final incoming = AppBackup.decode(utf8.decode(bytes));
       if (!mounted) return;
-      final mode = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
-        title: const HypText('JSON 서재 복원'),
-        content: HypText('작품 ' + incoming.works.length.toString() + '개를 가져왔어.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const HypText('취소')),
-          TextButton(onPressed: () => Navigator.pop(ctx, 'merge'), child: const HypText('병합')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, 'replace'), child: const HypText('전체 복원')),
-        ],
-      ));
-      if (mode == null) return;
-      await _commitLibrary((latest) =>
-          mode == 'replace' ? incoming : LibraryBackup.merge(latest, incoming));
-      _status('서재 가져오기 완료');
-    } catch (e) {
-      _status('복원 실패: ' + e.toString());
+
+      var mode = incoming.includesLibrary
+          ? AppRestoreMode.addWorks : AppRestoreMode.replaceSettings;
+      var destructiveApproved = false;
+      final selected = await showDialog<AppRestoreMode>(
+        context: context,
+        builder: (dialog) => StatefulBuilder(
+          builder: (ctx, update) => AlertDialog(
+            title: const HypText('JSON 백업 복원'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 530),
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  HypText('백업 작품: ' +
+                      incoming.library.works.length.toString() + '개'),
+                  HypText(incoming.hasSettings
+                      ? '앱 설정 포함됨' : '앱 설정 없음 (기존 형식)'),
+                  if (incoming.hasImages)
+                    const HypText('표지·배너 이미지 포함됨'),
+                  const SizedBox(height: 10),
+                  ListTile(
+                    key: const Key('backup-mode-add'),
+                    enabled: incoming.includesLibrary,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(mode == AppRestoreMode.addWorks
+                        ? Icons.radio_button_checked : Icons.radio_button_off),
+                    title: const HypText('① 작품 추가'),
+                    subtitle: const HypText('기존 서재와 설정을 유지하고 작품만 병합'),
+                    onTap: incoming.includesLibrary ? () => update(() {
+                      mode = AppRestoreMode.addWorks;
+                      destructiveApproved = false;
+                    }) : null,
+                  ),
+                  ListTile(
+                    key: const Key('backup-mode-settings'),
+                    enabled: incoming.hasSettings,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(mode == AppRestoreMode.replaceSettings
+                        ? Icons.radio_button_checked : Icons.radio_button_off),
+                    title: const HypText('② 설정 덮어쓰기'),
+                    subtitle: const HypText('작품 목록은 유지하고 앱 설정만 교체'),
+                    onTap: incoming.hasSettings ? () => update(() {
+                      mode = AppRestoreMode.replaceSettings;
+                      destructiveApproved = false;
+                    }) : null,
+                  ),
+                  ListTile(
+                    key: const Key('backup-mode-all'),
+                    enabled: incoming.includesLibrary && incoming.hasSettings,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(mode == AppRestoreMode.replaceEverything
+                        ? Icons.radio_button_checked : Icons.radio_button_off),
+                    title: const HypText('③ 작품 + 설정 덮어쓰기'),
+                    subtitle: const HypText('PC에만 있는 작품이 사라질 수 있어. '
+                        '실행 전 현재 서재가 .previous에 보존돼.'),
+                    onTap: incoming.includesLibrary && incoming.hasSettings
+                        ? () => update(() {
+                          mode = AppRestoreMode.replaceEverything;
+                          destructiveApproved = false;
+                        }) : null,
+                  ),
+                  if (mode == AppRestoreMode.replaceEverything)
+                    CheckboxListTile(
+                      key: const Key('backup-overwrite-confirm'),
+                      contentPadding: EdgeInsets.zero,
+                      title: const HypText('현재 서재를 교체한다는 점을 확인했어'),
+                      value: destructiveApproved,
+                      onChanged: (v) => update(
+                          () => destructiveApproved = v == true),
+                    ),
+                  const HypText('자동 다운로드·공지 수신은 복원 후 다시 동의해야 해. '
+                      'CBZ와 기기별 권한 및 API 키는 복원하지 않아.',
+                      style: TextStyle(fontSize: 12)),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog),
+                  child: const HypText('취소')),
+              FilledButton(
+                key: const Key('backup-import-confirm'),
+                onPressed: mode != AppRestoreMode.replaceEverything ||
+                        destructiveApproved
+                    ? () => Navigator.pop(dialog, mode) : null,
+                child: const HypText('선택한 방식으로 복원'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (selected == null || !mounted) return;
+      await _initialLibraryRead.future;
+      await _libraryWrites;
+      if (_libraryReadFailed) {
+        throw StateError('서재 복구가 필요해. 현재 백업을 안전하게 읽을 때까지 '
+            'JSON 덮어쓰기를 차단했어.');
+      }
+      final previousLibrary = library;
+      final previousSettings = readerSettings;
+      final plan = AppRestorePlan.build(
+          library, readerSettings, incoming, selected);
+
+      // First write new settings, then commit library atomically. If a
+      // library write fails, roll the settings back; library storage itself
+      // preserves .previous during a completed replacement.
+      if (plan.settings != null) {
+        await readerSettingsStorage.save(plan.settings!);
+      }
+      try {
+        if (plan.changesLibrary) {
+          await _commitLibrary((latest) => AppRestorePlan.build(
+              latest, previousSettings, incoming, selected).library);
+        }
+      } catch (_) {
+        if (plan.settings != null) {
+          await readerSettingsStorage.save(previousSettings);
+        }
+        rethrow;
+      }
+      if (plan.settings != null) {
+        setState(() => readerSettings = plan.settings!);
+        HypLanguage.selected.value = plan.settings!.languageCode;
+        _syncNoticesTimer();
+      }
+      final imageErrors = await _restoreBackupImages(
+          incoming, selected, previousLibrary);
+      if (mounted && plan.changesLibrary) {
+        setState(() => libraryNavigationEpoch++);
+      }
+      if (mounted) setState(() => coverEpoch++);
+      _status(imageErrors == 0
+          ? 'JSON 복원이 완료됐어.'
+          : '서재·설정 복원 완료. 이미지 $imageErrors개는 복원에 실패했어.');
+    } catch (error) {
+      _status('복원 실패: $error');
     }
+  }
+
+  Future<int> _restoreBackupImages(AppBackup incoming,
+      AppRestoreMode mode, LibraryBackup before) async {
+    if (!incoming.hasImages) return 0;
+    var failures = 0;
+    if (mode != AppRestoreMode.addWorks && incoming.bannerImage != null) {
+      try {
+        await heroArtworkStore.save(incoming.bannerImage!);
+        if (mounted) setState(() => heroArtwork = incoming.bannerImage);
+      } catch (_) {
+        failures++;
+      }
+    }
+    if (mode == AppRestoreMode.replaceSettings) return failures;
+    final existingIds = before.works.map((w) => w.workId).toSet();
+    for (final cover in incoming.covers) {
+      final work = library.works.where(
+          (w) => w.workId == cover.workId).firstOrNull;
+      if (work == null || work.coverMode != cover.mode ||
+          (work.coverMode == 'page' && work.coverPage != cover.page)) {
+        continue;
+      }
+      try {
+        if (mode == AppRestoreMode.addWorks &&
+            existingIds.contains(work.workId) &&
+            await coverStore.exists(cover.workId,
+                mode: cover.mode, page: cover.page)) {
+          continue;
+        }
+        await coverStore.save(cover.workId, cover.bytes,
+            mode: cover.mode, page: cover.page);
+      } catch (_) {
+        failures++;
+      }
+    }
+    return failures;
   }
 
   Future<void> _prepareAutomaticCover(WorkEntry work) async {
@@ -1242,6 +1559,93 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
+  /// Remove selected shelf entries in ONE library save; local files are
+  /// preserved unless the user explicitly opts into their deletion.
+  Future<bool> _deleteSelectedWorks(List<String> rawIds) async {
+    final selectedIds = rawIds.toSet();
+    final selected = library.works.where(
+        (w) => selectedIds.contains(w.workId)).toList();
+    if (!mounted || selected.isEmpty) return false;
+    if (selected.any((w) => downloadingGalleryKey == w.key)) {
+      _status('다운로드 중인 작품은 완료하거나 취소한 뒤 삭제해줘.');
+      return false;
+    }
+    var deleteFiles = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (ctx, update) => AlertDialog(
+          title: const HypText('선택한 작품 삭제'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('선택된 작품: ' + selected.length.toString() + '개',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                for (final work in selected.take(4))
+                  Text('#' + work.workId + ' · ' + work.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                if (selected.length > 4)
+                  Text('외 ' + (selected.length - 4).toString() + '개'),
+                const SizedBox(height: 10),
+                const HypText('선택한 작품의 즐겨찾기와 읽기 기록도 제거돼. '
+                    '다른 작품과 컬렉션은 유지해.'),
+                CheckboxListTile(
+                  key: const Key('bulk-delete-files-checkbox'),
+                  value: deleteFiles,
+                  contentPadding: EdgeInsets.zero,
+                  title: const HypText('로컬 파일도 함께 삭제'),
+                  subtitle: const HypText('기본 OFF. 켜면 이 작품들의 '
+                      '다운로드 파일과 표지 미리보기도 삭제해.'),
+                  onChanged: (v) => update(() => deleteFiles = v == true),
+                ),
+              ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog, false),
+                child: const HypText('취소')),
+            FilledButton.icon(
+              key: const Key('confirm-delete-selected'),
+              onPressed: () => Navigator.pop(dialog, true),
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const HypText('선택 삭제')),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return false;
+    if (selected.any((w) => downloadingGalleryKey == w.key)) {
+      _status('다운로드가 진행 중인 작품은 삭제할 수 없어.');
+      return false;
+    }
+    final ids = selected.map((w) => w.workId).toSet();
+    try {
+      await _commitLibrary((latest) => latest.withoutWorks(ids));
+    } catch (e) {
+      _status('선택 삭제 실패: ' + e.toString());
+      return false;
+    }
+    if (mounted) setState(() => coverEpoch++);
+    var fileErrors = 0;
+    if (deleteFiles) {
+      for (final id in ids) {
+        try {
+          await galleryStore.delete(id);
+          await coverStore.deleteAllForWork(id);
+        } catch (_) {
+          fileErrors++;
+        }
+      }
+    }
+    _status('선택한 작품 ' + ids.length.toString() +
+        '개를 서재에서 제거했어. ' +
+        (fileErrors > 0
+            ? '일부 로컬 파일 정리에 실패했어.'
+            : deleteFiles ? '로컬 파일도 정리했어.' : '로컬 파일은 유지했어.'));
+    return true;
+  }
+
   Future<void> _deleteOffline(WorkEntry work) async {
     if (!await galleryStore.exists(work.workId) || !mounted) return;
     final approved = await showDialog<bool>(
@@ -1598,6 +2002,8 @@ class _LibraryHomeState extends State<LibraryHome> {
     onDownloadJsonSource: _downloadJsonSource,
     onDeleteOffline: _deleteOffline,
     onDeleteWork: _deleteWork,
+    onDeleteSelectedWorks: _deleteSelectedWorks,
+    onEditWorkDetails: _editWorkDetails,
     onToggleDownloadPause: _pauseOrResumeReaderDownload,
     downloadPaused: isReaderTransferPaused,
     downloadCanPause: readerTransfer != null,

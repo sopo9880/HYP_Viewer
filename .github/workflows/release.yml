@@ -157,30 +157,34 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.1.10:
-          - Android sharing now uses a singleTask, non-document activity so
-            incoming Shorts URLs reuse the same recent-app task.
-          - Protect library JSON against a startup share/save race; recover
-            from previous or staged validated backups after interrupted saves
-            and refuse to overwrite unreadable library data.
-          - Optional physical screen-half tap navigation: horizontal
-            left/right or vertical top/bottom, honoring reading direction.
-          - Reader preload is a custom -1 or 0..1500 number. -1 warms
-            the whole work using a bounded, temporary DISK cache with at
-            most two speculative concurrent downloads; eviction keeps RAM
-            small, and cache is deleted on reader close.
-          - Optional auto-download when a work is saved, with up-front
-            rights confirmation; single-file existing downloads are skipped.
-          - Whole-library download button in Library, with explicit rights
-            confirmation, sequential downloads, queue count and cancel.
-            Restricted sources are never bypassed.
-          - Continuous width-fitted vertical webtoon reader with actual
-            scroll positions and no gaps between image pages.
-          - Random library covers now rotate automatically on all three
-            introduction slides; carousel advances on a timer and can
-            still be navigated manually.
-          - Keep existing v0.1.9 work editing, backups, reading preferences,
-            and signed Android update compatibility.
+          Changes in v0.1.11:
+          - New portable JSON schema v2 includes library entries and all
+            ReaderSettings by default; optional bounded (22 MB) base64
+            cover previews and home banner. Offline CBZ, API credentials,
+            machine-specific paths and Android security permissions excluded.
+          - Export options: library, settings, optional images. Import modes:
+            1) merge/add works without changing settings,
+            2) replace settings while preserving local works, or
+            3) explicitly overwrite works AND settings after confirmation.
+          - Old v1 JSON files remain importable (merge works only).
+            On restoring settings, sensitive permissions such as automatic
+            downloads and admin notices must be re-enabled manually.
+          - Library multi-select with toolbar and long-press Android
+            selection; choose individual works, visible-search-results only
+            select-all, clear selection, edit selected entry or delete many
+            in a single serialized library commit.
+          - Local CBZ and cover deletion remains OFF by default, with a
+            separate confirmation checkbox; untouched entries retain
+            favorites and reading positions.
+          - Edit saved work IDs, titles, creators and source comments from
+            the card menu or one selected card. Work ID metadata check,
+            explicit remote-title copy, warning for unverified IDs, and
+            user-approved merge on duplicate IDs (preserve max progress,
+            favorites and collections).
+          - Work ID changes never silently rekey local CBZ or cached covers;
+            original files remain attached to the original ID.
+          - Preserve all v0.1.10 features and existing Android signing
+            identity / Windows update path.
 
           Known limitations: Automated tests use mocked images and notices;
           actual remote sites, Android devices and Samsung firmware may

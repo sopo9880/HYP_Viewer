@@ -18,6 +18,12 @@ void main() {
     await tester.tap(find.byKey(const Key('nav-library')));
     await tester.pump();
     expect(find.text('내 서재'), findsWidgets);
+    expect(find.byKey(const Key('library-select-mode')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('library-select-mode')));
+    await tester.pump();
+    expect(find.byKey(const Key('library-select-visible')), findsOneWidget);
+    expect(find.byKey(const Key('library-delete-selected')), findsOneWidget);
+    expect(find.byKey(const Key('library-edit-selected')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('nav-settings')));
     await tester.pump();

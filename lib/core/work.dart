@@ -161,10 +161,52 @@ class LibraryBackup {
 
   /// Remove only the requested work from the saved library. Other entries,
   /// their reading progress, favorites and collection definitions stay intact.
-  LibraryBackup withoutWork(String workId) => LibraryBackup(
-    works: works.where((work) => work.workId != workId).toList(),
+  LibraryBackup withoutWork(String workId) => withoutWorks({workId});
+
+  /// Delete many shelf entries in one transaction; other works are untouched.
+  LibraryBackup withoutWorks(Set<String> workIds) => LibraryBackup(
+    works: works.where((work) => !workIds.contains(work.workId)).toList(),
     collections: collections,
   );
+
+  /// Never silently overwrite an existing destination work ID.
+  /// A duplicate destination is merged only after explicit user approval.
+  LibraryBackup editWork({
+    required String originalWorkId,
+    required WorkEntry edited,
+    bool mergeDuplicate = false,
+  }) {
+    if (!RegExp(r'^\d{1,12}$').hasMatch(edited.workId)) {
+      throw const FormatException('작품 번호는 숫자 1~12자리여야 해.');
+    }
+    if (!works.any((w) => w.workId == originalWorkId)) {
+      throw StateError('수정할 작품을 현재 서재에서 찾지 못했어.');
+    }
+    final duplicate = edited.workId != originalWorkId &&
+        works.any((w) => w.workId == edited.workId);
+    if (duplicate && !mergeDuplicate) {
+      throw StateError('새 작품 번호가 이미 서재에 있어. 병합 확인이 필요해.');
+    }
+    if (!duplicate) {
+      return LibraryBackup(
+        works: works.map((w) =>
+            w.workId == originalWorkId ? edited : w).toList(),
+        collections: collections,
+      );
+    }
+    final target = works.firstWhere((w) => w.workId == edited.workId);
+    // When merging into an existing ID, retain its local cover preferences.
+    // An older ID's CBZ and cover files must not be attached to a new work.
+    final corrected = edited.copyWith(
+      coverMode: target.coverMode,
+      coverPreset: target.coverPreset,
+      coverPage: target.coverPage,
+    );
+    return LibraryBackup.merge(
+      withoutWork(originalWorkId),
+      LibraryBackup(works: [corrected], collections: const []),
+    );
+  }
 
   Map<String, Object?> toJson() => {
     'app': 'HYP Viewer',

@@ -13,6 +13,10 @@ class HypWorkGrid extends StatelessWidget {
   final Map<String, Uint8List> coverImages;
   final void Function(WorkEntry) onOpen;
   final void Function(String, WorkEntry) onAction;
+  final bool selectionMode;
+  final Set<String> selectedWorkIds;
+  final void Function(WorkEntry)? onSelect;
+  final void Function(WorkEntry)? onLongPress;
 
   const HypWorkGrid({
     super.key,
@@ -22,6 +26,10 @@ class HypWorkGrid extends StatelessWidget {
     required this.coverImages,
     required this.onOpen,
     required this.onAction,
+    this.selectionMode = false,
+    this.selectedWorkIds = const {},
+    this.onSelect,
+    this.onLongPress,
   });
 
   @override
@@ -45,6 +53,10 @@ class HypWorkGrid extends StatelessWidget {
             coverBytes: coverImages[works[index].key],
             onOpen: () => onOpen(works[index]),
             onAction: (action) => onAction(action, works[index]),
+            selectionMode: selectionMode,
+            selected: selectedWorkIds.contains(works[index].workId),
+            onSelect: () => onSelect?.call(works[index]),
+            onLongPress: () => onLongPress?.call(works[index]),
           ),
         );
       });
@@ -57,6 +69,10 @@ class HypWorkCard extends StatelessWidget {
   final Uint8List? coverBytes;
   final VoidCallback onOpen;
   final ValueChanged<String> onAction;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onSelect;
+  final VoidCallback? onLongPress;
 
   const HypWorkCard({
     super.key,
@@ -66,6 +82,10 @@ class HypWorkCard extends StatelessWidget {
     required this.coverBytes,
     required this.onOpen,
     required this.onAction,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onSelect,
+    this.onLongPress,
   });
 
   @override
@@ -81,16 +101,33 @@ class HypWorkCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         key: Key('work-' + work.key),
-        onTap: onOpen,
+        onTap: selectionMode ? onSelect : onOpen,
+        onLongPress: onLongPress,
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all(color: HypColors.border.withValues(alpha: 0.65)),
+            border: Border.all(
+              width: selectionMode && selected ? 2 : 1,
+              color: selectionMode && selected
+                  ? HypColors.lightPurple
+                  : HypColors.border.withValues(alpha: 0.65),
+            ),
             borderRadius: BorderRadius.circular(15),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Expanded(
               child: Stack(fit: StackFit.expand, children: [
                 _cover(),
+                if (selectionMode)
+                  Positioned(
+                    key: Key('work-selection-' + work.workId),
+                    top: 7, left: 7,
+                    child: Icon(
+                      selected ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      color: selected ? HypColors.lightPurple : Colors.white,
+                      size: 27,
+                    ),
+                  ),
                 if (isOffline)
                   const Positioned(
                     left: 8, top: 8,
@@ -145,7 +182,7 @@ class HypWorkCard extends StatelessWidget {
                       style: const TextStyle(fontSize: 11),
                     ),
                   ),
-                  SizedBox(
+                  if (!selectionMode) SizedBox(
                     width: 27, height: 25,
                     child: PopupMenuButton<String>(
                       tooltip: '작품 메뉴',
@@ -171,7 +208,9 @@ class HypWorkCard extends StatelessWidget {
                         const PopupMenuItem(
                             value: 'import', child: HypText('CBZ/ZIP 연결')),
                         const PopupMenuItem(
-                            value: 'cover', child: HypText('표지 선택')), 
+                            value: 'cover', child: HypText('표지 선택')),
+                        const PopupMenuItem(
+                            value: 'edit_details', child: HypText('작품 정보 수정')), 
                         PopupMenuItem(
                           value: 'favorite',
                           child: HypText(work.favorite

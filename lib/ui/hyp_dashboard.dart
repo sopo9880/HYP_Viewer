@@ -94,6 +94,8 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function(WorkEntry) onDownloadJsonSource;
   final Future<void> Function(WorkEntry) onDeleteOffline;
   final Future<void> Function(WorkEntry) onDeleteWork;
+  final Future<bool> Function(List<String> ids) onDeleteSelectedWorks;
+  final Future<void> Function(WorkEntry) onEditWorkDetails;
   final VoidCallback onToggleDownloadPause;
   final bool downloadPaused;
   final bool downloadCanPause;
@@ -159,6 +161,8 @@ class HypDashboard extends StatefulWidget {
     required this.onDownloadJsonSource,
     required this.onDeleteOffline,
     required this.onDeleteWork,
+    required this.onDeleteSelectedWorks,
+    required this.onEditWorkDetails,
     required this.onToggleDownloadPause,
     required this.downloadPaused,
     required this.downloadCanPause,
@@ -181,6 +185,11 @@ class _HypDashboardState extends State<HypDashboard> {
   final FocusNode _searchFocus = FocusNode();
   HypPage _page = HypPage.home;
   final Set<String> _offlineKeys = <String>{};
+  bool _selectingWorks = false;
+  final Set<String> _selectedWorkIds = <String>{};
+  bool get _canSelectWorks => _page == HypPage.library ||
+      _search.text.trim().isNotEmpty;
+
   final Map<String, int> _pageCounts = <String, int>{};
   final Map<String, Uint8List> _coverImages = <String, Uint8List>{};
   int _offlineRefreshEpoch = 0;
@@ -237,6 +246,8 @@ class _HypDashboardState extends State<HypDashboard> {
       _page = HypPage.library;
       _search.clear();
     }
+    _selectedWorkIds.removeWhere((id) =>
+        !widget.library.works.any((w) => w.workId == id));
     if (oldWidget.library.works.length != widget.library.works.length ||
         oldWidget.coverEpoch != widget.coverEpoch ||
         _coverSignature(oldWidget.library) != _coverSignature(widget.library)) {
@@ -260,8 +271,59 @@ class _HypDashboardState extends State<HypDashboard> {
 
   void _navigate(HypPage page) {
     _search.clear();
-    setState(() => _page = page);
+    setState(() {
+      _page = page;
+      if (page != HypPage.library) {
+        _selectingWorks = false;
+        _selectedWorkIds.clear();
+      }
+    });
   }
+
+  void _toggleSelectionMode() => setState(() {
+    _selectingWorks = !_selectingWorks;
+    if (!_selectingWorks) _selectedWorkIds.clear();
+  });
+
+  void _toggleSelectedWork(WorkEntry work) => setState(() {
+    if (!_selectedWorkIds.add(work.workId)) {
+      _selectedWorkIds.remove(work.workId);
+    }
+  });
+
+  void _startSelection(WorkEntry work) => setState(() {
+    _selectingWorks = true;
+    _selectedWorkIds.add(work.workId);
+  });
+
+  Future<void> _removeSelectedWorks() async {
+    final ids = _selectedWorkIds.toList();
+    if (ids.isEmpty) return;
+    final completed = await widget.onDeleteSelectedWorks(ids);
+    if (!mounted) return;
+    if (completed) {
+      setState(() {
+        _selectedWorkIds.clear();
+        _selectingWorks = false;
+      });
+      await _refreshOffline();
+    }
+  }
+
+  Future<void> _editSelectedWork() async {
+    if (_selectedWorkIds.length != 1) return;
+    final matching = widget.library.works.where(
+        (w) => w.workId == _selectedWorkIds.first).toList();
+    if (matching.isEmpty) return;
+    await widget.onEditWorkDetails(matching.single);
+    if (!mounted) return;
+    setState(() {
+      _selectingWorks = false;
+      _selectedWorkIds.clear();
+    });
+    await _refreshOffline();
+  }
+
 
   String _coverSignature(LibraryBackup backup) => backup.works
       .map((w) => w.key + ':' + w.coverMode + ':' +
@@ -766,16 +828,66 @@ class _HypDashboardState extends State<HypDashboard> {
     ],
   );
 
+  Widget _selectionControls(List<WorkEntry> visible) =>
+      !_selectingWorks ? const SizedBox.shrink() : Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Wrap(spacing: 8, runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text('선택됨: ' + _selectedWorkIds.length.toString() + '개'),
+            OutlinedButton(
+              key: const Key('library-select-visible'),
+              onPressed: visible.isEmpty ? null : () => setState(() {
+                // When searching, select ONLY current matching results;
+                // never silently include previously selected hidden works.
+                if (_search.text.trim().isNotEmpty) {
+                  _selectedWorkIds.clear();
+                }
+                _selectedWorkIds.addAll(visible.map((w) => w.workId));
+              }),
+              child: const HypText('전체 선택'),
+            ),
+            OutlinedButton(
+              key: const Key('library-clear-selection'),
+              onPressed: _selectedWorkIds.isEmpty ? null
+                  : () => setState(() => _selectedWorkIds.clear()),
+              child: const HypText('선택 해제'),
+            ),
+            OutlinedButton.icon(
+              key: const Key('library-edit-selected'),
+              onPressed: _selectedWorkIds.length == 1
+                  ? _editSelectedWork : null,
+              icon: const Icon(Icons.edit_outlined),
+              label: const HypText('정보 수정'),
+            ),
+            FilledButton.icon(
+              key: const Key('library-delete-selected'),
+              onPressed: _selectedWorkIds.isNotEmpty
+                  ? _removeSelectedWorks : null,
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const HypText('선택 삭제'),
+            ),
+          ],
+        ),
+      );
+
   Widget _libraryContent() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Row(children: [
-        Expanded(child: HypSectionTitle(
-          icon: Icons.library_books_rounded,
-          title: '내 서재',
-          subtitle: '추가한 작품과 읽기 진행도를 관리하세요.',
-        )),
-        const SizedBox(width: 8),
+      HypSectionTitle(
+        icon: Icons.library_books_rounded,
+        title: '내 서재',
+        subtitle: '추가한 작품과 읽기 진행도를 관리하세요.',
+      ),
+      const SizedBox(height: 10),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        OutlinedButton.icon(
+          key: const Key('library-select-mode'),
+          onPressed: _toggleSelectionMode,
+          icon: Icon(_selectingWorks
+              ? Icons.close : Icons.checklist_outlined),
+          label: HypText(_selectingWorks ? '선택 종료' : '선택'),
+        ),
         OutlinedButton.icon(
           key: const Key('library-download-all'),
           onPressed: widget.library.works.isEmpty
@@ -784,7 +896,8 @@ class _HypDashboardState extends State<HypDashboard> {
           label: const HypText('전체 다운로드'),
         ),
       ]),
-      const SizedBox(height: 15),
+      _selectionControls(_works),
+      const SizedBox(height: 8),
       _gridOrEmpty(_works,
         emptyTitle: '내 서재에 작품이 없어',
         emptyMessage: '홈에서 번호를 찾아 저장해줘.',
@@ -792,11 +905,27 @@ class _HypDashboardState extends State<HypDashboard> {
     ],
   );
 
-  Widget _searchContent() => _fullPage(
-    '검색 결과',
-    '"' + _search.text + '" · ' + _results.length.toString() + '개 작품',
-    Icons.search_rounded,
-    _results,
+  Widget _searchContent() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Align(
+        alignment: Alignment.centerRight,
+        child: OutlinedButton.icon(
+          key: const Key('search-select-mode'),
+          onPressed: _toggleSelectionMode,
+          icon: Icon(_selectingWorks
+              ? Icons.close : Icons.checklist_outlined),
+          label: HypText(_selectingWorks ? '선택 종료' : '선택'),
+        ),
+      ),
+      _selectionControls(_results),
+      _fullPage(
+        '검색 결과',
+        '"' + _search.text + '" · ' + _results.length.toString() + '개 작품',
+        Icons.search_rounded,
+        _results,
+      ),
+    ],
   );
 
   Widget _gridOrEmpty(List<WorkEntry> works, {
@@ -825,6 +954,10 @@ class _HypDashboardState extends State<HypDashboard> {
         }
       },
       onAction: _workAction,
+      selectionMode: _selectingWorks && _canSelectWorks,
+      selectedWorkIds: _selectedWorkIds,
+      onSelect: _canSelectWorks ? _toggleSelectedWork : null,
+      onLongPress: _canSelectWorks ? _startSelection : null,
     );
   }
 
@@ -852,6 +985,9 @@ class _HypDashboardState extends State<HypDashboard> {
       await _refreshOffline();
     } else if (action == 'cover') {
       await widget.onChooseCover(work);
+      await _refreshOffline();
+    } else if (action == 'edit_details') {
+      await widget.onEditWorkDetails(work);
       await _refreshOffline();
     } else if (action == 'favorite') {
       await widget.onUpdateWork(work.copyWith(favorite: !work.favorite));
