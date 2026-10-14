@@ -14,7 +14,7 @@ Local-first **Windows setup.exe + Android APK** app for finding and organizing r
 - **JSON export/import** for Android-to-Android, Android-to-Windows and Windows-to-Windows library backup or merge.
 - **Excel XLSX export only** to read and organize library information.
 - Import user-owned CBZ/ZIP image archives per saved work; open a built-in full-screen reader with zoom, page swiping, horizontal/vertical navigation and progress saving.
-- **In-app online reading:** resolve metadata and images for a numbered Hitomi gallery, then display its pages in the existing Flutter reader with saved progress. As a fallback open a fixed external web reader URL: page 1 uses `#1`; page N>=2 uses `#N-(N+1)`.
+- **In-app online reading:** resolve metadata and images for a numbered Hitomi gallery, then display its pages in the existing Flutter reader with saved progress. As a fallback open a fixed external web reader URL: page 1 uses `#1-`; page N>=2 uses `#N-(N+1)`.
 - **Optional offline download:** press Download, review the consent dialog, and save a CBZ only if the source explicitly permits downloads. Progress and cancellation are included.
 - Check public GitHub Releases, download a platform-specific installer, validate its SHA-256 digest, and request OS-approved installation (APK system installer or Windows Setup.exe).
 - Windows Inno Setup installer and Android debug APK produced by the GitHub Actions verification workflow.
