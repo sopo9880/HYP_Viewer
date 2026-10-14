@@ -14,7 +14,7 @@ class WorkEntry {
   final String updatedAt;
   // Optional: absent in older schemaVersion 1 JSON backups.
   final String? lastOpenedAt;
-  /// 'auto' (first image), 'preset' (built-in art), or 'page' (chosen image).
+  /// 'auto', 'preset', 'page' or 'custom' (cropped/uploaded image).
   final String coverMode;
   final int coverPreset;
   final int coverPage;
@@ -139,7 +139,7 @@ class WorkEntry {
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true).toIso8601String(),
       lastOpenedAt: DateTime.tryParse(text('lastOpenedAt'))
           ?.toUtc().toIso8601String(),
-      coverMode: const {'auto', 'preset', 'page'}.contains(text('coverMode'))
+      coverMode: const {'auto', 'preset', 'page', 'custom'}.contains(text('coverMode'))
           ? text('coverMode') : 'auto',
       coverPreset: data['coverPreset'] is num
           ? (data['coverPreset'] as num).toInt().clamp(0, 5).toInt()
