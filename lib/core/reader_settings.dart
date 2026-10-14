@@ -18,6 +18,11 @@ class ReaderSettings {
   final bool tapNavigation;
   final bool webtoonMode;
   final bool autoDownloadOnSave;
+  final bool dataSaverMode;
+  final String librarySort;
+  final bool librarySortDescending;
+  final bool recentCollapsed;
+  final List<String> expandedSettings;
   final bool autoCoverEnabled;
   final bool volumeKeyNavigation;
   final bool forceLandscapeForSpreads;
@@ -35,10 +40,15 @@ class ReaderSettings {
     this.showPageControlsAction = true,
     this.showWebReaderAction = true,
     this.showOrientationAction = true,
-    this.preloadPages = 2,
+    this.preloadPages = -1,
     this.tapNavigation = false,
     this.webtoonMode = false,
     this.autoDownloadOnSave = false,
+    this.dataSaverMode = false,
+    this.librarySort = 'newest',
+    this.librarySortDescending = false,
+    this.recentCollapsed = false,
+    this.expandedSettings = const [],
     this.autoCoverEnabled = false,
     this.volumeKeyNavigation = false,
     this.forceLandscapeForSpreads = false,
@@ -63,6 +73,11 @@ class ReaderSettings {
     bool? tapNavigation,
     bool? webtoonMode,
     bool? autoDownloadOnSave,
+    bool? dataSaverMode,
+    String? librarySort,
+    bool? librarySortDescending,
+    bool? recentCollapsed,
+    List<String>? expandedSettings,
     bool? autoCoverEnabled,
     bool? volumeKeyNavigation,
     bool? forceLandscapeForSpreads,
@@ -83,6 +98,11 @@ class ReaderSettings {
     tapNavigation: tapNavigation ?? this.tapNavigation,
     webtoonMode: webtoonMode ?? this.webtoonMode,
     autoDownloadOnSave: autoDownloadOnSave ?? this.autoDownloadOnSave,
+    dataSaverMode: dataSaverMode ?? this.dataSaverMode,
+    librarySort: librarySort ?? this.librarySort,
+    librarySortDescending: librarySortDescending ?? this.librarySortDescending,
+    recentCollapsed: recentCollapsed ?? this.recentCollapsed,
+    expandedSettings: expandedSettings ?? this.expandedSettings,
     autoCoverEnabled: autoCoverEnabled ?? this.autoCoverEnabled,
     volumeKeyNavigation: volumeKeyNavigation ?? this.volumeKeyNavigation,
     forceLandscapeForSpreads: forceLandscapeForSpreads ?? this.forceLandscapeForSpreads,
@@ -105,6 +125,11 @@ class ReaderSettings {
     'tapNavigation': tapNavigation,
     'webtoonMode': webtoonMode,
     'autoDownloadOnSave': autoDownloadOnSave,
+    'dataSaverMode': dataSaverMode,
+    'librarySort': librarySort,
+    'librarySortDescending': librarySortDescending,
+    'recentCollapsed': recentCollapsed,
+    'expandedSettings': expandedSettings,
     'autoCoverEnabled': autoCoverEnabled,
     'volumeKeyNavigation': volumeKeyNavigation,
     'forceLandscapeForSpreads': forceLandscapeForSpreads,
@@ -134,12 +159,21 @@ class ReaderSettings {
         tapNavigation: data['tapNavigation'] == true,
         webtoonMode: data['webtoonMode'] == true,
         autoDownloadOnSave: data['autoDownloadOnSave'] == true,
+        dataSaverMode: data['dataSaverMode'] == true,
+        librarySort: const {'newest', 'mostRead', 'title', 'number'}
+                .contains(data['librarySort'])
+            ? data['librarySort'] as String : 'newest',
+        librarySortDescending: data['librarySortDescending'] == true,
+        recentCollapsed: data['recentCollapsed'] == true,
+        expandedSettings: data['expandedSettings'] is List
+            ? (data['expandedSettings'] as List).whereType<String>()
+                .take(25).toSet().toList() : const [],
         heroArtworkSource: {'default', 'custom', 'random'}
                 .contains(data['heroArtworkSource'])
             ? data['heroArtworkSource'] as String : 'custom',
         preloadPages: data['preloadPages'] is num
             ? (data['preloadPages'] as num).toInt().clamp(-1, 1500).toInt()
-            : 2,
+            : -1,
       );
 }
 
