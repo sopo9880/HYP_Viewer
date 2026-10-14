@@ -121,6 +121,7 @@ class BoundedWebImages {
     required int maxBytes,
     CancelDownload? cancellation,
     bool image = true,
+    Map<String, String>? headers,
   }) async {
     if (!OnlineSourcePolicy.isHttpsPublic(url)) {
       throw const FormatException('안전하지 않은 원격 주소야.');
@@ -131,6 +132,7 @@ class BoundedWebImages {
       ..headers['Accept'] = image
           ? 'image/avif,image/webp,image/png,image/jpeg,image/gif,image/bmp'
           : 'application/json';
+    if (headers != null) request.headers.addAll(headers);
     final response = await client.send(request).timeout(const Duration(seconds: 18));
     if (response.statusCode != 200) {
       throw HttpException('이미지/매니페스트 서버가 응답하지 않았어: ' +

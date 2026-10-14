@@ -16,6 +16,7 @@ class ShortsFinderPanel extends StatefulWidget {
   final bool busy;
   final VoidCallback onAnalyze;
   final Future<void> Function() onFetch;
+  final Future<void> Function() onOpenYoutube;
   final Future<void> Function() onSave;
 
   const ShortsFinderPanel({
@@ -30,6 +31,7 @@ class ShortsFinderPanel extends StatefulWidget {
     required this.busy,
     required this.onAnalyze,
     required this.onFetch,
+    required this.onOpenYoutube,
     required this.onSave,
   });
 
@@ -50,11 +52,13 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
   }
 
   void _search() {
-    if (widget.comment.text.trim().isNotEmpty) {
-      widget.onAnalyze();
-    } else if (widget.url.text.trim().isNotEmpty &&
-        widget.apiKey.text.trim().isNotEmpty) {
+    // A new Shorts URL must be fetched even if an older comment is present.
+    // Manual extraction has its own button inside the details section.
+    if (widget.url.text.trim().isNotEmpty) {
+      setState(() => _showDetails = true);
       widget.onFetch();
+    } else if (widget.comment.text.trim().isNotEmpty) {
+      widget.onAnalyze();
     } else {
       setState(() => _showDetails = true);
     }
@@ -99,7 +103,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
                         style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 4),
                     Text(
-                      'YouTube Shorts 링크를 분석하거나 댓글에서 번호를 찾아보세요.',
+                      'Shorts 링크만 붙여넣으면 공개 설명란·댓글에서 번호를 찾아봐. API 키는 필요 없어.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -127,7 +131,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               controller: widget.apiKey,
               obscureText: !_revealApiKey,
               decoration: InputDecoration(
-                hintText: 'YouTube API 키 (선택)',
+                hintText: '개인 YouTube Data API 키 (고급 · 선택)',
                 prefixIcon: const Icon(Icons.key_outlined, color: HypColors.muted),
                 suffixIcon: IconButton(
                   tooltip: _revealApiKey ? 'API 키 숨기기' : 'API 키 보기',
@@ -144,14 +148,26 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               icon: const Icon(Icons.search),
               label: const Text('작품 찾기'),
             );
+            final advanced = Material(
+              color: Colors.transparent,
+              child: ExpansionTile(
+                key: const Key('youtube-advanced-settings'),
+                title: const Text('고급 설정 · 내 YouTube Data API 키 사용 (선택)'),
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 8),
+                children: [apiKey],
+              ),
+            );
             if (wide) {
-              return Row(
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(flex: 5, child: url),
-                  const SizedBox(width: 10),
-                  Expanded(flex: 4, child: apiKey),
-                  const SizedBox(width: 10),
-                  SizedBox(width: 150, child: search),
+                  Row(children: [
+                    Expanded(child: url),
+                    const SizedBox(width: 10),
+                    SizedBox(width: 150, child: search),
+                  ]),
+                  advanced,
                 ],
               );
             }
@@ -160,18 +176,30 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               children: [
                 url,
                 const SizedBox(height: 10),
-                apiKey,
-                const SizedBox(height: 10),
                 search,
+                advanced,
               ],
             );
           }),
           const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: widget.busy ? null : widget.onFetch,
-            icon: const Icon(Icons.cloud_download_outlined, size: 19),
-            label: const Text('설명란 및 댓글 불러오기'),
+          const Text(
+            '기본 조회는 API 키 없이 YouTube 공개 페이지에서 댓글을 읽어. '
+            '유튜브 제한으로 실패할 수도 있어. 이때는 직접 댓글을 복사해 붙여넣어줘.',
+            style: TextStyle(fontSize: 12, color: HypColors.muted),
           ),
+          const SizedBox(height: 8),
+          Wrap(spacing: 10, runSpacing: 6, children: [
+            OutlinedButton.icon(
+              onPressed: widget.busy ? null : widget.onFetch,
+              icon: const Icon(Icons.cloud_download_outlined, size: 19),
+              label: const Text('설명란 · 댓글 자동 조회'),
+            ),
+            TextButton.icon(
+              onPressed: widget.onOpenYoutube,
+              icon: const Icon(Icons.open_in_new, size: 19),
+              label: const Text('유튜브 열고 댓글 복사'),
+            ),
+          ]),
           const SizedBox(height: 6),
           TextButton.icon(
             onPressed: () => setState(() => _showDetails = !showDetails),
@@ -180,7 +208,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
                 : Icons.keyboard_arrow_down),
             label: Text(showDetails
                 ? '댓글·번호 입력 접기'
-                : 'API 키 없이 댓글 직접 입력 · 번호 확정'),
+                : '댓글 직접 입력 · 번호 확정'),
           ),
           if (widget.busy) ...[
             const SizedBox(height: 8),
