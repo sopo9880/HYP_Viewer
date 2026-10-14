@@ -14,12 +14,15 @@ class HitomiGallery implements GalleryPageSource {
   final String workId;
   final String title;
   final List<Uri> pageUrls;
+  // A supported original image is used only when the preferred WebP fails.
+  final List<Uri?>? fallbackPageUrls;
   final http.Client _client;
 
   HitomiGallery({
     required this.workId,
     required this.title,
     required this.pageUrls,
+    this.fallbackPageUrls,
     required http.Client client,
   }) : _client = client;
 
@@ -35,12 +38,7 @@ class HitomiGallery implements GalleryPageSource {
     return 'page_' + (index + 1).toString().padLeft(5, '0') + '.' + extension;
   }
 
-  @override
-  Future<Uint8List> loadPage(int index) {
-    if (index < 0 || index >= pageUrls.length) {
-      throw RangeError.index(index, pageUrls);
-    }
-    final url = pageUrls[index];
+  Future<Uint8List> _loadImage(Uri url) {
     if (!RegExp(r'^(?:w|a)?[0-9]+\.gold-usergeneratedcontent\.net$')
         .hasMatch(url.host)) {
       throw const FormatException('허용되지 않은 이미지 서버야.');
@@ -51,6 +49,30 @@ class HitomiGallery implements GalleryPageSource {
       maxBytes: GalleryArchive.maxSingleImageBytes,
       headers: const {'Referer': 'https://hitomi.la/'},
     );
+  }
+
+  @override
+  Future<Uint8List> loadPage(int index) async {
+    if (index < 0 || index >= pageUrls.length) {
+      throw RangeError.index(index, pageUrls);
+    }
+    final primary = pageUrls[index];
+    try {
+      return await _loadImage(primary);
+    } catch (primaryError) {
+      final fallback = fallbackPageUrls != null &&
+              index < fallbackPageUrls!.length
+          ? fallbackPageUrls![index]
+          : null;
+      if (fallback == null || fallback == primary) rethrow;
+      try {
+        return await _loadImage(fallback);
+      } catch (fallbackError) {
+        throw FormatException(
+            '선호 이미지와 원본 이미지 요청이 모두 실패했어. '
+            '첫 요청: $primaryError / 원본 요청: $fallbackError');
+      }
+    }
   }
 }
 
@@ -87,16 +109,21 @@ class HitomiGalleryProvider {
     final ggScript = await _readScript(Uri.https(_host, '/gg.js'));
     final gg = _HitomiGg.fromScript(ggScript);
     final urls = <Uri>[];
+    final originalUrls = <Uri?>[];
     for (final item in files) {
       if (item is! Map) {
         throw const FormatException('이미지 파일 정보가 올바르지 않아.');
       }
-      urls.add(gg.urlFor(item));
+      final url = gg.urlFor(item);
+      final original = gg.originalUrlFor(item);
+      urls.add(url);
+      originalUrls.add(original == url ? null : original);
     }
     return HitomiGallery(
       workId: workId,
       title: decoded['title'] is String ? decoded['title'] as String : '',
       pageUrls: List.unmodifiable(urls),
+      fallbackPageUrls: List.unmodifiable(originalUrls),
       client: client,
     );
   }
@@ -166,7 +193,17 @@ class _HitomiGg {
     return _HitomiGg(offset, map, prefix);
   }
 
-  Uri urlFor(Map file) {
+  Uri? originalUrlFor(Map file) {
+    final name = file['name']?.toString().toLowerCase() ?? '';
+    final ext = name.split('.').last;
+    const supported = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
+    if (!supported.contains(ext)) {
+      return null;
+    }
+    return urlFor(file, forceOriginal: true);
+  }
+
+  Uri urlFor(Map file, {bool forceOriginal = false}) {
     final hash = file['hash']?.toString().toLowerCase() ?? '';
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(hash)) {
       throw const FormatException('이미지 해시 정보가 잘못됐어.');
@@ -183,16 +220,16 @@ class _HitomiGg {
     String dir;
     String ext;
     String hostPrefix;
-    if (hasWebp) {
-      dir = '/webp/';
+    if (hasWebp && !forceOriginal) {
+      dir = '/';
       ext = 'webp';
       hostPrefix = 'w';
     } else if (const {'jpg', 'jpeg', 'png', 'gif', 'webp'}.contains(originalExt)) {
       dir = '/';
       ext = originalExt;
       hostPrefix = '';
-    } else if (hasAvif) {
-      dir = '/avif/';
+    } else if (hasAvif && !forceOriginal) {
+      dir = '/';
       ext = 'avif';
       hostPrefix = 'a';
     } else {

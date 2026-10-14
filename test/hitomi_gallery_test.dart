@@ -42,12 +42,46 @@ void main() {
     expect(gallery.pageCount, 2);
     expect(gallery.pageUrls[0].host, 'w3.gold-usergeneratedcontent.net');
     expect(gallery.pageUrls[0].path,
-        '/webp/2026/$expectedGroup/$hash.webp');
+        '/2026/$expectedGroup/$hash.webp');
     expect(gallery.pageUrls[1].host, '3.gold-usergeneratedcontent.net');
     expect(gallery.pageUrls[1].path,
         '/2026/$expectedGroup/$hash.jpg');
     expect(await gallery.loadPage(0), [1, 2, 3, 4]);
     expect(requested.length, 3);
+    client.close();
+  });
+
+  test('falls back to a supported original image when WebP fails', () async {
+    final attempts = <Uri>[];
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/galleries/2711759.js')) {
+        return http.Response('var galleryinfo = ' + jsonEncode({
+          'id': 2711759, 'title': 'Fallback test',
+          'files': [{'hash': hash, 'name': 'page.jpg', 'haswebp': 1}],
+        }) + ';', 200);
+      }
+      if (request.url.path == '/gg.js') {
+        return http.Response('var o = 0; case $expectedGroup: o = 2; break; '
+            "var x = {b: '2026/'};", 200);
+      }
+      attempts.add(request.url);
+      expect(request.headers['referer'], 'https://hitomi.la/');
+      if (request.url.path.endsWith('.webp')) {
+        return http.Response('Not Found', 404);
+      }
+      return http.Response.bytes([0xff, 0xd8, 0xff, 0xd9], 200,
+          headers: {'content-type': 'image/jpeg'});
+    });
+    final gallery = await HitomiGalleryProvider(client).load(id);
+    expect(gallery.pageUrls.single.host, 'w3.gold-usergeneratedcontent.net');
+    expect(gallery.pageUrls.single.path, '/2026/$expectedGroup/$hash.webp');
+    expect(gallery.fallbackPageUrls?.single?.host,
+        '3.gold-usergeneratedcontent.net');
+    expect(await gallery.loadPage(0), [0xff, 0xd8, 0xff, 0xd9]);
+    expect(attempts.map((u) => u.path).toList(), [
+      '/2026/$expectedGroup/$hash.webp',
+      '/2026/$expectedGroup/$hash.jpg',
+    ]);
     client.close();
   });
 
