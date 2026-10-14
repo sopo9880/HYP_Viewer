@@ -277,13 +277,16 @@ class HypText extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Text(
-    HypI18n.t(context, data),
-    style: style,
-    textAlign: textAlign,
-    overflow: overflow,
-    maxLines: maxLines,
-    softWrap: softWrap,
-    textDirection: textDirection,
+  Widget build(BuildContext context) => ValueListenableBuilder<String>(
+    valueListenable: HypLanguage.selected,
+    builder: (context, language, _) => Text(
+      HypI18n.translate(data, language),
+      style: style,
+      textAlign: textAlign,
+      overflow: overflow,
+      maxLines: maxLines,
+      softWrap: softWrap,
+      textDirection: textDirection,
+    ),
   );
 }
