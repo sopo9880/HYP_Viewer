@@ -59,7 +59,7 @@ class _GalleryReaderState extends State<GalleryReader> {
   }
 
   void _retryPage(int index) {
-    setState(() => _imageCache.remove(index));
+    setState(() { _imageCache.remove(index); });
   }
 
   Widget _failedImage(int index, Object error) {
