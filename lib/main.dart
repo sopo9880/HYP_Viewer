@@ -14,6 +14,7 @@ import 'core/gallery.dart';
 import 'core/cover_store.dart';
 import 'core/reader_settings.dart';
 import 'core/reader_downloader.dart';
+import 'core/announcements.dart';
 import 'core/android_controls.dart';
 import 'core/hitomi_reader_link.dart';
 import 'core/hitomi_gallery.dart';
@@ -69,6 +70,7 @@ class _LibraryHomeState extends State<LibraryHome> {
   CancelDownload? galleryDownloadToken;
   GalleryTransfer? readerTransfer;
   bool isReaderTransferPaused = false;
+  Timer? _noticesTimer;
   String? downloadingGalleryKey;
   int downloadedGalleryPages = 0;
   int totalGalleryPages = 0;
@@ -93,13 +95,24 @@ class _LibraryHomeState extends State<LibraryHome> {
     _loadOnlineSource();
     _loadReaderSettings();
     _listenForSharedShorts();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _automaticUpdateCheck());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _automaticUpdateCheck();
+      if (Platform.isAndroid) _showSecurityNoticeOnce();
+    });
+    _noticesTimer = Timer.periodic(const Duration(minutes: 15), (_) {
+      if (mounted && readerSettings.receiveAnnouncements) {
+        _checkAnnouncements(silent: true);
+      }
+    });
   }
 
   Future<void> _loadReaderSettings() async {
     try {
       final result = await readerSettingsStorage.load();
       if (mounted) setState(() => readerSettings = result);
+      if (result.receiveAnnouncements) {
+        unawaited(_checkAnnouncements(silent: true));
+      }
     } catch (e) {
       _status('뷰어 설정 읽기 실패: ' + e.toString());
     }
@@ -109,6 +122,9 @@ class _LibraryHomeState extends State<LibraryHome> {
     try {
       await readerSettingsStorage.save(updated);
       if (mounted) setState(() => readerSettings = updated);
+      if (updated.receiveAnnouncements && !readerSettings.receiveAnnouncements) {
+        unawaited(_checkAnnouncements(silent: true));
+      }
     } catch (e) {
       _status('뷰어 설정 저장 실패: ' + e.toString());
     }
@@ -127,6 +143,110 @@ class _LibraryHomeState extends State<LibraryHome> {
     _libraryWrites = task.then<void>((_) {},
         onError: (Object _, StackTrace __) {});
     return task;
+  }
+
+  Future<File> _lastSeenNoticeFile() async {
+    final root = await getApplicationSupportDirectory();
+    await root.create(recursive: true);
+    return File(root.path + Platform.pathSeparator + 'announcements_last_seen.txt');
+  }
+
+  Future<void> _checkAnnouncements({bool silent = false}) async {
+    if (silent && !readerSettings.receiveAnnouncements) return;
+    final client = http.Client();
+    try {
+      final notices = await AnnouncementService(client).load();
+      if (notices.isEmpty || !mounted) {
+        if (!silent) _status('게시된 공지가 없어.');
+        return;
+      }
+      final file = await _lastSeenNoticeFile();
+      final latestId = notices.first.id;
+      final seen = await file.exists() ? (await file.readAsString()).trim() : '';
+      if (silent && seen == latestId) return;
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('HYP Viewer 관리자 공지'),
+          content: SizedBox(
+            width: 480,
+            height: 330,
+            child: ListView.separated(
+              itemCount: notices.length,
+              separatorBuilder: (_, __) => const Divider(),
+              itemBuilder: (_, index) {
+                final n = notices[index];
+                return ListTile(
+                  title: Text(n.title),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(n.message),
+                  ),
+                  isThreeLine: true,
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('확인'),
+            ),
+          ],
+        ),
+      );
+      await file.writeAsString(latestId, flush: true);
+    } catch (e) {
+      if (!silent) _status('관리자 공지 확인 실패: ' + e.toString());
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _showSecurityHelp() async {
+    if (!Platform.isAndroid || !mounted) return;
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('안드로이드 설치 보안 안내'),
+        content: const Text(
+          '삼성 갤럭시의 보안 위험 자동 차단 기능은 일부 APK 설치를 '
+          '막을 수 있어. 이는 기기를 보호하는 중요한 기능이야.\\n\\n'
+          '앱에서는 보안 차단을 자동 해제할 수 없어. '
+          '설치에 문제가 있다면 APK의 게시자, GitHub 릴리스 주소, '
+          'SHA-256 체크섬을 먼저 확인하고, '
+          '기기의 보안 설정은 직접 검토해줘. '
+          '보호 기능을 끄는 것은 권장하지 않아.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('알겠어')),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.settings),
+            label: const Text('보안 설정 확인'),
+          ),
+        ],
+      ),
+    );
+    if (open == true) {
+      final didOpen = await AndroidReaderControls.openSecuritySettings();
+      if (!didOpen) _status('이 기기에서는 보안 설정 화면을 열 수 없어.');
+    }
+  }
+
+  Future<void> _showSecurityNoticeOnce() async {
+    try {
+      final root = await getApplicationSupportDirectory();
+      final marker = File(root.path + Platform.pathSeparator +
+          'security_install_help_seen.txt');
+      if (await marker.exists()) return;
+      await marker.writeAsString('shown', flush: true);
+      if (mounted) await _showSecurityHelp();
+    } catch (_) {
+      // Security help is informational and never blocks launching.
+    }
   }
 
   Future<void> _loadOnlineSource() async {
@@ -916,6 +1036,7 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   @override
   void dispose() {
+    _noticesTimer?.cancel();
     for (final ctrl in [urlInput, commentInput, numberInput, titleInput, authorInput, apiKeyInput, onlineSourceInput]) {
       ctrl.dispose();
     }
