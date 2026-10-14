@@ -32,6 +32,22 @@ void main() {
         isTrue);
   });
 
+  test('legacy duplicate gallery records retain reading history when merged', () {
+    final older = WorkEntry.create(
+      workId: '2711759', videoId: 'AAAAAAAAAAA',
+    ).copyWith(currentPage: 20, favorite: true);
+    final newer = WorkEntry.create(
+      workId: '2711759', videoId: 'BBBBBBBBBBB',
+    ).copyWith(currentPage: 4);
+    final normalized = LibraryBackup.merge(
+      const LibraryBackup(works: [], collections: []),
+      LibraryBackup(works: [older, newer], collections: const []),
+    );
+    expect(normalized.works.length, 1);
+    expect(normalized.works.single.currentPage, 20);
+    expect(normalized.works.single.favorite, true);
+  });
+
   test('part 1 and part 2 codes on a single line remain distinct', () {
     final codes = NumberExtractor.extract(
       '1편 작품번호 2711759 / 2편 작품번호 2951072',
