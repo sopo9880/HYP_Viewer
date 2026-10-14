@@ -55,6 +55,8 @@ class HypDashboard extends StatefulWidget {
   final bool busy;
   final String message;
   final int navigationEpoch;
+  final int libraryNavigationEpoch;
+  final String appVersion;
   final bool downloadingUpdate;
   final double updateProgress;
   final String? downloadingGalleryKey;
@@ -64,6 +66,7 @@ class HypDashboard extends StatefulWidget {
   final VoidCallback onAnalyze;
   final Future<void> Function() onFetch;
   final Future<void> Function() onSaveWork;
+  final Future<void> Function(String code) onQuickAddNumber;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
   final Future<void> Function() onChooseHeroArtwork;
   final Future<void> Function() onClearHeroArtwork;
@@ -112,6 +115,8 @@ class HypDashboard extends StatefulWidget {
     required this.busy,
     required this.message,
     required this.navigationEpoch,
+    required this.libraryNavigationEpoch,
+    required this.appVersion,
     required this.downloadingUpdate,
     required this.updateProgress,
     required this.downloadingGalleryKey,
@@ -121,6 +126,7 @@ class HypDashboard extends StatefulWidget {
     required this.onAnalyze,
     required this.onFetch,
     required this.onSaveWork,
+    required this.onQuickAddNumber,
     required this.onSaveSelectedWorks,
     required this.onChooseHeroArtwork,
     required this.onClearHeroArtwork,
@@ -176,6 +182,10 @@ class _HypDashboardState extends State<HypDashboard> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.navigationEpoch != widget.navigationEpoch) {
       _page = HypPage.home;
+      _search.clear();
+    }
+    if (oldWidget.libraryNavigationEpoch != widget.libraryNavigationEpoch) {
+      _page = HypPage.library;
       _search.clear();
     }
     if (oldWidget.library.works.length != widget.library.works.length ||
@@ -358,7 +368,39 @@ class _HypDashboardState extends State<HypDashboard> {
                   ],
                 ),
               ),
-              child: _contents(),
+              child: Stack(children: [
+                Positioned.fill(child: _contents()),
+                if (widget.message.isNotEmpty)
+                  Positioned(
+                    top: 8, left: 12, right: 12,
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Material(
+                        key: const Key('viewport-notification'),
+                        color: HypColors.raised,
+                        elevation: 12,
+                        borderRadius: BorderRadius.circular(12),
+                        clipBehavior: Clip.antiAlias,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 5),
+                          child: Row(children: [
+                            const Icon(Icons.info_outline_rounded,
+                                color: HypColors.lightPurple, size: 19),
+                            const SizedBox(width: 10),
+                            Expanded(child: Text(widget.message, maxLines: 4,
+                                overflow: TextOverflow.ellipsis)),
+                            IconButton(
+                              tooltip: '알림 닫기',
+                              onPressed: widget.onDismissMessage,
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                            ),
+                          ]),
+                        ),
+                      ),
+                    ),
+                  ),
+              ]),
             ),
           ),
         ])),
@@ -584,28 +626,7 @@ class _HypDashboardState extends State<HypDashboard> {
     return ListView(
       key: ValueKey(_search.text.trim().isEmpty ? _page.name : 'search'),
       padding: const EdgeInsets.fromLTRB(22, 2, 22, 30),
-      children: [
-        if (widget.message.isNotEmpty) ...[
-          HypPanel(
-            color: HypColors.raised,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            child: Row(children: [
-              const Icon(Icons.info_outline_rounded,
-                color: HypColors.lightPurple, size: 19),
-              const SizedBox(width: 10),
-              Expanded(child: Text(widget.message, maxLines: 3,
-                overflow: TextOverflow.ellipsis)),
-              IconButton(
-                tooltip: '알림 닫기',
-                onPressed: widget.onDismissMessage,
-                icon: const Icon(Icons.close_rounded, size: 18),
-              ),
-            ]),
-          ),
-          const SizedBox(height: 14),
-        ],
-        pageContent,
-      ],
+      children: [pageContent],
     );
   }
 
@@ -631,6 +652,7 @@ class _HypDashboardState extends State<HypDashboard> {
         onFetch: widget.onFetch,
         onOpenYoutube: widget.onOpenShortsInput,
         onSave: widget.onSaveWork,
+        onQuickAddNumber: widget.onQuickAddNumber,
         onSaveSelectedWorks: widget.onSaveSelectedWorks,
       ),
       const SizedBox(height: 24),
@@ -935,6 +957,20 @@ class _HypDashboardState extends State<HypDashboard> {
           Material(
             color: Colors.transparent,
             child: SwitchListTile.adaptive(
+              key: const Key('open-after-save-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('서재 추가 후 작품 자동 열기'),
+              subtitle: const Text('기본값은 끔. 켜면 한 작품을 저장한 직후 뷰어를 열어. '
+                  '여러 작품을 한 번에 저장하면 서재로 이동해.'),
+              value: widget.readerSettings.openAfterSave,
+              onChanged: (v) => widget.onSaveReaderSettings(
+                  widget.readerSettings.copyWith(openAfterSave: v)),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Material(
+            color: Colors.transparent,
+            child: SwitchListTile.adaptive(
               key: const Key('reader-two-page-setting'),
               contentPadding: EdgeInsets.zero,
               title: const Text('2쪽 모아보기'),
@@ -1222,6 +1258,10 @@ class _HypDashboardState extends State<HypDashboard> {
           const SizedBox(height: 6),
           const Text('최신 0.x 업데이트 · GitHub Releases',
             style: TextStyle(color: HypColors.muted, fontSize: 12)),
+          const SizedBox(height: 9),
+          Text('현재 버전: ${widget.appVersion}',
+              key: const Key('app-version-label'),
+              style: const TextStyle(color: HypColors.muted, fontSize: 12)),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: widget.onCheckRelease,

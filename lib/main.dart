@@ -67,6 +67,8 @@ class _LibraryHomeState extends State<LibraryHome> {
   Future<void> _libraryWrites = Future<void>.value();
   final Set<String> _coverCaptures = <String>{};
   int navigationEpoch = 0;
+  int libraryNavigationEpoch = 0;
+  String appVersion = '—';
   final galleryStore = GalleryStore();
   final sourceSettings = OnlineSourceSettings();
   final onlineSourceInput = TextEditingController();
@@ -97,12 +99,25 @@ class _LibraryHomeState extends State<LibraryHome> {
     _load();
     _loadOnlineSource();
     _loadReaderSettings();
+    _loadVersionInfo();
     _loadHeroArtwork();
     _listenForSharedShorts();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _automaticUpdateCheck();
       if (Platform.isAndroid) _showSecurityNoticeOnce();
     });
+  }
+
+  Future<void> _loadVersionInfo() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() => appVersion =
+          'v${info.version} (build ${info.buildNumber})');
+      }
+    } catch (_) {
+      // Test hosts and unsupported platforms may not supply package metadata.
+    }
   }
 
   void _syncNoticesTimer() {
@@ -404,6 +419,17 @@ class _LibraryHomeState extends State<LibraryHome> {
   Future<void> _saveWork() =>
       _saveSelectedWorks([numberInput.text.trim()]);
 
+  Future<void> _quickAddNumber(String code) async {
+    // The top search field accepts either a Shorts URL or a gallery ID.
+    // A numeric entry must never be sent to YouTube as a video URL.
+    urlInput.text = code;
+    numberInput.text = code;
+    titleInput.clear();
+    authorInput.clear();
+    commentInput.clear();
+    await _saveSelectedWorks([code]);
+  }
+
   Future<void> _saveSelectedWorks(List<String> selectedCodes) async {
     if (busy) return;
     final codes = selectedCodes.map((code) => code.trim()).toSet().toList();
@@ -414,6 +440,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
     setState(() => busy = true);
     final client = http.Client();
+    WorkEntry? openAfterSave;
     try {
       final videoId = ShortsLink.videoId(urlInput.text) ?? '';
       final works = <WorkEntry>[];
@@ -445,6 +472,10 @@ class _LibraryHomeState extends State<LibraryHome> {
       }
       await _commitLibrary((latest) => LibraryBackup.merge(latest,
           LibraryBackup(works: works, collections: const [])));
+      if (mounted) setState(() => libraryNavigationEpoch++);
+      if (readerSettings.openAfterSave && works.length == 1) {
+        openAfterSave = works.single;
+      }
       if (readerSettings.autoCoverEnabled) {
         for (final work in works) {
           unawaited(_prepareAutomaticCover(work));
@@ -459,6 +490,14 @@ class _LibraryHomeState extends State<LibraryHome> {
     } finally {
       client.close();
       if (mounted) setState(() => busy = false);
+    }
+    if (openAfterSave != null && mounted) {
+      final entry = openAfterSave;
+      if (await galleryStore.exists(entry.workId)) {
+        await _openGallery(entry);
+      } else {
+        await _readOnline(entry);
+      }
     }
   }
 
@@ -1294,6 +1333,8 @@ class _LibraryHomeState extends State<LibraryHome> {
     busy: busy,
     message: message,
     navigationEpoch: navigationEpoch,
+    libraryNavigationEpoch: libraryNavigationEpoch,
+    appVersion: appVersion,
     downloadingUpdate: downloadingUpdate,
     updateProgress: updateProgress,
     downloadingGalleryKey: downloadingGalleryKey,
@@ -1303,6 +1344,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     onAnalyze: _analyze,
     onFetch: _fetch,
     onSaveWork: _saveWork,
+    onQuickAddNumber: _quickAddNumber,
     onSaveSelectedWorks: _saveSelectedWorks,
     onChooseHeroArtwork: _chooseHeroArtwork,
     onClearHeroArtwork: _clearHeroArtwork,

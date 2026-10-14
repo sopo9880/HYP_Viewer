@@ -18,6 +18,7 @@ class ShortsFinderPanel extends StatefulWidget {
   final Future<void> Function() onFetch;
   final Future<void> Function() onOpenYoutube;
   final Future<void> Function() onSave;
+  final Future<void> Function(String code)? onQuickAddNumber;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
 
   const ShortsFinderPanel({
@@ -34,6 +35,7 @@ class ShortsFinderPanel extends StatefulWidget {
     required this.onFetch,
     required this.onOpenYoutube,
     required this.onSave,
+    this.onQuickAddNumber,
     required this.onSaveSelectedWorks,
   });
 
@@ -45,6 +47,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
   bool _showDetails = false;
   bool _revealApiKey = false;
   final Set<String> _selectedCodes = <String>{};
+  final GlobalKey _quickCandidateAnchor = GlobalKey();
 
   @override
   void initState() {
@@ -66,16 +69,35 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
       if (widget.candidates.length <= 2) {
         _selectedCodes.addAll(widget.candidates.map((e) => e.code));
       }
-      if (widget.candidates.isNotEmpty) _showDetails = true;
+      if (widget.candidates.isNotEmpty) {
+        _showDetails = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final anchor = _quickCandidateAnchor.currentContext;
+          if (anchor != null && mounted) {
+            Scrollable.ensureVisible(anchor,
+              duration: const Duration(milliseconds: 180),
+              alignment: 0.20,
+              alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+          }
+        });
+      }
     }
   }
 
   void _search() {
     // A new Shorts URL must be fetched even if an older comment is present.
     // Manual extraction has its own button inside the details section.
-    if (widget.url.text.trim().isNotEmpty) {
+    final input = widget.url.text.trim();
+    final workNumber = RegExp(r'^\d{1,12}$');
+    if (workNumber.hasMatch(input) && widget.onQuickAddNumber != null) {
+      widget.onQuickAddNumber!(input);
+    } else if (input.isNotEmpty) {
       setState(() => _showDetails = true);
       widget.onFetch();
+    } else if (workNumber.hasMatch(widget.workId.text.trim()) &&
+        widget.comment.text.trim().isEmpty &&
+        widget.onQuickAddNumber != null) {
+      widget.onQuickAddNumber!(widget.workId.text.trim());
     } else if (widget.comment.text.trim().isNotEmpty) {
       widget.onAnalyze();
     } else {
@@ -142,7 +164,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _search(),
               decoration: const InputDecoration(
-                hintText: 'YouTube Shorts 링크 붙여넣기',
+                hintText: 'YouTube Shorts 링크 또는 작품 번호 입력',
                 prefixIcon: Icon(Icons.link_rounded, color: HypColors.muted),
               ),
             );
@@ -200,6 +222,43 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               ],
             );
           }),
+          if (widget.candidates.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              key: _quickCandidateAnchor,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('발견된 번호 후보: ${widget.candidates.length}개',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 7),
+                  SizedBox(
+                    height: 42,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: widget.candidates.take(20).map((candidate) =>
+                        Padding(
+                          padding: const EdgeInsets.only(right: 7),
+                          child: ActionChip(
+                            key: Key('shorts-quick-candidate-${candidate.code}'),
+                            avatar: const Icon(Icons.tag, size: 15),
+                            label: Text('#${candidate.code}'),
+                            onPressed: () => setState(() {
+                              widget.workId.text = candidate.code;
+                              _selectedCodes.add(candidate.code);
+                              _showDetails = true;
+                            }),
+                          ),
+                        ),
+                      ).toList(),
+                    ),
+                  ),
+                  const Text('후보를 누르면 번호가 입력돼. 아래에서 확인 후 저장해줘.',
+                      style: TextStyle(fontSize: 12, color: HypColors.muted)),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           const Text(
             '기본 조회는 API 키 없이 YouTube 공개 페이지에서 댓글을 읽어. '
