@@ -13,14 +13,15 @@ class CoverStore {
   static bool _valid(String id) => RegExp(r'^\d{1,12}$').hasMatch(id);
 
   Future<File> _imageFile(String workId, String mode, int page) async {
-    if (!_valid(workId) || !{'auto', 'page'}.contains(mode) ||
+    if (!_valid(workId) || !{'auto', 'page', 'custom'}.contains(mode) ||
         page < 1 || page > 1000000) {
       throw const FormatException('표지 파일 경로가 유효하지 않아.');
     }
     final root = baseDirectory ?? await getApplicationSupportDirectory();
     final dir = Directory(root.path + Platform.pathSeparator + 'covers');
     await dir.create(recursive: true);
-    final suffix = mode == 'auto' ? 'auto' : 'page_' + page.toString();
+    final suffix = mode == 'auto' ? 'auto' :
+        mode == 'custom' ? 'custom' : 'page_' + page.toString();
     return File(dir.path + Platform.pathSeparator + workId + '_' + suffix + '.png');
   }
 

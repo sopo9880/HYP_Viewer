@@ -13,10 +13,14 @@ import 'core/export.dart';
 import 'core/gallery.dart';
 import 'core/cover_store.dart';
 import 'core/reader_settings.dart';
+import 'core/reader_downloader.dart';
+import 'core/announcements.dart';
+import 'core/android_controls.dart';
 import 'core/hitomi_reader_link.dart';
 import 'core/hitomi_gallery.dart';
 import 'ui/gallery_reader.dart';
 import 'ui/cover_picker.dart';
+import 'ui/cover_cropper.dart';
 import 'ui/hyp_dashboard.dart';
 import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
@@ -64,6 +68,9 @@ class _LibraryHomeState extends State<LibraryHome> {
   final sourceSettings = OnlineSourceSettings();
   final onlineSourceInput = TextEditingController();
   CancelDownload? galleryDownloadToken;
+  GalleryTransfer? readerTransfer;
+  bool isReaderTransferPaused = false;
+  Timer? _noticesTimer;
   String? downloadingGalleryKey;
   int downloadedGalleryPages = 0;
   int totalGalleryPages = 0;
@@ -88,22 +95,45 @@ class _LibraryHomeState extends State<LibraryHome> {
     _loadOnlineSource();
     _loadReaderSettings();
     _listenForSharedShorts();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _automaticUpdateCheck());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _automaticUpdateCheck();
+      if (Platform.isAndroid) _showSecurityNoticeOnce();
+    });
+  }
+
+  void _syncNoticesTimer() {
+    _noticesTimer?.cancel();
+    _noticesTimer = null;
+    if (!readerSettings.receiveAnnouncements) return;
+    _noticesTimer = Timer.periodic(const Duration(minutes: 15), (_) {
+      if (mounted && readerSettings.receiveAnnouncements) {
+        _checkAnnouncements(silent: true);
+      }
+    });
   }
 
   Future<void> _loadReaderSettings() async {
     try {
       final result = await readerSettingsStorage.load();
       if (mounted) setState(() => readerSettings = result);
+      _syncNoticesTimer();
+      if (result.receiveAnnouncements) {
+        unawaited(_checkAnnouncements(silent: true));
+      }
     } catch (e) {
       _status('뷰어 설정 읽기 실패: ' + e.toString());
     }
   }
 
   Future<void> _saveReaderSettings(ReaderSettings updated) async {
+    final wasSubscribed = readerSettings.receiveAnnouncements;
     try {
       await readerSettingsStorage.save(updated);
       if (mounted) setState(() => readerSettings = updated);
+      _syncNoticesTimer();
+      if (updated.receiveAnnouncements && !wasSubscribed) {
+        unawaited(_checkAnnouncements(silent: true));
+      }
     } catch (e) {
       _status('뷰어 설정 저장 실패: ' + e.toString());
     }
@@ -122,6 +152,111 @@ class _LibraryHomeState extends State<LibraryHome> {
     _libraryWrites = task.then<void>((_) {},
         onError: (Object _, StackTrace __) {});
     return task;
+  }
+
+  Future<File> _lastSeenNoticeFile() async {
+    final root = await getApplicationSupportDirectory();
+    await root.create(recursive: true);
+    return File(root.path + Platform.pathSeparator + 'announcements_last_seen.txt');
+  }
+
+  Future<void> _checkAnnouncements({bool silent = false}) async {
+    if (silent && !readerSettings.receiveAnnouncements) return;
+    final client = http.Client();
+    try {
+      final notices = await AnnouncementService(client).load();
+      if (notices.isEmpty || !mounted) {
+        if (!silent) _status('게시된 공지가 없어.');
+        return;
+      }
+      final file = await _lastSeenNoticeFile();
+      final latestId = notices.first.id;
+      final seen = await file.exists() ? (await file.readAsString()).trim() : '';
+      if (silent && seen == latestId) return;
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('HYP Viewer 관리자 공지'),
+          content: SizedBox(
+            width: 480,
+            height: 330,
+            child: ListView.separated(
+              itemCount: notices.length,
+              separatorBuilder: (_, __) => const Divider(),
+              itemBuilder: (_, index) {
+                final n = notices[index];
+                return ListTile(
+                  title: Text(n.title),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(n.message),
+                  ),
+                  isThreeLine: true,
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('확인'),
+            ),
+          ],
+        ),
+      );
+      await file.writeAsString(latestId, flush: true);
+    } catch (e) {
+      if (!silent) _status('관리자 공지 확인 실패: ' + e.toString());
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _showSecurityHelp() async {
+    if (!mounted) return;
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('안드로이드 설치 보안 안내'),
+        content: const Text(
+          '삼성 갤럭시의 보안 위험 자동 차단 기능은 일부 APK 설치를 '
+          '막을 수 있어. 이는 기기를 보호하는 중요한 기능이야.\\n\\n'
+          '앱에서는 보안 차단을 자동 해제할 수 없어. '
+          '설치에 문제가 있다면 APK의 게시자, GitHub 릴리스 주소, '
+          'SHA-256 체크섬을 먼저 확인하고, '
+          '기기의 보안 설정은 직접 검토해줘. '
+          '보호 기능을 끄는 것은 권장하지 않아.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('알겠어')),
+          if (Platform.isAndroid)
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.settings),
+              label: const Text('보안 설정 확인'),
+            ),
+        ],
+      ),
+    );
+    if (open == true) {
+      final didOpen = await AndroidReaderControls.openSecuritySettings();
+      if (!didOpen) _status('이 기기에서는 보안 설정 화면을 열 수 없어.');
+    }
+  }
+
+  Future<void> _showSecurityNoticeOnce() async {
+    try {
+      final root = await getApplicationSupportDirectory();
+      final marker = File(root.path + Platform.pathSeparator +
+          'security_install_help_seen.txt');
+      if (await marker.exists()) return;
+      await marker.writeAsString('shown', flush: true);
+      if (mounted) await _showSecurityHelp();
+    } catch (_) {
+      // Security help is informational and never blocks launching.
+    }
   }
 
   Future<void> _loadOnlineSource() async {
@@ -227,11 +362,13 @@ class _LibraryHomeState extends State<LibraryHome> {
         title: titleInput.text,
         author: authorInput.text,
         originalComment: commentInput.text,
-      );
+      ).copyWith(coverMode: readerSettings.autoCoverEnabled ? 'auto' : 'preset');
       await _commitLibrary((latest) => LibraryBackup.merge(latest,
           LibraryBackup(works: [work], collections: const [])));
       // Start preparing the first-page thumbnail, without blocking Save.
-      unawaited(_prepareAutomaticCover(work));
+      if (readerSettings.autoCoverEnabled) {
+        unawaited(_prepareAutomaticCover(work));
+      }
       _status('서재에 저장했어.');
     } catch (e) {
       _status('저장 실패: ' + e.toString());
@@ -350,7 +487,7 @@ class _LibraryHomeState extends State<LibraryHome> {
   }
 
   Future<void> _prepareAutomaticCover(WorkEntry work) async {
-    if (work.coverMode != 'auto') return;
+    if (!readerSettings.autoCoverEnabled || work.coverMode != 'auto') return;
     final client = http.Client();
     try {
       if (await coverStore.exists(work.workId)) return;
@@ -369,7 +506,8 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   Future<void> _captureAutomaticCover(
       WorkEntry work, int page, Uint8List bytes) async {
-    if (page != 1 || work.coverMode != 'auto' ||
+    if (!readerSettings.autoCoverEnabled ||
+        page != 1 || work.coverMode != 'auto' ||
         !_coverCaptures.add(work.workId)) return;
     try {
       if (!await coverStore.exists(work.workId)) {
@@ -383,22 +521,48 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
-  Future<void> _usePageAsCover(
-      WorkEntry work, int page, Uint8List bytes) async {
-    await coverStore.save(work.workId, bytes, mode: 'page', page: page);
-    await _updateWork(work.copyWith(coverMode: 'page', coverPage: page));
+  Future<void> _saveCroppedCover(
+      WorkEntry work, Uint8List source, {int page = 1}) async {
+    if (!mounted) return;
+    final cropped = await showCoverCropper(context, source);
+    if (cropped == null || !mounted) return;
+    await coverStore.save(work.workId, cropped, mode: 'custom');
+    await _updateWork(work.copyWith(coverMode: 'custom', coverPage: page));
     if (mounted) {
       setState(() => coverEpoch++);
-      _status('작품 ' + page.toString() + '페이지를 서재 표지로 설정했어.');
+      _status('보이는 영역을 작품 표지로 저장했어.');
+    }
+  }
+
+  Future<void> _usePageAsCover(
+      WorkEntry work, int page, Uint8List bytes) async {
+    try {
+      await _saveCroppedCover(work, bytes, page: page);
+    } catch (e) {
+      _status('표지 변경 실패: ' + e.toString());
     }
   }
 
   Future<void> _chooseCover(WorkEntry work) async {
     final choice = await showCoverPicker(context, work);
     if (choice == null || !mounted) return;
-    final mode = choice.mode;
     try {
-      if (mode == 'page') {
+      if (choice.mode == 'upload') {
+        final picked = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'],
+          withData: true,
+        );
+        if (picked == null || picked.files.isEmpty) return;
+        final chosen = picked.files.single;
+        if (chosen.size > GalleryArchive.maxSingleImageBytes) {
+          throw const FormatException('이미지 파일은 최대 35MB까지 지원해.');
+        }
+        final bytes = chosen.bytes ??
+            (chosen.path != null ? await File(chosen.path!).readAsBytes() : null);
+        if (bytes == null) throw const FormatException('선택한 이미지를 읽지 못했어.');
+        await _saveCroppedCover(work, bytes);
+      } else if (choice.mode == 'page') {
         final client = http.Client();
         try {
           final GalleryPageSource gallery =
@@ -410,30 +574,20 @@ class _LibraryHomeState extends State<LibraryHome> {
                 '페이지 중에서 선택해야 해.');
           }
           final bytes = await gallery.loadPage(choice.page - 1);
-          await _usePageAsCover(work, choice.page, bytes);
+          await _saveCroppedCover(work, bytes, page: choice.page);
         } finally {
           client.close();
         }
       } else {
         await _updateWork(work.copyWith(
-          coverMode: mode, coverPreset: choice.preset,
+          coverMode: choice.mode,
+          coverPreset: choice.preset,
           coverPage: choice.page,
         ));
         if (mounted) setState(() => coverEpoch++);
-        if (mode == 'auto' && !await coverStore.exists(work.workId)) {
-          final client = http.Client();
-          try {
-            final GalleryPageSource gallery =
-                await galleryStore.exists(work.workId)
-                    ? await galleryStore.read(work.workId)
-                    : await HitomiGalleryProvider(client).load(work.workId);
-            await coverStore.save(work.workId, await gallery.loadPage(0));
-            if (mounted) setState(() => coverEpoch++);
-          } catch (_) {
-            _status('자동 표지를 선택했어. 첫 페이지를 열면 미리보기를 생성할게.');
-          } finally {
-            client.close();
-          }
+        if (choice.mode == 'auto' && readerSettings.autoCoverEnabled &&
+            !await coverStore.exists(work.workId)) {
+          unawaited(_prepareAutomaticCover(work));
         }
       }
     } catch (e) {
@@ -461,6 +615,7 @@ class _LibraryHomeState extends State<LibraryHome> {
           archive: remote,
           onPageChanged: (page) { _touchRead(work, page: page); },
           onOpenInBrowser: (page) => _openWebReader(work, page: page),
+          onDownloadOffline: () => _downloadOnline(work),
           settings: readerSettings,
           onPageLoaded: (page, bytes) {
             unawaited(_captureAutomaticCover(work, page, bytes));
@@ -533,6 +688,135 @@ class _LibraryHomeState extends State<LibraryHome> {
   }
 
   Future<void> _downloadOnline(WorkEntry work) async {
+    if (galleryDownloadToken != null) {
+      _status('이미 진행 중인 다운로드가 있어. 먼저 완료하거나 취소해줘.');
+      return;
+    }
+    final client = http.Client();
+    GalleryTransfer? transfer;
+    try {
+      final remote = await HitomiGalleryProvider(client).load(work.workId);
+      if (!mounted) return;
+      final existing = await galleryStore.exists(work.workId);
+      var confirmedRights = false;
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => StatefulBuilder(
+          builder: (context, update) => AlertDialog(
+            title: const Text('온라인 작품을 오프라인으로 저장'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(remote.pageCount.toString() + '장의 이미지를 CBZ로 저장해. ' +
+                    (existing ? '기존 오프라인 파일은 완성 후 교체돼.' :
+                        '완료하면 네트워크 없이도 읽을 수 있어.')),
+                const SizedBox(height: 10),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('이 콘텐츠를 저장할 권한이 있어'),
+                  value: confirmedRights,
+                  onChanged: (v) =>
+                      update(() => confirmedRights = v == true),
+                ),
+                const Text('다운로드는 작품별로 직접 승인해야 해. '
+                    '사이트가 접근을 제한하면 우회하지 않고 실패해.',
+                    style: TextStyle(fontSize: 12)),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog, false),
+                  child: const Text('취소')),
+              FilledButton(
+                onPressed: confirmedRights
+                    ? () => Navigator.pop(dialog, true) : null,
+                child: const Text('다운로드'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (accepted != true || !mounted) return;
+      transfer = GalleryTransfer();
+      setState(() {
+        galleryDownloadToken = transfer;
+        readerTransfer = transfer;
+        downloadingGalleryKey = work.key;
+        downloadedGalleryPages = 0;
+        downloadedGalleryBytes = 0;
+        totalGalleryPages = remote.pageCount;
+        isReaderTransferPaused = false;
+      });
+      final downloaded = await ReaderGalleryDownloader(galleryStore).download(
+        work.workId, remote,
+        transfer: transfer,
+        onProgress: (completed, total, bytes) {
+          if (mounted) {
+            setState(() {
+              downloadedGalleryPages = completed;
+              totalGalleryPages = total;
+              downloadedGalleryBytes = bytes;
+            });
+          }
+        },
+      );
+      if (mounted) setState(() => coverEpoch++);
+      _status('오프라인 저장 완료! ' +
+          downloaded.pageCount.toString() + '페이지를 인터넷 없이 읽을 수 있어.');
+    } on DownloadCancelled {
+      _status('다운로드가 취소됐어. 기존 오프라인 파일은 유지했어.');
+    } catch (e) {
+      _status('오프라인 저장 실패: ' + e.toString());
+    } finally {
+      client.close();
+      if (mounted && transfer != null) {
+        setState(() {
+          galleryDownloadToken = null;
+          readerTransfer = null;
+          downloadingGalleryKey = null;
+          isReaderTransferPaused = false;
+        });
+      }
+    }
+  }
+
+  void _pauseOrResumeReaderDownload() {
+    final active = readerTransfer;
+    if (active == null) return;
+    if (active.isPaused) {
+      active.resume();
+    } else {
+      active.pause();
+    }
+    if (mounted) setState(() => isReaderTransferPaused = active.isPaused);
+  }
+
+  Future<void> _deleteOffline(WorkEntry work) async {
+    if (!await galleryStore.exists(work.workId) || !mounted) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('오프라인 파일 삭제'),
+        content: const Text('CBZ 이미지만 삭제할까? '
+            '서재 기록·즐겨찾기·표지는 그대로 유지돼.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('취소')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('파일 삭제')),
+        ],
+      ),
+    );
+    if (approved != true) return;
+    try {
+      await galleryStore.delete(work.workId);
+      if (mounted) setState(() => coverEpoch++);
+      _status('오프라인 이미지를 삭제했어. 서재 기록은 유지했어.');
+    } catch (e) {
+      _status('오프라인 파일 삭제 실패: ' + e.toString());
+    }
+  }
+
+  Future<void> _downloadJsonSource(WorkEntry work) async {
     if (galleryDownloadToken != null) {
       _status('이미 다른 다운로드가 실행 중이야.');
       return;
@@ -763,6 +1047,7 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   @override
   void dispose() {
+    _noticesTimer?.cancel();
     for (final ctrl in [urlInput, commentInput, numberInput, titleInput, authorInput, apiKeyInput, onlineSourceInput]) {
       ctrl.dispose();
     }
@@ -801,10 +1086,17 @@ class _LibraryHomeState extends State<LibraryHome> {
     onExportExcel: () => _export(true),
     onImportJson: _import,
     onCheckRelease: () => _checkRelease(),
+    onCheckAnnouncements: () => _checkAnnouncements(),
+    onSecurityHelp: _showSecurityHelp,
     onOpenGallery: (work) => _openGallery(work),
     onReadOnline: _readOnline,
     onReadWebPage: _chooseWebPage,
     onDownloadOnline: _downloadOnline,
+    onDownloadJsonSource: _downloadJsonSource,
+    onDeleteOffline: _deleteOffline,
+    onToggleDownloadPause: _pauseOrResumeReaderDownload,
+    downloadPaused: isReaderTransferPaused,
+    downloadCanPause: readerTransfer != null,
     onImportGallery: _importGallery,
     onUpdateWork: _updateWork,
     onChooseCover: _chooseCover,

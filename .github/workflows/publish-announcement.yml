@@ -1,0 +1,46 @@
+name: Publish administrator notice
+
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: '공지 제목 (최대 120자)'
+        required: true
+        type: string
+      message:
+        description: '공지 본문 (최대 2000자)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hyp-announcements
+  cancel-in-progress: false
+
+jobs:
+  broadcast:
+    name: Publish to app-announcements branch (in-app, not background push)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Stage validated publishing script from main
+        run: cp scripts/publish_announcement.py /tmp/hyp_publish_announcement.py
+      - name: Checkout separate feed branch without publishing a release
+        run: git checkout app-announcements
+      - name: Validate and write notice
+        env:
+          NOTICE_TITLE: ${{ inputs.title }}
+          NOTICE_MESSAGE: ${{ inputs.message }}
+        run: python3 /tmp/hyp_publish_announcement.py
+      - name: Commit notice using repository author permissions
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add notices/feed.json
+          git commit -m "notice: publish in-app announcement"
+          git push origin app-announcements

@@ -68,10 +68,17 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function() onExportExcel;
   final Future<void> Function() onImportJson;
   final Future<void> Function() onCheckRelease;
+  final Future<void> Function() onCheckAnnouncements;
+  final Future<void> Function() onSecurityHelp;
   final Future<void> Function(WorkEntry) onOpenGallery;
   final Future<void> Function(WorkEntry) onReadOnline;
   final Future<void> Function(WorkEntry) onReadWebPage;
   final Future<void> Function(WorkEntry) onDownloadOnline;
+  final Future<void> Function(WorkEntry) onDownloadJsonSource;
+  final Future<void> Function(WorkEntry) onDeleteOffline;
+  final VoidCallback onToggleDownloadPause;
+  final bool downloadPaused;
+  final bool downloadCanPause;
   final Future<void> Function(WorkEntry) onImportGallery;
   final Future<void> Function(WorkEntry) onUpdateWork;
   final Future<void> Function(WorkEntry) onChooseCover;
@@ -113,10 +120,17 @@ class HypDashboard extends StatefulWidget {
     required this.onExportExcel,
     required this.onImportJson,
     required this.onCheckRelease,
+    required this.onCheckAnnouncements,
+    required this.onSecurityHelp,
     required this.onOpenGallery,
     required this.onReadOnline,
     required this.onReadWebPage,
     required this.onDownloadOnline,
+    required this.onDownloadJsonSource,
+    required this.onDeleteOffline,
+    required this.onToggleDownloadPause,
+    required this.downloadPaused,
+    required this.downloadCanPause,
     required this.onImportGallery,
     required this.onUpdateWork,
     required this.onChooseCover,
@@ -297,8 +311,8 @@ class _HypDashboardState extends State<HypDashboard> {
         title: const Text('HYP Viewer'),
         actions: [
           IconButton(
-            tooltip: '업데이트 확인',
-            onPressed: widget.onCheckRelease,
+            tooltip: '관리자 공지 확인',
+            onPressed: widget.onCheckAnnouncements,
             icon: const Icon(Icons.notifications_outlined),
           ),
           PopupMenuButton<String>(
@@ -476,8 +490,10 @@ class _HypDashboardState extends State<HypDashboard> {
       _toolIcon(Icons.table_chart_outlined, 'Excel 내보내기',
           widget.onExportExcel),
       const SizedBox(width: 8),
-      _toolIcon(Icons.notifications_outlined, '업데이트 확인',
-          widget.onCheckRelease),
+      _toolIcon(Icons.notifications_outlined, '관리자 공지',
+          widget.onCheckAnnouncements),
+      const SizedBox(width: 8),
+      _toolIcon(Icons.system_update_alt, '앱 업데이트', widget.onCheckRelease),
       const SizedBox(width: 8),
       PopupMenuButton<String>(
         tooltip: '추가 메뉴',
@@ -693,6 +709,12 @@ class _HypDashboardState extends State<HypDashboard> {
     } else if (action == 'download') {
       await widget.onDownloadOnline(work);
       await _refreshOffline();
+    } else if (action == 'download_json') {
+      await widget.onDownloadJsonSource(work);
+      await _refreshOffline();
+    } else if (action == 'delete_offline') {
+      await widget.onDeleteOffline(work);
+      await _refreshOffline();
     } else if (action == 'import') {
       await widget.onImportGallery(work);
       await _refreshOffline();
@@ -735,6 +757,12 @@ class _HypDashboardState extends State<HypDashboard> {
                 (widget.downloadedGalleryBytes / 1048576).toStringAsFixed(1) +
                 ' MB',
               )),
+              if (widget.downloadCanPause)
+                TextButton.icon(
+                  onPressed: widget.onToggleDownloadPause,
+                  icon: Icon(widget.downloadPaused ? Icons.play_arrow : Icons.pause),
+                  label: Text(widget.downloadPaused ? '계속' : '일시정지'),
+                ),
               TextButton.icon(
                 onPressed: widget.onCancelGalleryDownload,
                 icon: const Icon(Icons.close),
@@ -751,6 +779,63 @@ class _HypDashboardState extends State<HypDashboard> {
       ),
     ],
   );
+
+  Future<void> _chooseCoverFromSettings() async {
+    if (widget.library.works.isEmpty) return;
+    final search = TextEditingController();
+    WorkEntry? selected;
+    try {
+      selected = await showDialog<WorkEntry>(
+        context: context,
+        builder: (_) => StatefulBuilder(builder: (ctx, refresh) {
+          final term = search.text.trim().toLowerCase();
+          final filtered = widget.library.works.where((work) =>
+            work.workId.contains(term) ||
+            work.title.toLowerCase().contains(term)).toList();
+          return AlertDialog(
+            title: const Text('표지를 바꿀 작품 선택'),
+            content: SizedBox(
+              width: 500,
+              height: 420,
+              child: Column(children: [
+                TextField(
+                  key: const Key('cover-work-search'),
+                  controller: search,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: '작품 번호 또는 제목',
+                  ),
+                  onChanged: (_) => refresh(() {}),
+                ),
+                const SizedBox(height: 10),
+                Expanded(child: ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (ctx, index) {
+                    final work = filtered[index];
+                    return ListTile(
+                      title: Text(work.title.isEmpty ? '작품 ' + work.workId : work.title),
+                      subtitle: Text('번호 ' + work.workId),
+                      onTap: () => Navigator.pop(ctx, work),
+                    );
+                  },
+                )),
+              ]),
+            ),
+            actions: [TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('취소'),
+            )],
+          );
+        }),
+      );
+    } finally {
+      search.dispose();
+    }
+    if (selected != null) {
+      await widget.onChooseCover(selected);
+      await _refreshOffline();
+    }
+  }
 
   Widget _settingsContent() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -818,6 +903,100 @@ class _HypDashboardState extends State<HypDashboard> {
             '키보드(뷰어): ← / →, PageUp / PageDown, Space, Home / End, '
             'Esc(닫기). 서재의 작품 메뉴에서 표지 선택 가능.',
             style: TextStyle(fontSize: 12, color: HypColors.muted),
+          ),
+        ],
+      )),
+      const SizedBox(height: 10),
+      HypPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('표지 자동 설정 및 편집', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Material(color: Colors.transparent,
+            child: SwitchListTile.adaptive(
+              key: const Key('automatic-cover-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('새 작품의 첫 페이지를 자동 표지로 사용'),
+              subtitle: const Text('끄면 새 작품은 기본 디자인 표지로 시작해. '
+                  '기존에 직접 지정한 표지는 바뀌지 않아.'),
+              value: widget.readerSettings.autoCoverEnabled,
+              onChanged: (v) => widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(autoCoverEnabled: v)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const Key('settings-cover-manager'),
+            icon: const Icon(Icons.photo_library_outlined),
+            onPressed: _chooseCoverFromSettings,
+            label: const Text('서재 작품 표지 편집 · 이미지 업로드 및 자르기'),
+          ),
+          const SizedBox(height: 8),
+          const Text('이미지를 선택하거나 작품 페이지를 불러온 뒤, '
+              '미리보기 영역에서 드래그·확대·축소하여 표지를 만들 수 있어.',
+              style: TextStyle(fontSize: 12, color: HypColors.muted)),
+        ],
+      )),
+      const SizedBox(height: 13),
+      HypPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Android 뷰어 동작', style: Theme.of(context).textTheme.titleMedium),
+          Material(color: Colors.transparent,
+            child: SwitchListTile.adaptive(
+              key: const Key('volume-keys-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('볼륨키로 페이지 넘기기'),
+              subtitle: const Text('뷰어가 열려 있을 때 볼륨+는 이전, '
+                  '볼륨−는 다음 페이지. 소리 조절은 일시적으로 대신 사용돼.'),
+              value: widget.readerSettings.volumeKeyNavigation,
+              onChanged: (v) => widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(volumeKeyNavigation: v)),
+            ),
+          ),
+          Material(color: Colors.transparent,
+            child: SwitchListTile.adaptive(
+              key: const Key('landscape-spread-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('2쪽 보기에서 가로 화면 고정'),
+              subtitle: const Text('Android에서 2쪽 모아보기일 때만 가로 방향으로 열어. '
+                  '끄면 휴대폰을 돌려 자유롭게 회전할 수 있어.'),
+              value: widget.readerSettings.forceLandscapeForSpreads,
+              onChanged: (v) => widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(forceLandscapeForSpreads: v)),
+            ),
+          ),
+        ],
+      )),
+      const SizedBox(height: 13),
+      HypPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('관리자 공지', style: Theme.of(context).textTheme.titleMedium),
+          Material(color: Colors.transparent,
+            child: SwitchListTile.adaptive(
+              key: const Key('announcements-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('관리자 공지 수신 (동의)'),
+              subtitle: const Text('앱 실행 중이나 재실행 시 공개 공지를 확인해. '
+                  '앱을 종료한 상태의 시스템 푸시 알림은 아직 지원하지 않아.'),
+              value: widget.readerSettings.receiveAnnouncements,
+              onChanged: (v) => widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(receiveAnnouncements: v)),
+            ),
+          ),
+          OutlinedButton.icon(
+            key: const Key('announcements-open'),
+            onPressed: widget.onCheckAnnouncements,
+            icon: const Icon(Icons.campaign_outlined),
+            label: const Text('공지 목록 확인'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const Key('android-security-help'),
+            onPressed: widget.onSecurityHelp,
+            icon: const Icon(Icons.security),
+            label: const Text('Android 설치 및 보안 위험 자동 차단 안내'),
           ),
         ],
       )),

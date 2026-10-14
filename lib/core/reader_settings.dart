@@ -9,11 +9,19 @@ class ReaderSettings {
   final String nextDirection; // left or right
   final bool twoPageSpread;
   final int preloadPages;
+  final bool autoCoverEnabled;
+  final bool volumeKeyNavigation;
+  final bool forceLandscapeForSpreads;
+  final bool receiveAnnouncements;
 
   const ReaderSettings({
     this.nextDirection = 'left',
     this.twoPageSpread = false,
     this.preloadPages = 2,
+    this.autoCoverEnabled = false,
+    this.volumeKeyNavigation = false,
+    this.forceLandscapeForSpreads = false,
+    this.receiveAnnouncements = false,
   });
 
   bool get reverse => nextDirection == 'right';
@@ -22,22 +30,38 @@ class ReaderSettings {
     String? nextDirection,
     bool? twoPageSpread,
     int? preloadPages,
+    bool? autoCoverEnabled,
+    bool? volumeKeyNavigation,
+    bool? forceLandscapeForSpreads,
+    bool? receiveAnnouncements,
   }) => ReaderSettings(
     nextDirection: nextDirection ?? this.nextDirection,
     twoPageSpread: twoPageSpread ?? this.twoPageSpread,
     preloadPages: preloadPages ?? this.preloadPages,
+    autoCoverEnabled: autoCoverEnabled ?? this.autoCoverEnabled,
+    volumeKeyNavigation: volumeKeyNavigation ?? this.volumeKeyNavigation,
+    forceLandscapeForSpreads: forceLandscapeForSpreads ?? this.forceLandscapeForSpreads,
+    receiveAnnouncements: receiveAnnouncements ?? this.receiveAnnouncements,
   );
 
   Map<String, Object> toJson() => {
     'nextDirection': nextDirection,
     'twoPageSpread': twoPageSpread,
     'preloadPages': preloadPages,
+    'autoCoverEnabled': autoCoverEnabled,
+    'volumeKeyNavigation': volumeKeyNavigation,
+    'forceLandscapeForSpreads': forceLandscapeForSpreads,
+    'receiveAnnouncements': receiveAnnouncements,
   };
 
   factory ReaderSettings.fromJson(Map<String, dynamic> data) =>
       ReaderSettings(
         nextDirection: data['nextDirection'] == 'right' ? 'right' : 'left',
         twoPageSpread: data['twoPageSpread'] == true,
+        autoCoverEnabled: data['autoCoverEnabled'] == true,
+        volumeKeyNavigation: data['volumeKeyNavigation'] == true,
+        forceLandscapeForSpreads: data['forceLandscapeForSpreads'] == true,
+        receiveAnnouncements: data['receiveAnnouncements'] == true,
         preloadPages: data['preloadPages'] is num
             ? (data['preloadPages'] as num).toInt().clamp(0, 3).toInt()
             : 2,
