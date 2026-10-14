@@ -220,6 +220,9 @@ class CandidateEditorState extends State<CandidateEditor> {
                 LengthLimitingTextInputFormatter(9)],
               onChanged: (_) => setState(() {
                 slot.touched = true;
+                // An explicit edit opts this candidate back into selection.
+                // The user may still uncheck it before saving.
+                slot.selected = true;
                 slot.result = null;
                 slot.checkedCode = '';
               }),
