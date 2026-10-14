@@ -63,16 +63,7 @@ class NumberExtractor {
       if (groups.isEmpty) continue;
       // A comment such as "1편 1234567, 2편 7654321" has TWO works.
       // Joining every number would manufacture an unrelated extra ID.
-      if (!groups.any((g) => RegExp(r'^\d{6,9}
-    }
-    return candidates.values.toList()
-      ..sort((a, b) {
-        final byScore = b.score.compareTo(a.score);
-        return byScore != 0 ? byScore : a.code.compareTo(b.code);
-      });
-  }
-}
-).hasMatch(g))) {
+      if (!groups.any((g) => RegExp(r'^\d{6,9}$').hasMatch(g))) {
         add(groups.join(), s, 25);
       }
       for (final group in groups) {
