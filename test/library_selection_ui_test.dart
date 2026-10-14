@@ -35,7 +35,7 @@ void main() {
             }),
           ),
         )),
-      )),
+      ),
     ));
     await tester.longPress(find.byKey(const Key('work-work:2711759')));
     await tester.pumpAndSettle();

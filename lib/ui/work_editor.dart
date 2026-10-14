@@ -238,7 +238,6 @@ class _WorkEditorDialogState extends State<WorkEditorDialog> {
           )),
         ),
       ),
-    ),
     actions: [
       TextButton(onPressed: () => Navigator.pop(context),
         child: const HypText('취소')),
