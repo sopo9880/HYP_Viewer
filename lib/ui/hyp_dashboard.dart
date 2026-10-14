@@ -23,6 +23,7 @@ import 'hero_banner.dart';
 import 'hyp_theme.dart';
 import 'shorts_finder_panel.dart';
 import 'work_cards.dart';
+import 'auto_group_wizard.dart';
 import 'work_group_card.dart';
 
 enum HypPage { home, library, favorites, downloads, history, settings }
@@ -105,6 +106,7 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function(WorkEntry) onEditWorkDetails;
   final Future<void> Function(WorkEntry) onShowWorkInfo;
   final Future<void> Function(List<String> ids, String title) onGroupWorks;
+  final Future<void> Function(String groupId, List<String> ids)? onAddWorksToGroup;
   final Future<void> Function(String id) onUngroupWorks;
   final Future<void> Function(String id, String title) onRenameGroup;
   final Future<void> Function(String id, List<String> ids) onReorderGroup;
@@ -180,6 +182,7 @@ class HypDashboard extends StatefulWidget {
     required this.onEditWorkDetails,
     required this.onShowWorkInfo,
     required this.onGroupWorks,
+    this.onAddWorksToGroup,
     required this.onUngroupWorks,
     required this.onRenameGroup,
     required this.onReorderGroup,
@@ -1156,55 +1159,44 @@ class _HypDashboardState extends State<HypDashboard> {
     final suggestions = WorkGrouping.suggest(widget.library.works);
     if (suggestions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: HypText('자동으로 묶을 만한 미분류 회차가 없어. '
-            '이미 묶인 작품은 변경하지 않아.')));
+        content: HypText('새로 추천할 시리즈를 찾지 못했어. '
+            '작품 정보의 제목·작가를 확인하거나 선택 묶기를 사용해 줘.')));
       return;
     }
-    final chosen = <int>{};
-    final approved = await showDialog<bool>(
+    final confirmed = await showDialog<List<AutoGroupReview>>(
       context: context,
-      builder: (dialog) => StatefulBuilder(
-        builder: (ctx, update) => AlertDialog(
-          title: const HypText('Auto 묶기 마법사'),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520, maxHeight: 500),
-            child: SingleChildScrollView(child: Column(
-              mainAxisSize: MainAxisSize.min, children: [
-                const HypText('이미 묶인 작품은 유지해. 제안은 자동으로 '
-                    '적용되지 않으며 직접 체크한 세트만 생성돼.'),
-                for (var i = 0; i < suggestions.length; i++)
-                  CheckboxListTile(
-                    key: Key('auto-group-' + i.toString()),
-                    value: chosen.contains(i),
-                    title: Text(suggestions[i].title),
-                    subtitle: Text(suggestions[i].workIds.length.toString() +
-                        '개 작품 · ' + suggestions[i].reason),
-                    onChanged: (enabled) => update(() {
-                      if (enabled == true) {
-                        chosen.add(i);
-                      } else {
-                        chosen.remove(i);
-                      }
-                    }),
-                  ),
-              ]),
-            )),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialog, false),
-                child: const HypText('취소')),
-            FilledButton(
-              key: const Key('auto-group-confirm'),
-              onPressed: chosen.isEmpty ? null
-                  : () => Navigator.pop(dialog, true),
-              child: const HypText('선택한 묶음 생성')),
-          ],
-        ),
+      builder: (dialog) => AutoGroupWizard(
+        suggestions: suggestions,
+        works: widget.library.works,
+        coverImages: _coverImages,
       ),
     );
-    if (approved != true || !mounted) return;
-    for (final index in chosen.toList()..sort()) {
-      final item = suggestions[index];
-      await widget.onGroupWorks(item.workIds, item.title);
+    if (confirmed == null || confirmed.isEmpty || !mounted) return;
+    var saved = 0;
+    for (final review in confirmed) {
+      if (review.existingGroupId.isEmpty) {
+        await widget.onGroupWorks(review.workIds, review.title);
+        saved++;
+      } else if (widget.onAddWorksToGroup != null) {
+        try {
+          await widget.onAddWorksToGroup!(
+              review.existingGroupId, review.workIds);
+          final original = widget.library.works.where((work) =>
+              work.groupId == review.existingGroupId).toList();
+          if (original.isNotEmpty &&
+              original.first.groupTitle != review.title) {
+            await widget.onRenameGroup(review.existingGroupId, review.title);
+          }
+          saved++;
+        } catch (error) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('묶음 추가 실패: $error')));
+        }
+      }
+    }
+    if (mounted && saved > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('선택한 묶음 $saved개 적용을 요청했어.')));
     }
   }
 
