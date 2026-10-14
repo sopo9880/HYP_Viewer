@@ -164,10 +164,14 @@ class CandidateEditorState extends State<CandidateEditor> {
     _scheduleVerify();
   }
 
-  Future<void> _verifyAll() async {
+  Future<void> _verifyAll({bool force = false}) async {
     if (_checking || widget.onVerify == null) return;
     final matching = _slots.where((s) =>
-        _valid.hasMatch(s.controller.text.trim())).take(160).toList();
+        _valid.hasMatch(s.controller.text.trim()) &&
+        (force || s.checkedCode != s.controller.text.trim() ||
+            s.result == null ||
+            s.result!.status == CandidateCheck.unavailable))
+        .take(160).toList();
     if (matching.isEmpty) {
       _startFallback();
       return;
@@ -222,7 +226,10 @@ class CandidateEditorState extends State<CandidateEditor> {
     // A 429/503/timeout is unavailable, not proof of absence.
     if (!_fallbackAttempted && results.isNotEmpty &&
         results.length == uniqueCodes.length &&
-        results.values.every((item) => item.status == CandidateCheck.notFound)) {
+        results.values.every((item) => item.status == CandidateCheck.notFound) &&
+        !_slots.any((slot) =>
+            slot.result?.status == CandidateCheck.verified ||
+            slot.result?.status == CandidateCheck.unavailable)) {
       _startFallback();
     } else if (unavailableCount > 0 && !_fallbackAttempted) {
       setState(() => _fallbackMessage =
@@ -401,7 +408,7 @@ class CandidateEditorState extends State<CandidateEditor> {
           OutlinedButton.icon(
             key: const Key('candidate-verify-all'),
             onPressed: widget.busy || _checking || widget.onVerify == null
-                ? null : _verifyAll,
+                ? null : () => _verifyAll(force: true),
             icon: const Icon(Icons.fact_check_outlined),
             label: const HypText('번호 존재 재검증'),
           ),

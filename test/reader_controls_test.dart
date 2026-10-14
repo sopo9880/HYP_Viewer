@@ -67,6 +67,12 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
+    // Image codecs can finish after the last scheduled widget animation.
+    for (var i = 0; i < 5 && completed.isEmpty; i++) {
+      await tester.runAsync(() async =>
+          Future<void>.delayed(const Duration(milliseconds: 45)));
+      await tester.pump();
+    }
     expect(completed, [5]);
   });
 

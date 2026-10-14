@@ -52,7 +52,7 @@ class NumberExtractor {
         int points) {
       if (!RegExp(r'^\d{6,9}$').hasMatch(code)) return;
       final bonus = (_hints.hasMatch(evidence) ? 8 : 0) +
-          (creatorComment ? 20 : 0);
+          (creatorComment ? 20 : 0) + (episode.isNotEmpty ? 25 : 0);
       final candidate = NumberCandidate(
         code: code, evidence: evidence.trim(), source: source,
         score: points + bonus, rule: rule, episode: episode,
@@ -62,31 +62,20 @@ class NumberExtractor {
       }
     }
 
-    void parseLine(String raw, {bool crossLine = false}) {
-      final line = raw.trim();
-      if (line.isEmpty) return;
-      final episode = _episodes.firstMatch(line)?.group(0) ?? '';
-
-      var withoutLinks = line;
-      for (final match in _links.allMatches(line)) {
-        add(match.group(1)!, line, episode, 'gallery-url', 150);
-      }
-      withoutLinks = withoutLinks.replaceAll(RegExp(r'https?://\S+'), ' ');
-      if (withoutLinks.trim().isEmpty) return;
-
-      // A complete gallery number must never be joined to surrounding dates.
-      final complete = _complete.allMatches(withoutLinks).toList();
+    void parseSegment(String text, String line, String episode,
+        {required bool crossLine}) {
+      final complete = _complete.allMatches(text).toList();
       for (final m in complete) {
         add(m.group(0)!, line, episode,
             crossLine ? 'cross-line-complete' : 'complete-id',
             crossLine ? 65 : 125);
       }
-      final withoutComplete = withoutLinks.replaceAll(_complete, ' ');
-      final groups = _digits.allMatches(withoutComplete)
+      // A standalone full-length ID must not be contaminated with the next
+      // timestamp, and one numbered episode must not join the next episode.
+      final remaining = text.replaceAll(_complete, ' ');
+      final groups = _digits.allMatches(remaining)
           .map((m) => m.group(0)!).toList();
 
-      // Every contiguous window of numbers within the same line may encode
-      // an ID. No jumping over unrelated groups and no exponential subsets.
       for (var i = 0; i < groups.length; i++) {
         var joined = '';
         for (var j = i; j < groups.length && j < i + 7; j++) {
@@ -100,14 +89,43 @@ class NumberExtractor {
         }
       }
 
-      // Korean "271만 59" is also encoded as 2710059, not just 27159.
-      for (final m in _tenThousands.allMatches(withoutComplete)) {
+      for (final m in _tenThousands.allMatches(remaining)) {
         final major = int.tryParse(m.group(1)!);
         final minor = int.tryParse(m.group(2)!);
         if (major == null || minor == null) continue;
         add((major * 10000 + minor).toString(), line, episode,
             crossLine ? 'cross-line-ten-thousands' : 'ten-thousands',
             crossLine ? 35 : 64);
+      }
+    }
+
+    void parseLine(String raw, {bool crossLine = false}) {
+      final line = raw.trim();
+      if (line.isEmpty) return;
+      final episode = _episodes.firstMatch(line)?.group(0) ?? '';
+      for (final match in _links.allMatches(line)) {
+        add(match.group(1)!, line, episode, 'gallery-url', 150);
+      }
+      final plain = line.replaceAll(RegExp(r'https?://\S+'), ' ');
+      if (plain.trim().isEmpty) return;
+
+      final markers = _episodes.allMatches(plain).toList();
+      if (markers.isEmpty) {
+        parseSegment(plain, line, '', crossLine: crossLine);
+        return;
+      }
+      if (markers.first.start > 0) {
+        parseSegment(plain.substring(0, markers.first.start), line, '',
+            crossLine: crossLine);
+      }
+      // Numeric windows stay within one chapter. The chapter number itself
+      // is a label, not part of the gallery ID (1편 + 2900년7월56일).
+      for (var i = 0; i < markers.length; i++) {
+        final marker = markers[i];
+        final end = i + 1 < markers.length
+            ? markers[i + 1].start : plain.length;
+        parseSegment(plain.substring(marker.end, end), line, marker.group(0)!,
+            crossLine: crossLine);
       }
     }
 
