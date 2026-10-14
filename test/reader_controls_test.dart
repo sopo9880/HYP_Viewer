@@ -52,6 +52,34 @@ void main() {
     expect(find.text('1 / 5'), findsOneWidget);
   });
 
+  testWidgets('RTL reverses bottom controls and slider, toolbar toggle persists',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1120, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final changes = <bool>[];
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData.dark(),
+      home: GalleryReader(
+        work: WorkEntry.create(workId: '2711759'),
+        archive: _Pages(),
+        settings: const ReaderSettings(
+            nextDirection: 'right', verticalScrolling: true),
+        onPageChanged: (_) {},
+        onVerticalScrollingChanged: changes.add,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.byKey(const Key('reader-next'))).dx,
+        lessThan(tester.getTopLeft(
+            find.byKey(const Key('reader-previous'))).dx));
+    expect(Directionality.of(tester.element(find.byType(Slider))),
+        TextDirection.rtl);
+    await tester.tap(find.byTooltip('가로 넘기기'));
+    await tester.pumpAndSettle();
+    expect(changes, [false]);
+    expect(find.byTooltip('세로 넘기기'), findsOneWidget);
+  });
+
   testWidgets('two-page spread turns by pairs and keyboard works in RTL',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 850));
