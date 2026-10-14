@@ -704,11 +704,11 @@ class _HypDashboardState extends State<HypDashboard> {
           const Text(
             '기본 온라인 읽기는 이미지 메타데이터를 이용해 앱 안에서 열어. '
             '작품 메뉴의 웹 리더를 선택하면 브라우저에서 고정 링크를 열 수 있어. '
-            '1페이지는 #1, 2페이지부터는 #2-3 형식이야.',
+            '1페이지는 #1-, 2페이지부터는 #2-3 형식이야.',
             style: TextStyle(fontSize: 12, color: HypColors.muted),
           ),
           const SizedBox(height: 8),
-          const SelectableText('https://hitomi.la/reader/{작품번호}.html#1'),
+          const SelectableText('https://hitomi.la/reader/{작품번호}.html#1-'),
           const SizedBox(height: 4),
           const Text(
             '앱 안에서 읽는 경우에는 페이지 진행도가 저장돼. '
