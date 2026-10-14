@@ -82,6 +82,7 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function(String code) onQuickAddNumber;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
   final CandidateBatchVerify onVerifyCandidateCodes;
+  final List<NumberCandidate> Function()? onCrossLineFallback;
   final Future<void> Function() onChooseHeroArtwork;
   final Future<void> Function() onClearHeroArtwork;
   final Future<void> Function() onSaveOnlineSource;
@@ -158,6 +159,7 @@ class HypDashboard extends StatefulWidget {
     required this.onQuickAddNumber,
     required this.onSaveSelectedWorks,
     required this.onVerifyCandidateCodes,
+    this.onCrossLineFallback,
     required this.onChooseHeroArtwork,
     required this.onClearHeroArtwork,
     required this.onSaveOnlineSource,
@@ -952,6 +954,7 @@ class _HypDashboardState extends State<HypDashboard> {
         onQuickAddNumber: widget.onQuickAddNumber,
         onSaveSelectedWorks: widget.onSaveSelectedWorks,
         onVerifyCandidateCodes: widget.onVerifyCandidateCodes,
+        onCrossLineFallback: widget.onCrossLineFallback,
       ),
       const SizedBox(height: 24),
       Row(children: [

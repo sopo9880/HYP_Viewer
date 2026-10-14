@@ -445,7 +445,7 @@ class _LibraryHomeState extends State<LibraryHome> {
       // titles are fetched individually when the user saves the codes.
       titleInput.clear();
       commentInput.text = [data.description, ...data.comments]
-          .where((s) => s.trim().isNotEmpty).join('\n');
+          .where((s) => s.trim().isNotEmpty).join('\n\n');
       _analyze();
       if (data.comments.isEmpty) {
         _status('영상 설명란은 읽었지만 공개 댓글을 가져오지 못했어. '
@@ -459,6 +459,10 @@ class _LibraryHomeState extends State<LibraryHome> {
       if (mounted) setState(() => busy = false);
     }
   }
+
+  List<NumberCandidate> _crossLineFallback() =>
+      NumberExtractor.extract(commentInput.text, source: 'comment',
+        allowCrossLine: true, crossLineOnly: true, maxCandidates: 160);
 
   Future<Map<String, CandidateVerification>> _verifyCandidateCodes(
       List<String> codes) async {
@@ -2219,6 +2223,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     onQuickAddNumber: _quickAddNumber,
     onSaveSelectedWorks: _saveSelectedWorks,
     onVerifyCandidateCodes: _verifyCandidateCodes,
+    onCrossLineFallback: _crossLineFallback,
     onChooseHeroArtwork: _chooseHeroArtwork,
     onClearHeroArtwork: _clearHeroArtwork,
     onSaveOnlineSource: _saveOnlineSource,

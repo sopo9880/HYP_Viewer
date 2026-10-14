@@ -23,7 +23,7 @@ class NumberExtractor {
     caseSensitive: false,
   );
   static final RegExp _episodes = RegExp(
-    r'(\d{1,3})\s*(?:편|화|부|권|part|episode|ep)\b?',
+    r'(\d{1,3})\s*(?:편|화|부|권|part|episode|ep)',
     caseSensitive: false,
   );
   static final RegExp _tenThousands =
@@ -42,6 +42,7 @@ class NumberExtractor {
     String source = 'manual',
     bool creatorComment = false,
     bool allowCrossLine = false,
+    bool crossLineOnly = false,
     int maxCandidates = 160,
   }) {
     final found = <String, NumberCandidate>{};
@@ -126,7 +127,8 @@ class NumberExtractor {
         }
       }
     }
-    return (found.values.toList()
+    return (found.values.where((candidate) =>
+        !crossLineOnly || candidate.rule.startsWith('cross-line')).toList()
       ..sort((a, b) {
         final score = b.score.compareTo(a.score);
         return score != 0 ? score : a.code.compareTo(b.code);
