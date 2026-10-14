@@ -157,26 +157,27 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.1.5:
-          - Save online galleries for which the user has storage rights as
-            persistent local CBZ archives using the same page loader as the
-            in-app reader. Download progress, pause/resume between pages,
-            cancellation, local deletion and offline-first reading.
-          - Automatic first-page thumbnail selection is now optional
-            (disabled by default for newly saved works).
-          - Select a custom cover in Settings or on a work card: upload a
-            local image or pick a work page, drag/zoom and crop the preview.
-            Keep the six bundled cover styles.
-          - Android: optional hardware volume-key page turns while reading,
-            free landscape rotation and optional landscape lock in spreads.
-          - Administrator in-app notices may be published by an authorized
-            GitHub Actions workflow and are checked only after user opt-in.
-            This does not send push notifications while the app is closed.
-          - First-launch Android installation-security guidance and
-            user-initiated access to system security settings. The app
-            never disables protective features.
-          - Preserve v0.1.4 file locking fixes, v0.1.3 WebP routing,
-            portable JSON backups, YouTube Shorts and existing reader modes.
+          Changes in v0.1.6:
+          - Save multiple distinct work IDs found in the comments of a
+            single YouTube Shorts video without overwriting each other.
+            Select the candidate IDs you wish to save together; preserve
+            per-work favorites, progress and backups.
+          - Edit the first home banner illustration in Settings: import
+            your own PNG/JPG/WebP (up to 12 MB) or restore the default.
+            This artwork is stored locally, not in JSON backup.
+          - Resolve missing gallery titles from the public metadata for
+            that exact work ID when available. When access fails, retain
+            the work as "작품 <number>" instead of losing the ID.
+          - Mirror the bottom progress slider and previous/next buttons
+            in right-to-left reading mode.
+          - Persist horizontal/vertical reading and configure visibility
+            of the reader's top-right action buttons from Settings.
+          - Android app updates: after verified APK download, open system
+            security settings first. Only after the user returns and
+            confirms installation does the OS installer open. The app
+            never turns off Android/Samsung protections automatically.
+          - Keep v0.1.5 online CBZ downloads, cover crop editor, volume
+            keys, safe JSON saves, notices and old 0.x reader features.
 
           Known limitations: Automated tests use mocked images and notices;
           actual remote sites, Android devices and Samsung firmware may
