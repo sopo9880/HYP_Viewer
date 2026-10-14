@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../core/gallery.dart';
+import '../core/cover_store.dart';
+import '../core/reader_settings.dart';
 import '../core/number_extractor.dart';
 import '../core/work.dart';
 import 'hero_banner.dart';
@@ -37,6 +39,9 @@ extension HypPageInfo on HypPage {
 class HypDashboard extends StatefulWidget {
   final LibraryBackup library;
   final GalleryStore galleryStore;
+  final CoverStore coverStore;
+  final ReaderSettings readerSettings;
+  final int coverEpoch;
   final TextEditingController urlInput;
   final TextEditingController apiKeyInput;
   final TextEditingController commentInput;
@@ -68,6 +73,8 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function(WorkEntry) onDownloadOnline;
   final Future<void> Function(WorkEntry) onImportGallery;
   final Future<void> Function(WorkEntry) onUpdateWork;
+  final Future<void> Function(WorkEntry) onChooseCover;
+  final Future<void> Function(ReaderSettings) onSaveReaderSettings;
   final Future<void> Function(WorkEntry) onOpenOriginal;
   final Future<void> Function() onOpenShortsInput;
   final VoidCallback onCancelGalleryDownload;
@@ -77,6 +84,9 @@ class HypDashboard extends StatefulWidget {
     super.key,
     required this.library,
     required this.galleryStore,
+    required this.coverStore,
+    required this.readerSettings,
+    required this.coverEpoch,
     required this.urlInput,
     required this.apiKeyInput,
     required this.commentInput,
@@ -108,6 +118,8 @@ class HypDashboard extends StatefulWidget {
     required this.onDownloadOnline,
     required this.onImportGallery,
     required this.onUpdateWork,
+    required this.onChooseCover,
+    required this.onSaveReaderSettings,
     required this.onOpenOriginal,
     required this.onOpenShortsInput,
     required this.onCancelGalleryDownload,
@@ -139,7 +151,9 @@ class _HypDashboardState extends State<HypDashboard> {
       _page = HypPage.home;
       _search.clear();
     }
-    if (oldWidget.library.works.length != widget.library.works.length) {
+    if (oldWidget.library.works.length != widget.library.works.length ||
+        oldWidget.coverEpoch != widget.coverEpoch ||
+        _coverSignature(oldWidget.library) != _coverSignature(widget.library)) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refreshOffline());
     }
   }
@@ -160,30 +174,48 @@ class _HypDashboardState extends State<HypDashboard> {
     setState(() => _page = page);
   }
 
+  String _coverSignature(LibraryBackup backup) => backup.works
+      .map((w) => w.key + ':' + w.coverMode + ':' +
+          w.coverPreset.toString() + ':' + w.coverPage.toString())
+      .join('|');
+
   Future<void> _refreshOffline() async {
     final offline = <String>{};
-    final total = <String, int>{};
+    final counts = <String, int>{};
     final images = <String, Uint8List>{};
     try {
       for (final work in widget.library.works) {
+        if (work.coverMode != 'preset') {
+          try {
+            final bytes = await widget.coverStore.read(
+              work.workId,
+              mode: work.coverMode,
+              page: work.coverMode == 'page' ? work.coverPage : 1,
+            );
+            if (bytes != null) images[work.key] = bytes;
+          } catch (_) {
+            // Missing cached previews fall back to built-in cover art.
+          }
+        }
+
         if (!await widget.galleryStore.exists(work.workId)) continue;
         offline.add(work.key);
-        if (total.length >= 12) continue;
+        if (counts.length >= 30) continue;
         try {
           final book = await widget.galleryStore.read(work.workId);
-          total[work.key] = book.pageCount;
-          if (images.length < 12) {
-            final cover = book.pageBytes(0);
-            if (cover.isNotEmpty && cover.length <= 2 * 1024 * 1024) {
-              images[work.key] = cover;
+          counts[work.key] = book.pageCount;
+          if (work.coverMode == 'auto' && !images.containsKey(work.key)) {
+            final first = book.pageBytes(0);
+            if (first.isNotEmpty && first.length <= 2 * 1024 * 1024) {
+              images[work.key] = first;
             }
           }
         } catch (_) {
-          // The work stays in the offline list, without an invalid preview.
+          // Keep the offline entry even if thumbnail decoding fails.
         }
       }
     } catch (_) {
-      // Widget tests and platforms without a file provider remain usable.
+      // Flutter widget tests can run without platform file services.
     }
     if (!mounted) return;
     setState(() {
@@ -192,7 +224,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ..addAll(offline);
       _pageCounts
         ..clear()
-        ..addAll(total);
+        ..addAll(counts);
       _coverImages
         ..clear()
         ..addAll(images);
@@ -633,6 +665,9 @@ class _HypDashboardState extends State<HypDashboard> {
     } else if (action == 'import') {
       await widget.onImportGallery(work);
       await _refreshOffline();
+    } else if (action == 'cover') {
+      await widget.onChooseCover(work);
+      await _refreshOffline();
     } else if (action == 'favorite') {
       await widget.onUpdateWork(work.copyWith(favorite: !work.favorite));
     } else if (action == 'original') {
@@ -692,9 +727,67 @@ class _HypDashboardState extends State<HypDashboard> {
       const HypSectionTitle(
         icon: Icons.settings_rounded,
         title: '설정',
-        subtitle: '고정 웹 리더, 추가 다운로드 소스와 앱 데이터를 관리해.',
+        subtitle: '뷰어 조작, 기본 표지, 추가 다운로드 소스와 앱 데이터를 관리해.',
       ),
       const SizedBox(height: 14),
+      HypPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('이미지 뷰어 설정', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          const Text('읽기 방향을 정하면 화면 스와이프와 방향키도 함께 적용돼.',
+            style: TextStyle(fontSize: 12, color: HypColors.muted)),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            key: const Key('reader-direction-setting'),
+            initialValue: widget.readerSettings.nextDirection,
+            decoration: const InputDecoration(labelText: '다음 페이지로 넘기는 방향'),
+            items: const [
+              DropdownMenuItem(value: 'left',
+                  child: Text('왼쪽으로 넘기기 (→ 다음 페이지)')),
+              DropdownMenuItem(value: 'right',
+                  child: Text('오른쪽으로 넘기기 (← 다음 페이지)')),
+            ],
+            onChanged: (v) {
+              if (v != null) widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(nextDirection: v));
+            },
+          ),
+          const SizedBox(height: 9),
+          SwitchListTile.adaptive(
+            key: const Key('reader-two-page-setting'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('2쪽 모아보기'),
+            subtitle: const Text('1-2, 3-4처럼 두 페이지를 한 화면에 표시'),
+            value: widget.readerSettings.twoPageSpread,
+            onChanged: (v) => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(twoPageSpread: v)),
+          ),
+          const SizedBox(height: 9),
+          DropdownButtonFormField<int>(
+            key: const Key('reader-preload-setting'),
+            initialValue: widget.readerSettings.preloadPages,
+            decoration: const InputDecoration(labelText: '앞뒤 미리 로딩 페이지'),
+            items: const [
+              DropdownMenuItem(value: 0, child: Text('끄기')),
+              DropdownMenuItem(value: 1, child: Text('1장씩')),
+              DropdownMenuItem(value: 2, child: Text('2장씩 (추천)')),
+              DropdownMenuItem(value: 3, child: Text('3장씩')),
+            ],
+            onChanged: (v) {
+              if (v != null) widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(preloadPages: v));
+            },
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '키보드: ← / → 방향키, PageUp / PageDown, Space, Home / End, '
+            'Esc(닫기). 서재의 작품 메뉴에서 표지 선택 가능.',
+            style: TextStyle(fontSize: 12, color: HypColors.muted),
+          ),
+        ],
+      )),
+      const SizedBox(height: 13),
       HypPanel(child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -780,7 +873,7 @@ class _HypDashboardState extends State<HypDashboard> {
         children: [
           Text('업데이트', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
-          const Text('v0.1.0 프리뷰 · GitHub Releases',
+          const Text('최신 0.x 업데이트 · GitHub Releases',
             style: TextStyle(color: HypColors.muted, fontSize: 12)),
           const SizedBox(height: 12),
           OutlinedButton.icon(
