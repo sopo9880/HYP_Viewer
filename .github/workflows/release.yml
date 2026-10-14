@@ -157,22 +157,21 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.1.8:
-          - A numeric work ID entered in the main Shorts search field can
-            be saved directly without querying YouTube. Successful saves
-            switch to the Library screen.
-          - A new preference, disabled by default, opens a single newly
-            saved work in the reader. Batch saves still open the library.
-          - Show app messages at the top of the CURRENT viewport rather
-            than at the scroll position of the home page, with dismissal.
-          - Make Shorts candidate IDs readily visible on Android's small
-            screens using #number chips immediately below search.
-            If YouTube blocks public comments, manual paste remains supported.
-          - Add Korean, English and Japanese language preferences, persisted
-            locally, with instant translation of key screens and controls.
-          - Display the installed app version and build number in Settings.
-          - Preserve the v0.1.7 library delete menu and all earlier v0.x
-            release functionality, backups, covers and Android signing.
+          Changes in v0.1.9:
+          - Rule-based multi-part number extraction: remove episode markers
+            (1편, 2편, 3편) from work IDs. Handle disguised IDs with
+            year/month/day, hour/minute/second, slash and Korean man notation.
+          - Verify up to 24 IDs using metadata only, with at most 3
+            concurrent checks. Distinguish verified, not found, unavailable.
+          - Edit candidate numbers and count, add and remove input slots,
+            select works, reverify edited IDs and save only selected works.
+            Show episode labels and original extraction evidence.
+          - Translate sidebar library/offline counts; language options always
+            display native names: 한국어 / English / 日本語.
+          - Home hero supports default art, custom uploaded illustrations
+            and random actual saved library-cover images with reshuffle.
+          - Preserve existing v0.1.8 quick-add, 3-language UI, notifications,
+            favorites, backups, reader settings and signed updates.
 
           Known limitations: Automated tests use mocked images and notices;
           actual remote sites, Android devices and Samsung firmware may
