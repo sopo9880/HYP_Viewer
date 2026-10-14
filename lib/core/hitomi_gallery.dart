@@ -184,7 +184,7 @@ class _HitomiGg {
     String ext;
     String hostPrefix;
     if (hasWebp) {
-      dir = '/webp/';
+      dir = '/';
       ext = 'webp';
       hostPrefix = 'w';
     } else if (const {'jpg', 'jpeg', 'png', 'gif', 'webp'}.contains(originalExt)) {
@@ -192,7 +192,7 @@ class _HitomiGg {
       ext = originalExt;
       hostPrefix = '';
     } else if (hasAvif) {
-      dir = '/avif/';
+      dir = '/';
       ext = 'avif';
       hostPrefix = 'a';
     } else {
