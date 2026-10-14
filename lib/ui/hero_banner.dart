@@ -66,7 +66,7 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
             if (_index == 0 && widget.artwork != null) ...[
               Positioned.fill(
                 child: Image.memory(widget.artwork!, fit: BoxFit.cover,
-                    gaplessPlayback: true),
+                    cacheWidth: 1600, gaplessPlayback: true),
               ),
               // Keep the slogan and carousel controls legible on bright art.
               Positioned.fill(child: DecoratedBox(
