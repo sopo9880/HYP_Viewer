@@ -54,6 +54,9 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   bool get _verticalReading => _vertical || widget.settings.webtoonMode;
   bool _controlsVisible = true;
   bool _completionReported = false;
+  final TransformationController _webtoonTransform = TransformationController();
+  bool _webtoonZoomed = false;
+  bool _controlHeld = false;
   final Map<int, TransformationController> _pageTransforms = {};
   TransformationController _zoomController(int page) =>
       _pageTransforms.putIfAbsent(page, TransformationController.new);
@@ -175,6 +178,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     for (final controller in _pageTransforms.values) {
       controller.dispose();
     }
+    _webtoonTransform.dispose();
     super.dispose();
   }
 
@@ -310,6 +314,15 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event.logicalKey == LogicalKeyboardKey.controlLeft ||
+        event.logicalKey == LogicalKeyboardKey.controlRight) {
+      if (event is KeyDownEvent && !_controlHeld) {
+        setState(() => _controlHeld = true);
+      } else if (event is KeyUpEvent && _controlHeld) {
+        setState(() => _controlHeld = false);
+      }
+      return KeyEventResult.ignored;
+    }
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
@@ -571,7 +584,30 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
           ],
         ) : null,
         body: widget.settings.webtoonMode
-          ? ScrollablePositionedList.builder(
+          ? GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTapUp: (event) {
+                final width = MediaQuery.sizeOf(context).width;
+                if (!_webtoonZoomed &&
+                    event.localPosition.dx >= width * 0.3 &&
+                    event.localPosition.dx <= width * 0.7) {
+                  _toggleChrome();
+                }
+              },
+              child: InteractiveViewer(
+                transformationController: _webtoonTransform,
+                minScale: 1, maxScale: 5, scaleFactor: 200,
+                panEnabled: _webtoonZoomed,
+                // Keep normal desktop wheel scrolling; Ctrl+wheel zooms.
+                scaleEnabled: _controlHeld ||
+                    Theme.of(context).platform == TargetPlatform.android ||
+                    Theme.of(context).platform == TargetPlatform.iOS,
+                onInteractionEnd: (_) {
+                  final scaled = _webtoonTransform.value
+                      .getMaxScaleOnAxis() > 1.02;
+                  if (mounted) setState(() => _webtoonZoomed = scaled);
+                },
+                child: ScrollablePositionedList.builder(
               key: const Key('webtoon-continuous-reader'),
               itemCount: widget.archive.pageCount,
               initialScrollIndex: _currentUnit,
@@ -581,7 +617,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
               padding: EdgeInsets.zero,
               itemBuilder: (context, index) =>
                   _pageAt(index, webtoon: true),
-            )
+                ),
+              ))
           : LayoutBuilder(builder: (context, constraints) => GestureDetector(
               key: const Key('reader-tap-zones'),
               behavior: HitTestBehavior.translucent,
