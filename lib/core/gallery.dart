@@ -107,6 +107,14 @@ class GalleryStore {
   Future<bool> exists(String workId) async =>
       await (await _localFile(workId)).exists();
 
+  /// Delete the local CBZ without touching the library, progress or covers.
+  Future<void> delete(String workId) async {
+    final file = await _localFile(workId);
+    if (await file.exists()) await file.delete();
+    final previous = File(file.path + '.previous');
+    if (await previous.exists()) await previous.delete();
+  }
+
   Future<GalleryArchive> read(String workId) async {
     final f = await _localFile(workId);
     if (!await f.exists()) {
