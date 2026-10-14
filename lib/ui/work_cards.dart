@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../core/work.dart';
 import 'hyp_theme.dart';
+import 'cover_palettes.dart';
 
 class HypWorkGrid extends StatelessWidget {
   final List<WorkEntry> works;
@@ -163,6 +164,8 @@ class HypWorkCard extends StatelessWidget {
                             value: 'download', child: Text('JSON 소스 다운로드')),
                         const PopupMenuItem(
                             value: 'import', child: Text('CBZ/ZIP 연결')),
+                        const PopupMenuItem(
+                            value: 'cover', child: Text('표지 선택')), 
                         PopupMenuItem(
                           value: 'favorite',
                           child: Text(work.favorite
@@ -201,7 +204,7 @@ class HypWorkCard extends StatelessWidget {
   }
 
   Widget _cover() {
-    if (coverBytes != null) {
+    if (coverBytes != null && work.coverMode != 'preset') {
       return Image.memory(coverBytes!, fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) => _fallbackCover());
     }
@@ -210,20 +213,19 @@ class HypWorkCard extends StatelessWidget {
 
   Widget _fallbackCover() {
     final seed = work.workId.codeUnits.fold<int>(0, (a, b) => a + b);
-    final hue = (240 + seed % 60).toDouble();
+    final paletteIndex = work.coverMode == 'preset'
+        ? work.coverPreset.clamp(0, 5).toInt()
+        : seed % CoverPalettes.colors.length;
+    final palette = CoverPalettes.colors[paletteIndex];
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft, end: Alignment.bottomRight,
-          colors: [
-            HSVColor.fromAHSV(1, hue, 0.48, 0.48).toColor(),
-            HypColors.background,
-            HSVColor.fromAHSV(1, (hue + 30) % 360, 0.47, 0.4).toColor(),
-          ],
+          colors: palette,
         ),
       ),
       child: Stack(children: [
-        Center(child: Icon(Icons.auto_stories_rounded, size: 54,
+        Center(child: Icon(CoverPalettes.symbols[paletteIndex], size: 54,
             color: Colors.white.withValues(alpha: 0.23))),
         if (work.favorite)
           const Positioned(top: 8, left: 8,
