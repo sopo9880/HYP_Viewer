@@ -727,6 +727,41 @@ class _LibraryHomeState extends State<LibraryHome> {
     ));
   }
 
+  Future<void> _deleteSelectedOffline(List<String> workIds) async {
+    final ids = workIds.toSet();
+    final works = library.works.where((w) =>
+        ids.contains(w.workId)).toList();
+    if (works.isEmpty || !mounted) return;
+    if (works.any((w) => downloadingGalleryKey == w.key)) {
+      _status('다운로드가 진행 중인 작품은 완료 후 정리해줘.');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const HypText('선택한 오프라인 파일 삭제'),
+        content: HypText(works.length.toString() + '개 작품의 CBZ를 '
+            '기기에서 삭제할까? 서재 작품·즐겨찾기·읽기 진행도·표지는 유지해.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const HypText('취소')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const HypText('CBZ 파일 삭제')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    var removed = 0;
+    for (final work in works) {
+      try {
+        await galleryStore.delete(work.workId);
+        removed++;
+      } catch (_) {}
+    }
+    if (mounted) setState(() => coverEpoch++);
+    _status(removed.toString() + '개 CBZ를 삭제했어. 서재 기록은 유지했어.');
+  }
+
   Future<void> _exportSelectedDownloads(List<String> ids) async {
     final idsSet = ids.toSet();
     final selected = library.works.where(
@@ -2136,6 +2171,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     onRenameGroup: _renameGroup,
     onReorderGroup: _reorderGroup,
     onExportSelectedDownloads: _exportSelectedDownloads,
+    onDeleteSelectedOffline: _deleteSelectedOffline,
     onToggleDownloadPause: _pauseOrResumeReaderDownload,
     downloadPaused: isReaderTransferPaused,
     downloadCanPause: readerTransfer != null,

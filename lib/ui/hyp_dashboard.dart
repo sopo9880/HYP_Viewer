@@ -104,6 +104,7 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function(String id, String title) onRenameGroup;
   final Future<void> Function(String id, List<String> ids) onReorderGroup;
   final Future<void> Function(List<String> ids) onExportSelectedDownloads;
+  final Future<void> Function(List<String> ids) onDeleteSelectedOffline;
   final VoidCallback onToggleDownloadPause;
   final bool downloadPaused;
   final bool downloadCanPause;
@@ -177,6 +178,7 @@ class HypDashboard extends StatefulWidget {
     required this.onRenameGroup,
     required this.onReorderGroup,
     required this.onExportSelectedDownloads,
+    required this.onDeleteSelectedOffline,
     required this.onToggleDownloadPause,
     required this.downloadPaused,
     required this.downloadCanPause,
@@ -1200,7 +1202,7 @@ class _HypDashboardState extends State<HypDashboard> {
               icon: const Icon(Icons.edit_outlined),
               label: const HypText('정보 수정'),
             ),
-            if (_page == HypPage.downloads)
+            if (_page == HypPage.downloads) ...[
               FilledButton.icon(
                 key: const Key('download-export-selected'),
                 onPressed: _selectedWorkIds.isNotEmpty
@@ -1208,7 +1210,21 @@ class _HypDashboardState extends State<HypDashboard> {
                         _selectedWorkIds.toList()) : null,
                 icon: const Icon(Icons.folder_outlined),
                 label: const HypText('선택 CBZ 폴더로 내보내기'),
-              )
+              ),
+              OutlinedButton.icon(
+                key: const Key('download-delete-selected'),
+                onPressed: _selectedWorkIds.isNotEmpty ? () async {
+                  await widget.onDeleteSelectedOffline(
+                      _selectedWorkIds.toList());
+                  if (mounted) {
+                    setState(() => _selectedWorkIds.clear());
+                    await _refreshOffline();
+                  }
+                } : null,
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const HypText('선택 CBZ 삭제'),
+              ),
+            ]
             else
               FilledButton.icon(
                 key: const Key('library-delete-selected'),
@@ -1384,6 +1400,64 @@ class _HypDashboardState extends State<HypDashboard> {
     }
   }
 
+  Future<WorkEntry?> _chooseLibraryWork(String purpose) async {
+    if (widget.library.works.isEmpty) return null;
+    final input = TextEditingController();
+    try {
+      return await showDialog<WorkEntry>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (dialog, update) {
+            final term = input.text.trim().toLowerCase();
+            final works = _works.where((w) => [
+              w.workId, w.title, w.author,
+            ].join(' ').toLowerCase().contains(term)).toList();
+            return AlertDialog(
+              title: Text(purpose),
+              content: SizedBox(
+                width: 460, height: 380,
+                child: Column(children: [
+                  TextField(controller: input,
+                    decoration: const InputDecoration(
+                      labelText: '작품 번호 또는 제목로 검색'),
+                    onChanged: (_) => update(() {})),
+                  const SizedBox(height: 8),
+                  Expanded(child: ListView.builder(
+                    itemCount: works.length,
+                    itemBuilder: (_, i) => ListTile(
+                      title: HypText(works[i].title),
+                      subtitle: Text('#' + works[i].workId),
+                      onTap: () => Navigator.pop(dialog, works[i]),
+                    ),
+                  )),
+                ]),
+              ),
+              actions: [TextButton(
+                onPressed: () => Navigator.pop(dialog),
+                child: const HypText('취소'))],
+            );
+          },
+        ),
+      );
+    } finally {
+      input.dispose();
+    }
+  }
+
+  Future<void> _connectArchiveFromDownloads() async {
+    final chosen = await _chooseLibraryWork('CBZ/ZIP을 연결할 작품');
+    if (chosen == null || !mounted) return;
+    await widget.onImportGallery(chosen);
+    await _refreshOffline();
+  }
+
+  Future<void> _downloadSourceFromDownloads() async {
+    final chosen = await _chooseLibraryWork('추가 JSON 소스로 받을 작품');
+    if (chosen == null || !mounted) return;
+    await widget.onDownloadJsonSource(chosen);
+    await _refreshOffline();
+  }
+
   Widget _downloadsContent() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -1393,12 +1467,28 @@ class _HypDashboardState extends State<HypDashboard> {
         subtitle: '내 기기에 저장된 작품 ' + _downloaded.length.toString() + '개',
       ),
       const SizedBox(height: 8),
-      OutlinedButton.icon(
-        key: const Key('download-select-mode'),
-        onPressed: _toggleSelectionMode,
-        icon: Icon(_selectingWorks ? Icons.close : Icons.checklist_outlined),
-        label: HypText(_selectingWorks ? '선택 종료' : '선택'),
-      ),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        OutlinedButton.icon(
+          key: const Key('download-select-mode'),
+          onPressed: _toggleSelectionMode,
+          icon: Icon(_selectingWorks ? Icons.close : Icons.checklist_outlined),
+          label: HypText(_selectingWorks ? '선택 종료' : '선택'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('download-import-cbz'),
+          onPressed: widget.library.works.isEmpty
+              ? null : _connectArchiveFromDownloads,
+          icon: const Icon(Icons.folder_open_outlined),
+          label: const HypText('CBZ/ZIP 연결'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('download-json-source'),
+          onPressed: widget.library.works.isEmpty
+              ? null : _downloadSourceFromDownloads,
+          icon: const Icon(Icons.data_object_outlined),
+          label: const HypText('고급 JSON 소스 다운로드'),
+        ),
+      ]),
       _selectionControls(_downloaded),
       const SizedBox(height: 15),
       if (widget.queuedDownloadCount > 0) ...[
