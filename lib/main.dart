@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'core/export.dart';
 import 'core/gallery.dart';
 import 'core/cover_store.dart';
+import 'core/hero_artwork_store.dart';
 import 'core/reader_settings.dart';
 import 'core/reader_downloader.dart';
 import 'core/announcements.dart';
@@ -58,6 +59,8 @@ class LibraryHome extends StatefulWidget {
 class _LibraryHomeState extends State<LibraryHome> {
   final storage = LibraryStorage();
   final coverStore = const CoverStore();
+  final heroArtworkStore = const HeroArtworkStore();
+  Uint8List? heroArtwork;
   final readerSettingsStorage = const ReaderSettingsStorage();
   ReaderSettings readerSettings = const ReaderSettings();
   int coverEpoch = 0;
@@ -94,6 +97,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     _load();
     _loadOnlineSource();
     _loadReaderSettings();
+    _loadHeroArtwork();
     _listenForSharedShorts();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _automaticUpdateCheck();
@@ -122,6 +126,50 @@ class _LibraryHomeState extends State<LibraryHome> {
       }
     } catch (e) {
       _status('뷰어 설정 읽기 실패: ' + e.toString());
+    }
+  }
+
+  Future<void> _loadHeroArtwork() async {
+    try {
+      final bytes = await heroArtworkStore.read();
+      if (mounted) setState(() => heroArtwork = bytes);
+    } catch (error) {
+      _status('홈 배너 이미지 읽기 실패: $error');
+    }
+  }
+
+  Future<void> _chooseHeroArtwork() async {
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+        withData: true,
+      );
+      if (picked == null || picked.files.isEmpty) return;
+      final selected = picked.files.single;
+      if (selected.size > HeroArtworkStore.maxBytes) {
+        throw const FormatException('배너 이미지는 최대 12MB까지 지원해.');
+      }
+      final bytes = selected.bytes ?? (selected.path != null
+          ? await File(selected.path!).readAsBytes() : null);
+      if (bytes == null) {
+        throw const FormatException('선택한 이미지 파일을 읽지 못했어.');
+      }
+      await heroArtworkStore.save(bytes);
+      if (mounted) setState(() => heroArtwork = bytes);
+      _status('홈 배너 첫 번째 화면에 일러스트를 설정했어.');
+    } catch (error) {
+      _status('배너 이미지 설정 실패: $error');
+    }
+  }
+
+  Future<void> _clearHeroArtwork() async {
+    try {
+      await heroArtworkStore.clear();
+      if (mounted) setState(() => heroArtwork = null);
+      _status('홈 배너를 기본 디자인으로 되돌렸어.');
+    } catch (error) {
+      _status('기본 배경 복원 실패: $error');
     }
   }
 
@@ -330,7 +378,9 @@ class _LibraryHomeState extends State<LibraryHome> {
       final data = key.isEmpty
           ? await YoutubePublicClient(client).fetch(videoId)
           : await YoutubeClient(client).fetch(videoId, key);
-      titleInput.text = data.title;
+      // Shorts titles often describe multiple DIFFERENT works; their real
+      // titles are fetched individually when the user saves the codes.
+      titleInput.clear();
       commentInput.text = [data.description, ...data.comments]
           .where((s) => s.trim().isNotEmpty).join('\n');
       _analyze();
@@ -347,31 +397,64 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
-  Future<void> _saveWork() async {
-    final code = numberInput.text.trim();
-    if (!RegExp(r'^\d{1,12}$').hasMatch(code)) {
+  Future<void> _saveWork() =>
+      _saveSelectedWorks([numberInput.text.trim()]);
+
+  Future<void> _saveSelectedWorks(List<String> selectedCodes) async {
+    if (busy) return;
+    final codes = selectedCodes.map((code) => code.trim()).toSet().toList();
+    if (codes.isEmpty ||
+        codes.any((code) => !RegExp(r'^\d{1,12}$').hasMatch(code))) {
       _status('번호는 숫자 1~12자리로 입력해줘.');
       return;
     }
+    setState(() => busy = true);
+    final client = http.Client();
     try {
-      final id = ShortsLink.videoId(urlInput.text) ?? '';
-      final work = WorkEntry.create(
-        workId: code,
-        videoId: id,
-        videoUrl: id.isEmpty ? '' : 'https://www.youtube.com/shorts/' + id,
-        title: titleInput.text,
-        author: authorInput.text,
-        originalComment: commentInput.text,
-      ).copyWith(coverMode: readerSettings.autoCoverEnabled ? 'auto' : 'preset');
-      await _commitLibrary((latest) => LibraryBackup.merge(latest,
-          LibraryBackup(works: [work], collections: const [])));
-      // Start preparing the first-page thumbnail, without blocking Save.
-      if (readerSettings.autoCoverEnabled) {
-        unawaited(_prepareAutomaticCover(work));
+      final videoId = ShortsLink.videoId(urlInput.text) ?? '';
+      final works = <WorkEntry>[];
+      var unknownTitles = 0;
+      for (final code in codes) {
+        var title = codes.length == 1 ? titleInput.text.trim() : '';
+        if (title.isEmpty) {
+          try {
+            title = await HitomiGalleryProvider(client).fetchTitle(code);
+          } catch (_) {
+            // A missing or offline metadata server must not lose a saved ID.
+          }
+        }
+        if (title.isEmpty) {
+          title = '작품 $code';
+          unknownTitles += 1;
+        }
+        works.add(WorkEntry.create(
+          workId: code,
+          videoId: videoId,
+          videoUrl: videoId.isEmpty
+              ? '' : 'https://www.youtube.com/shorts/$videoId',
+          title: title,
+          author: codes.length == 1 ? authorInput.text : '',
+          originalComment: commentInput.text,
+        ).copyWith(
+          coverMode: readerSettings.autoCoverEnabled ? 'auto' : 'preset',
+        ));
       }
-      _status('서재에 저장했어.');
-    } catch (e) {
-      _status('저장 실패: ' + e.toString());
+      await _commitLibrary((latest) => LibraryBackup.merge(latest,
+          LibraryBackup(works: works, collections: const [])));
+      if (readerSettings.autoCoverEnabled) {
+        for (final work in works) {
+          unawaited(_prepareAutomaticCover(work));
+        }
+      }
+      _status('작품 ${works.length}개를 서재에 저장했어.' +
+          (unknownTitles > 0
+              ? ' 제목을 찾지 못한 $unknownTitles개는 임시 이름으로 저장했어.'
+              : ''));
+    } catch (error) {
+      _status('저장 실패: $error');
+    } finally {
+      client.close();
+      if (mounted) setState(() => busy = false);
     }
   }
 
