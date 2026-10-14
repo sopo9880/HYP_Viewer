@@ -2,13 +2,13 @@
 
 Local-first **Windows setup.exe + Android APK** app for finding and organizing references from YouTube Shorts. No AI service, login, or cloud library required.
 
-**Status:** v0.1.0 is published. This feature branch contains unreleased changes intended for the next 0.x update; it is not a new release yet.
+**Status:** v0.1.1 release candidate; v0.1.0 remains available. The user-facing workflow is **release → update → live test → fix in the next 0.x release**. See [v0.1.1 smoke test](docs/SMOKE_TEST_V0.1.1.md).
 
 ## Features implemented in the MVP
 
 - Share a Shorts URL from YouTube to the Android app, or paste a URL in Windows.
 - Extract numeric work-reference candidates from text using deterministic rules (no LLM).
-- **Keyless Shorts comment lookup (experimental on this branch):** fetch public YouTube watch-page metadata and sample comments using the website's public client configuration. No personal YouTube Data API key is required; changes to YouTube, consent screens and anti-bot controls can prevent access. The optional personal Data API key remains available as an advanced fallback. If fetching fails, paste comment text manually. See [technical notes](docs/YOUTUBE_PUBLIC_COMMENTS.md).
+- **Keyless Shorts comment lookup (experimental):** fetch public YouTube watch-page metadata and sample comments using the website's public client configuration. No personal YouTube Data API key is required; changes to YouTube, consent screens and anti-bot controls can prevent access. The optional personal Data API key remains available as an advanced fallback. If fetching fails, paste comment text manually. See [technical notes](docs/YOUTUBE_PUBLIC_COMMENTS.md).
 - Inspect all candidate codes and the original text; manually enter the correct number when ambiguous.
 - Local library with favorites, reading page, completion state and metadata.
 - **JSON export/import** for Android-to-Android, Android-to-Windows and Windows-to-Windows library backup or merge.
@@ -25,7 +25,7 @@ The reader supports local CBZ/ZIP files and numbered Hitomi galleries, with opti
 
 Open the [Build and verify Actions runs](https://github.com/sopo9880/HYP_Viewer/actions/workflows/verify.yml), select a successful run, then expand **Artifacts**. The Android debug APK is for temporary development testing and may require uninstall/reinstall when switching to a consistently signed official release. JSON-export your library first.
 
-The Windows artifact contains `HYP_Viewer_Setup_v0.1.0.exe`. It installs per user and keeps the local library outside the application folder.
+The Windows artifact is named `HYP_Viewer_Setup_v<version>.exe` (for this release: `HYP_Viewer_Setup_v0.1.1.exe`). It installs per user and keeps the local library outside the application folder.
 
 ## Build locally
 
