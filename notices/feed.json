@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "announcements": [
+    {
+      "id": "welcome_20261014",
+      "title": "HYP Viewer 공지 알림",
+      "message": "앱 설정에서 공지 수신을 켠 사용자에게 새 소식을 보여주는 기능을 준비했어. 앱을 닫은 상태의 시스템 푸시 알림은 별도 서비스 연결이 필요해.",
+      "publishedAt": "2026-10-14T00:00:00Z"
+    }
+  ]
+}
