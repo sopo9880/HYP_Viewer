@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -8,8 +10,8 @@ void main() {
     final urls = <Uri>[];
     final client = MockClient((request) async {
       urls.add(request.url);
-      return http.Response('var galleryinfo = '
-          '{"id":2711759,"title":"작품 제목","files":[]};', 200);
+      return http.Response.bytes(utf8.encode('var galleryinfo = '
+          '{"id":2711759,"title":"작품 제목","files":[]};'), 200);
     });
     final title = await HitomiGalleryProvider(client).fetchTitle('2711759');
     expect(title, '작품 제목');
@@ -19,8 +21,9 @@ void main() {
 
   test('title lookup rejects mismatched IDs rather than using wrong title',
       () async {
-    final client = MockClient((_) async => http.Response(
-        'var galleryinfo = {"id":9999999,"title":"다른 작품"};', 200));
+    final client = MockClient((_) async => http.Response.bytes(
+        utf8.encode('var galleryinfo = '
+            '{"id":9999999,"title":"다른 작품"};'), 200));
     await expectLater(HitomiGalleryProvider(client).fetchTitle('2711759'),
         throwsFormatException);
     await expectLater(HitomiGalleryProvider(client).fetchTitle('../bad'),
