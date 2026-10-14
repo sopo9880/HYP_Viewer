@@ -159,14 +159,22 @@ class _GalleryReaderState extends State<GalleryReader> {
     final total = widget.archive.pageCount;
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: _controlsVisible
-          ? AppBar(
+      appBar: AppBar(
               backgroundColor: Colors.black,
               foregroundColor: Colors.white,
               title: Text(widget.work.title.isEmpty
                   ? widget.work.workId
                   : widget.work.title, maxLines: 1),
               actions: [
+                IconButton(
+                  tooltip: _controlsVisible ? '페이지 도구 숨기기' : '페이지 도구 표시',
+                  onPressed: () => setState(() {
+                    _controlsVisible = !_controlsVisible;
+                  }),
+                  icon: Icon(_controlsVisible
+                      ? Icons.visibility_off
+                      : Icons.visibility),
+                ),
                 if (widget.onOpenInBrowser != null)
                   IconButton(
                     tooltip: '현재 페이지를 웹 리더로 열기',
@@ -179,11 +187,10 @@ class _GalleryReaderState extends State<GalleryReader> {
                   onPressed: _toggleDirection,
                 ),
               ],
-            )
-          : null,
-      body: GestureDetector(
-        onDoubleTap: () => setState(() => _controlsVisible = !_controlsVisible),
-        child: PageView.builder(
+            ),
+      // Keep error/retry buttons directly hittable; an enclosing
+      // double-tap detector delays ordinary tap gestures in the reader.
+      body: PageView.builder(
           key: ValueKey('$_vertical-$_pageReloadGeneration'),
           controller: _controller,
           scrollDirection: _vertical ? Axis.vertical : Axis.horizontal,
@@ -194,7 +201,6 @@ class _GalleryReaderState extends State<GalleryReader> {
           },
           itemBuilder: (context, index) => _imageAt(index),
         ),
-      ),
       bottomNavigationBar: _controlsVisible
           ? SafeArea(
               top: false,
