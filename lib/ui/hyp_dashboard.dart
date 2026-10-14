@@ -72,6 +72,11 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function(WorkEntry) onReadOnline;
   final Future<void> Function(WorkEntry) onReadWebPage;
   final Future<void> Function(WorkEntry) onDownloadOnline;
+  final Future<void> Function(WorkEntry) onDownloadJsonSource;
+  final Future<void> Function(WorkEntry) onDeleteOffline;
+  final VoidCallback onToggleDownloadPause;
+  final bool downloadPaused;
+  final bool downloadCanPause;
   final Future<void> Function(WorkEntry) onImportGallery;
   final Future<void> Function(WorkEntry) onUpdateWork;
   final Future<void> Function(WorkEntry) onChooseCover;
@@ -117,6 +122,11 @@ class HypDashboard extends StatefulWidget {
     required this.onReadOnline,
     required this.onReadWebPage,
     required this.onDownloadOnline,
+    required this.onDownloadJsonSource,
+    required this.onDeleteOffline,
+    required this.onToggleDownloadPause,
+    required this.downloadPaused,
+    required this.downloadCanPause,
     required this.onImportGallery,
     required this.onUpdateWork,
     required this.onChooseCover,
@@ -693,6 +703,12 @@ class _HypDashboardState extends State<HypDashboard> {
     } else if (action == 'download') {
       await widget.onDownloadOnline(work);
       await _refreshOffline();
+    } else if (action == 'download_json') {
+      await widget.onDownloadJsonSource(work);
+      await _refreshOffline();
+    } else if (action == 'delete_offline') {
+      await widget.onDeleteOffline(work);
+      await _refreshOffline();
     } else if (action == 'import') {
       await widget.onImportGallery(work);
       await _refreshOffline();
@@ -735,6 +751,12 @@ class _HypDashboardState extends State<HypDashboard> {
                 (widget.downloadedGalleryBytes / 1048576).toStringAsFixed(1) +
                 ' MB',
               )),
+              if (widget.downloadCanPause)
+                TextButton.icon(
+                  onPressed: widget.onToggleDownloadPause,
+                  icon: Icon(widget.downloadPaused ? Icons.play_arrow : Icons.pause),
+                  label: Text(widget.downloadPaused ? '계속' : '일시정지'),
+                ),
               TextButton.icon(
                 onPressed: widget.onCancelGalleryDownload,
                 icon: const Icon(Icons.close),
