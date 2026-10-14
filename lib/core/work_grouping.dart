@@ -11,7 +11,7 @@ class WorkGroupSuggestion {
 /// Works already grouped by a user are NEVER edited or proposed again.
 class WorkGrouping {
   static final _episode = RegExp(
-      r'(?:^|[\s\-\[_（(])(?:제\s*)?(\d{1,3})\s*(?:편|화|부|권|episode|ep\.?|part)\b',
+      r'(?:^|[\s\-\[_（(])(?:제\s*)?(\d{1,3})\s*(?:편|화|부|권|episode|ep\.?|part)(?=$|[\s\-\]）):])',
       caseSensitive: false);
   static final _suffix = RegExp(
       r'(?:\s|[-_])(?:\d{1,3})\s*(?:편|화|부|권)?\s*$',
