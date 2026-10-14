@@ -952,8 +952,10 @@ class _HypDashboardState extends State<HypDashboard> {
             ),
           ),
           const SizedBox(height: 9),
-          ExpansionTile(
-            key: const Key('reader-toolbar-settings'),
+          Material(
+            color: Colors.transparent,
+            child: ExpansionTile(
+              key: const Key('reader-toolbar-settings'),
             tilePadding: EdgeInsets.zero,
             childrenPadding: EdgeInsets.zero,
             title: const Text('뷰어 오른쪽 위 아이콘 구성'),
@@ -1005,7 +1007,7 @@ class _HypDashboardState extends State<HypDashboard> {
                     widget.readerSettings.copyWith(showOrientationAction: v)),
               ),
             ],
-          ),
+          )),
           const SizedBox(height: 9),
           DropdownButtonFormField<int>(
             key: const Key('reader-preload-setting'),
