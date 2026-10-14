@@ -1,7 +1,7 @@
 #define AppName "HYP Viewer"
 #define AppExe "hyp_viewer.exe"
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.10"
+  #define MyAppVersion "0.1.11"
 #endif
 
 [Setup]
