@@ -44,6 +44,14 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('cover-crop-save')));
     await tester.tap(find.byKey(const Key('cover-crop-save')));
     await tester.pumpAndSettle();
+    // RenderRepaintBoundary.toImage uses the real engine asynchronous image
+    // rasterization, which may finish after pumpAndSettle's fake-async frames.
+    await tester.runAsync(() async {
+      for (var attempt = 0; attempt < 24 && cropped == null; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+      }
+    });
+    await tester.pumpAndSettle();
     expect(cropped, isNotNull);
     expect(cropped!.length, greaterThan(100));
     expect(cropped!.sublist(0, 4), [137, 80, 78, 71]);
