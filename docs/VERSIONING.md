@@ -9,6 +9,22 @@
 - Changing the policy later requires an explicit user request and a reviewed
   modification of the version validator and release workflow.
 
+## Preferred workflow: release -> update -> verify
+
+The owner prefers to test the app by **installing the official signed release over
+the existing installation**. Keep the basic automated CI checks as a safety
+gate, then publish a new **0.x patch release**, update Windows and Android
+normally, and collect live-site and real-device test feedback. Fix reported
+issues in a subsequent 0.x patch rather than rewriting an already released tag.
+
+- Do not silently promote untested public website scraping to guaranteed behavior:
+  mock tests and release builds do not prove real external website access.
+- Preserve the same persistent Android signing key and increment the Android
+  build number on every patch release.
+- Do not require a fresh install or deletion of existing library data. If the
+  update cannot be installed, collect diagnostics and preserve user backups.
+- No 1.x version unless the owner explicitly approves it.
+
 ## Requesting the next 0.x version
 
 1. Review and test changes in a PR.
