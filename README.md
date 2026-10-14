@@ -2,7 +2,16 @@
 
 Local-first **Windows setup.exe + Android APK** app for finding and organizing references from YouTube Shorts. No AI service, login, or cloud library required.
 
-**Status:** v0.1.4 reader comfort and library stability update (0.x preview). Earlier 0.x releases remain available. We follow **release → update → live test → next 0.x fix**. See [v0.1.4 smoke test](docs/SMOKE_TEST_V0.1.4.md).
+**Status:** v0.1.5 next release candidate (not published yet). Earlier 0.x releases remain available. We follow **release → update → live test → next 0.x fix**. See [v0.1.5 smoke test](docs/SMOKE_TEST_V0.1.5.md).
+
+## v0.1.5 changes in review
+
+- Download images from the same built-in gallery reader after explicitly confirming storage rights. Stream pages to a CBZ archive with progress, pause (between images), resume and cancel; the previous CBZ is retained if a new download fails.
+- Automatic first-page covers are opt-in (off by default for new works). Choose built-in designs, upload photos or crop any gallery page using drag/pinch/zoom.
+- Android reader: optional physical volume +/- page navigation and optional landscape lock while a two-page spread is open. Normal system volume control is restored after closing.
+- Administrator **in-app notices** with opt-in, a GitHub-authorized publishing action and plain-text feed. They do not generate background system push notifications. See [admin guide](docs/ADMIN_NOTICES.md).
+- First-launch Android security help; device security is never disabled automatically, and the user opens system settings deliberately.
+- Existing library JSON data, CBZ files and signing identities are preserved across 0.x updates.
 
 ## Features implemented in the MVP
 
