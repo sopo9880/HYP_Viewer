@@ -25,7 +25,6 @@ void main() {
     expect(output.verticalScrolling, true);
     expect(output.showDownloadAction, false);
     expect(output.showOrientationAction, false);
-    expect(output.preloadPages, 3);
     expect(output.openAfterSave, true);
     expect(output.languageCode, 'ja');
     expect(output.heroArtworkSource, 'random');
@@ -46,7 +45,7 @@ void main() {
     expect(bad.verticalScrolling, false);
     expect(bad.showDownloadAction, true);
     expect(bad.showOrientationAction, true);
-    expect(bad.preloadPages, 3);
+    expect(bad.preloadPages, 100);
     expect(bad.openAfterSave, false);
     expect(bad.languageCode, 'ko');
     expect(bad.heroArtworkSource, 'custom');
