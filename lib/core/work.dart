@@ -14,6 +14,10 @@ class WorkEntry {
   final String updatedAt;
   // Optional: absent in older schemaVersion 1 JSON backups.
   final String? lastOpenedAt;
+  /// 'auto' (first image), 'preset' (built-in art), or 'page' (chosen image).
+  final String coverMode;
+  final int coverPreset;
+  final int coverPage;
 
   const WorkEntry({
     required this.videoId,
@@ -28,6 +32,9 @@ class WorkEntry {
     required this.collections,
     required this.updatedAt,
     this.lastOpenedAt,
+    this.coverMode = 'auto',
+    this.coverPreset = 0,
+    this.coverPage = 1,
   });
 
   factory WorkEntry.create({
@@ -65,6 +72,9 @@ class WorkEntry {
     int? currentPage,
     List<String>? collections,
     String? lastOpenedAt,
+    String? coverMode,
+    int? coverPreset,
+    int? coverPage,
   }) {
     return WorkEntry(
       videoId: videoId,
@@ -78,6 +88,9 @@ class WorkEntry {
       currentPage: currentPage ?? this.currentPage,
       collections: collections ?? this.collections,
       lastOpenedAt: lastOpenedAt ?? this.lastOpenedAt,
+      coverMode: coverMode ?? this.coverMode,
+      coverPreset: coverPreset ?? this.coverPreset,
+      coverPage: coverPage ?? this.coverPage,
       updatedAt: DateTime.now().toUtc().toIso8601String(),
     );
   }
@@ -95,6 +108,9 @@ class WorkEntry {
     'collections': collections,
     'updatedAt': updatedAt,
     if (lastOpenedAt != null) 'lastOpenedAt': lastOpenedAt,
+    if (coverMode != 'auto') 'coverMode': coverMode,
+    if (coverPreset != 0) 'coverPreset': coverPreset,
+    if (coverPage != 1) 'coverPage': coverPage,
   };
 
   factory WorkEntry.fromJson(Map<String, dynamic> data) {
@@ -123,6 +139,14 @@ class WorkEntry {
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true).toIso8601String(),
       lastOpenedAt: DateTime.tryParse(text('lastOpenedAt'))
           ?.toUtc().toIso8601String(),
+      coverMode: const {'auto', 'preset', 'page'}.contains(text('coverMode'))
+          ? text('coverMode') : 'auto',
+      coverPreset: data['coverPreset'] is num
+          ? (data['coverPreset'] as num).toInt().clamp(0, 5).toInt()
+          : 0,
+      coverPage: data['coverPage'] is num
+          ? (data['coverPage'] as num).toInt().clamp(1, 1000000).toInt()
+          : 1,
     );
   }
 }
@@ -206,6 +230,9 @@ class LibraryBackup {
             ? existing.currentPage
             : incoming.currentPage,
         collections: {...existing.collections, ...incoming.collections}.toList(),
+        coverMode: recent.coverMode,
+        coverPreset: recent.coverPreset,
+        coverPage: recent.coverPage,
         updatedAt: recent.updatedAt,
         lastOpenedAt: (existing.lastOpenedAt ?? '').compareTo(
             incoming.lastOpenedAt ?? '') >= 0

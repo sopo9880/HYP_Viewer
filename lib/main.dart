@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -9,9 +11,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/export.dart';
 import 'core/gallery.dart';
+import 'core/cover_store.dart';
+import 'core/reader_settings.dart';
 import 'core/hitomi_reader_link.dart';
 import 'core/hitomi_gallery.dart';
 import 'ui/gallery_reader.dart';
+import 'ui/cover_picker.dart';
 import 'ui/hyp_dashboard.dart';
 import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
@@ -48,6 +53,12 @@ class LibraryHome extends StatefulWidget {
 
 class _LibraryHomeState extends State<LibraryHome> {
   final storage = LibraryStorage();
+  final coverStore = const CoverStore();
+  final readerSettingsStorage = const ReaderSettingsStorage();
+  ReaderSettings readerSettings = const ReaderSettings();
+  int coverEpoch = 0;
+  Future<void> _libraryWrites = Future<void>.value();
+  final Set<String> _coverCaptures = <String>{};
   int navigationEpoch = 0;
   final galleryStore = GalleryStore();
   final sourceSettings = OnlineSourceSettings();
@@ -75,8 +86,42 @@ class _LibraryHomeState extends State<LibraryHome> {
     super.initState();
     _load();
     _loadOnlineSource();
+    _loadReaderSettings();
     _listenForSharedShorts();
     WidgetsBinding.instance.addPostFrameCallback((_) => _automaticUpdateCheck());
+  }
+
+  Future<void> _loadReaderSettings() async {
+    try {
+      final result = await readerSettingsStorage.load();
+      if (mounted) setState(() => readerSettings = result);
+    } catch (e) {
+      _status('뷰어 설정 읽기 실패: ' + e.toString());
+    }
+  }
+
+  Future<void> _saveReaderSettings(ReaderSettings updated) async {
+    try {
+      await readerSettingsStorage.save(updated);
+      if (mounted) setState(() => readerSettings = updated);
+    } catch (e) {
+      _status('뷰어 설정 저장 실패: ' + e.toString());
+    }
+  }
+
+  /// Apply a mutation to the latest library, not to an old snapshot captured
+  /// before an earlier asynchronous save finished.
+  Future<void> _commitLibrary(
+    LibraryBackup Function(LibraryBackup) change,
+  ) {
+    final task = _libraryWrites.then((_) async {
+      final updated = change(library);
+      await storage.save(updated);
+      if (mounted) setState(() => library = updated);
+    });
+    _libraryWrites = task.then<void>((_) {},
+        onError: (Object _, StackTrace __) {});
+    return task;
   }
 
   Future<void> _loadOnlineSource() async {
@@ -183,10 +228,10 @@ class _LibraryHomeState extends State<LibraryHome> {
         author: authorInput.text,
         originalComment: commentInput.text,
       );
-      final updated = LibraryBackup.merge(library,
-          LibraryBackup(works: [work], collections: const []));
-      await storage.save(updated);
-      setState(() => library = updated);
+      await _commitLibrary((latest) => LibraryBackup.merge(latest,
+          LibraryBackup(works: [work], collections: const [])));
+      // Start preparing the first-page thumbnail, without blocking Save.
+      unawaited(_prepareAutomaticCover(work));
       _status('서재에 저장했어.');
     } catch (e) {
       _status('저장 실패: ' + e.toString());
@@ -195,25 +240,37 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   Future<void> _updateWork(WorkEntry work) async {
     try {
-      final updated = LibraryBackup(
-        works: library.works.map((w) => w.key == work.key ? work : w).toList(),
-        collections: library.collections,
-      );
-      await storage.save(updated);
-      setState(() => library = updated);
+      await _commitLibrary((latest) => LibraryBackup(
+        works: latest.works.map((w) {
+          if (w.key != work.key) return w;
+          // Do not roll back recently updated reading progress when a
+          // bookmark/cover action arrives while an earlier save is in flight.
+          return work.copyWith(
+            currentPage: w.currentPage,
+            lastOpenedAt: w.lastOpenedAt,
+          );
+        }).toList(),
+        collections: latest.collections,
+      ));
     } catch (e) {
       _status('변경 실패: ' + e.toString());
     }
   }
 
   Future<void> _touchRead(WorkEntry work, {int? page}) async {
-    final matches = library.works.where((w) => w.key == work.key);
-    if (matches.isEmpty) return;
-    final current = matches.first;
-    await _updateWork(current.copyWith(
-      currentPage: page ?? current.currentPage,
-      lastOpenedAt: DateTime.now().toUtc().toIso8601String(),
-    ));
+    try {
+      await _commitLibrary((latest) => LibraryBackup(
+        works: latest.works.map((w) => w.key == work.key
+            ? w.copyWith(
+                currentPage: page ?? w.currentPage,
+                lastOpenedAt: DateTime.now().toUtc().toIso8601String(),
+              )
+            : w).toList(),
+        collections: latest.collections,
+      ));
+    } catch (e) {
+      _status('읽기 기록 저장 실패: ' + e.toString());
+    }
   }
 
   Future<void> _openOriginal(WorkEntry work) async {
@@ -284,12 +341,103 @@ class _LibraryHomeState extends State<LibraryHome> {
         ],
       ));
       if (mode == null) return;
-      final updated = mode == 'replace' ? incoming : LibraryBackup.merge(library, incoming);
-      await storage.save(updated);
-      if (mounted) setState(() => library = updated);
+      await _commitLibrary((latest) =>
+          mode == 'replace' ? incoming : LibraryBackup.merge(latest, incoming));
       _status('서재 가져오기 완료');
     } catch (e) {
       _status('복원 실패: ' + e.toString());
+    }
+  }
+
+  Future<void> _prepareAutomaticCover(WorkEntry work) async {
+    if (work.coverMode != 'auto') return;
+    final client = http.Client();
+    try {
+      if (await coverStore.exists(work.workId)) return;
+      final GalleryPageSource source =
+          await galleryStore.exists(work.workId)
+              ? await galleryStore.read(work.workId)
+              : await HitomiGalleryProvider(client).load(work.workId);
+      final first = await source.loadPage(0);
+      await _captureAutomaticCover(work, 1, first);
+    } catch (_) {
+      // Unavailable remote thumbnails must never prevent saving a work.
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _captureAutomaticCover(
+      WorkEntry work, int page, Uint8List bytes) async {
+    if (page != 1 || work.coverMode != 'auto' ||
+        !_coverCaptures.add(work.workId)) return;
+    try {
+      if (!await coverStore.exists(work.workId)) {
+        await coverStore.save(work.workId, bytes);
+        if (mounted) setState(() => coverEpoch++);
+      }
+    } catch (_) {
+      // Image reading remains usable even if generating a cover fails.
+    } finally {
+      _coverCaptures.remove(work.workId);
+    }
+  }
+
+  Future<void> _usePageAsCover(
+      WorkEntry work, int page, Uint8List bytes) async {
+    await coverStore.save(work.workId, bytes, mode: 'page', page: page);
+    await _updateWork(work.copyWith(coverMode: 'page', coverPage: page));
+    if (mounted) {
+      setState(() => coverEpoch++);
+      _status('작품 ' + page.toString() + '페이지를 서재 표지로 설정했어.');
+    }
+  }
+
+  Future<void> _chooseCover(WorkEntry work) async {
+    final choice = await showCoverPicker(context, work);
+    if (choice == null || !mounted) return;
+    final mode = choice.mode;
+    try {
+      if (mode == 'page') {
+        final client = http.Client();
+        try {
+          final GalleryPageSource gallery =
+              await galleryStore.exists(work.workId)
+                  ? await galleryStore.read(work.workId)
+                  : await HitomiGalleryProvider(client).load(work.workId);
+          if (choice.page > gallery.pageCount) {
+            throw FormatException('전체 ' + gallery.pageCount.toString() +
+                '페이지 중에서 선택해야 해.');
+          }
+          final bytes = await gallery.loadPage(choice.page - 1);
+          await _usePageAsCover(work, choice.page, bytes);
+        } finally {
+          client.close();
+        }
+      } else {
+        await _updateWork(work.copyWith(
+          coverMode: mode, coverPreset: choice.preset,
+          coverPage: choice.page,
+        ));
+        if (mounted) setState(() => coverEpoch++);
+        if (mode == 'auto' && !await coverStore.exists(work.workId)) {
+          final client = http.Client();
+          try {
+            final GalleryPageSource gallery =
+                await galleryStore.exists(work.workId)
+                    ? await galleryStore.read(work.workId)
+                    : await HitomiGalleryProvider(client).load(work.workId);
+            await coverStore.save(work.workId, await gallery.loadPage(0));
+            if (mounted) setState(() => coverEpoch++);
+          } catch (_) {
+            _status('자동 표지를 선택했어. 첫 페이지를 열면 미리보기를 생성할게.');
+          } finally {
+            client.close();
+          }
+        }
+      }
+    } catch (e) {
+      _status('표지 설정 실패: ' + e.toString());
     }
   }
 
@@ -313,6 +461,11 @@ class _LibraryHomeState extends State<LibraryHome> {
           archive: remote,
           onPageChanged: (page) { _touchRead(work, page: page); },
           onOpenInBrowser: (page) => _openWebReader(work, page: page),
+          settings: readerSettings,
+          onPageLoaded: (page, bytes) {
+            unawaited(_captureAutomaticCover(work, page, bytes));
+          },
+          onChooseCover: (page, bytes) => _usePageAsCover(work, page, bytes),
         )),
       );
     } catch (e) {
@@ -346,7 +499,7 @@ class _LibraryHomeState extends State<LibraryHome> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('1페이지는 #1, 2페이지부터는 #2-3처럼 열어. '
+            const Text('1페이지는 #1-, 2페이지부터는 #2-3처럼 열어. '
                 '외부 브라우저에서 넘긴 페이지는 자동 기록되지 않아.'),
             const SizedBox(height: 12),
             TextFormField(
@@ -487,7 +640,12 @@ class _LibraryHomeState extends State<LibraryHome> {
           onPageChanged: (page) {
             _touchRead(work, page: page);
           },
-        )),
+          settings: readerSettings,
+          onPageLoaded: (page, bytes) {
+            unawaited(_captureAutomaticCover(work, page, bytes));
+          },
+          onChooseCover: (page, bytes) => _usePageAsCover(work, page, bytes),
+        )), 
       );
     } catch (e) {
       _status('읽기 실패: ' + e.toString() + ' / CBZ 또는 ZIP 파일을 먼저 연결해줘.');
@@ -615,6 +773,9 @@ class _LibraryHomeState extends State<LibraryHome> {
   Widget build(BuildContext context) => HypDashboard(
     library: library,
     galleryStore: galleryStore,
+    coverStore: coverStore,
+    coverEpoch: coverEpoch,
+    readerSettings: readerSettings,
     urlInput: urlInput,
     apiKeyInput: apiKeyInput,
     commentInput: commentInput,
@@ -646,6 +807,8 @@ class _LibraryHomeState extends State<LibraryHome> {
     onDownloadOnline: _downloadOnline,
     onImportGallery: _importGallery,
     onUpdateWork: _updateWork,
+    onChooseCover: _chooseCover,
+    onSaveReaderSettings: _saveReaderSettings,
     onOpenOriginal: _openOriginal,
     onOpenShortsInput: _openShortsInput,
     onCancelGalleryDownload: () => galleryDownloadToken?.cancel(),

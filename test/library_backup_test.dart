@@ -55,6 +55,27 @@ void main() {
     expect(restored.works.single.currentPage, 7);
   });
 
+  test('backups preserve chosen cover and older imports use defaults', () {
+    final chosen = WorkEntry.create(workId: '2711759').copyWith(
+        coverMode: 'page', coverPage: 12, coverPreset: 3);
+    final encoded = LibraryBackup(
+        works: [chosen], collections: const []).encode();
+    final restored = LibraryBackup.decode(encoded).works.single;
+    expect(restored.coverMode, 'page');
+    expect(restored.coverPage, 12);
+    expect(restored.coverPreset, 3);
+
+    final old = WorkEntry.fromJson(WorkEntry.create(workId: '123').toJson());
+    expect(old.coverMode, 'auto');
+    expect(old.coverPage, 1);
+    final merged = LibraryBackup.merge(
+      LibraryBackup(works: [chosen], collections: const []),
+      LibraryBackup(works: [chosen.copyWith(coverMode: 'preset')],
+          collections: const []),
+    );
+    expect(merged.works.single.coverMode, 'preset');
+  });
+
   test('older v1 backup without lastOpenedAt remains compatible', () {
     final oldWork = WorkEntry.create(workId: '1234567');
     final restored = LibraryBackup.decode(
