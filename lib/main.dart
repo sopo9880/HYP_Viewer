@@ -479,6 +479,12 @@ class _LibraryHomeState extends State<LibraryHome> {
       var unknownTitles = 0;
       for (final code in codes) {
         var title = codes.length == 1 ? titleInput.text.trim() : '';
+        // Reuse titles from the existence check: don't refetch the same
+        // metadata for each selected work while saving a batch.
+        final verified = _candidateCache[code];
+        if (title.isEmpty && verified?.exists == true) {
+          title = verified!.title;
+        }
         if (title.isEmpty) {
           try {
             title = await HitomiGalleryProvider(client).fetchTitle(code);
