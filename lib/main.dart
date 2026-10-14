@@ -1051,22 +1051,52 @@ class _LibraryHomeState extends State<LibraryHome> {
         },
       );
       if (!mounted) return;
-      final install = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('업데이트 파일 검증 완료'),
-          content: const Text(
-            '다운로드한 파일의 SHA-256을 확인했어. '
-            'Windows는 앱을 종료한 뒤 설치하고, Android는 시스템 설치 확인창이 열려. 계속할까?',
+      bool install;
+      if (Platform.isAndroid) {
+        // Review system security settings before opening the APK installer.
+        // Native Android completes only AFTER the user returns to our app.
+        _status('APK 다운로드와 SHA-256 검증 완료. '
+            '보안 설정을 확인한 뒤 앱으로 돌아와줘.');
+        final returned = await AndroidReaderControls
+            .openSecuritySettingsForUpdate();
+        if (!mounted) return;
+        if (!returned) {
+          _status('기기 보안 설정을 열지 못했어. '
+              '설정에서 직접 확인한 뒤 업데이트를 다시 시도해줘.');
+          return;
+        }
+        install = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('보안 설정 확인 후 설치'),
+            content: const Text('보안 설정 화면에서 앱으로 돌아왔어. '
+                'HYP Viewer는 보안 위험 자동 차단이나 출처 확인 기능을 '
+                '자동으로 끄지 않아. 설치를 계속하면 Android의 '
+                '시스템 설치 승인 화면이 열려. 계속할까?'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('나중에')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('설치 화면 열기')),
+            ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('나중에')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('설치 시작')),
-          ],
-        ),
-      );
+        ) == true;
+      } else {
+        install = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('업데이트 파일 검증 완료'),
+            content: const Text('다운로드한 파일의 SHA-256을 확인했어. '
+                'Windows 설치 프로그램을 열기 전에 앱을 종료할게. 계속할까?'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('나중에')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('설치 시작')),
+            ],
+          ),
+        ) == true;
+      }
       if (install == true) {
         await UpdateService(client).launchInstaller(installer);
         if (Platform.isWindows) {
@@ -1125,7 +1155,8 @@ class _LibraryHomeState extends State<LibraryHome> {
                 child: const Text('릴리스 보기')),
             if (asset != null) FilledButton(
               onPressed: () => Navigator.pop(ctx, 'download'),
-              child: const Text('다운로드 및 검증'),
+              child: Text(Platform.isAndroid
+                  ? '다운로드 → 보안 설정 확인' : '다운로드 및 검증'),
             ),
           ],
         ),
