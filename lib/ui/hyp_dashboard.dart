@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:http/http.dart' as http;
+import '../core/hitomi_gallery.dart';
+import '../core/hitomi_popularity.dart';
+
 import '../core/hero_cover_picker.dart';
 
 import 'package:flutter/material.dart';
@@ -110,6 +114,7 @@ class HypDashboard extends StatefulWidget {
   final bool downloadCanPause;
   final Future<void> Function(WorkEntry) onImportGallery;
   final Future<void> Function(WorkEntry) onUpdateWork;
+  final Future<void> Function(Map<String, String>) onSavePublicationDates;
   final Future<void> Function(WorkEntry) onChooseCover;
   final Future<void> Function(ReaderSettings) onSaveReaderSettings;
   final Future<void> Function(WorkEntry) onOpenOriginal;
@@ -184,6 +189,7 @@ class HypDashboard extends StatefulWidget {
     required this.downloadCanPause,
     required this.onImportGallery,
     required this.onUpdateWork,
+    required this.onSavePublicationDates,
     required this.onChooseCover,
     required this.onSaveReaderSettings,
     required this.onOpenOriginal,
@@ -216,6 +222,74 @@ class _HypDashboardState extends State<HypDashboard> {
   final List<String?> _rotatingCoverKeys = [null, null, null];
   Timer? _bannerTimer;
   late final TextEditingController _preloadInput;
+  final Map<String, Map<String, int>> _popularity = {};
+  final Set<String> _popularityTried = {};
+  bool _popularityBusy = false;
+  bool _publicationBusy = false;
+  bool _publicationTried = false;
+  String? _sortLoadError;
+
+  void _syncSortLookup() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.readerSettings.librarySort == 'hitomiPopular') {
+        unawaited(_loadPopularity());
+      } else if (widget.readerSettings.librarySort == 'published') {
+        unawaited(_loadPublicationDates());
+      }
+    });
+  }
+
+  Future<void> _loadPopularity({bool refresh = false}) async {
+    final period = widget.readerSettings.popularityPeriod;
+    if (_popularityBusy || (!refresh && _popularityTried.contains(period))) return;
+    _popularityTried.add(period);
+    setState(() { _popularityBusy = true; _sortLoadError = null; });
+    final client = http.Client();
+    try {
+      final ranks = await HitomiPopularity(client).loadRanks(period);
+      if (mounted) setState(() => _popularity[period] = ranks);
+    } catch (error) {
+      if (mounted) setState(() =>
+          _sortLoadError = '히토미 인기 목록을 받지 못했어: $error');
+    } finally {
+      client.close();
+      if (mounted) setState(() => _popularityBusy = false);
+    }
+  }
+
+  Future<void> _loadPublicationDates({bool refresh = false}) async {
+    if (_publicationBusy || (!refresh && _publicationTried)) return;
+    _publicationTried = true;
+    final missing = widget.library.works.where(
+        (w) => w.sourceDate.isEmpty &&
+        RegExp(r'^\d{1,12}$').hasMatch(w.workId)).take(250).toList();
+    if (missing.isEmpty) return;
+    setState(() { _publicationBusy = true; _sortLoadError = null; });
+    final client = http.Client();
+    var failures = 0;
+    try {
+      for (var offset = 0; offset < missing.length && mounted; offset += 3) {
+        final dates = <String, String>{};
+        await Future.wait(missing.skip(offset).take(3).map((work) async {
+          try {
+            final info = await HitomiGalleryProvider(client)
+                .fetchInfo(work.workId).timeout(const Duration(seconds: 12));
+            if (DateTime.tryParse(info.date) != null) {
+              dates[work.workId] = info.date;
+            }
+          } catch (_) { failures++; }
+        }));
+        if (dates.isNotEmpty) await widget.onSavePublicationDates(dates);
+        if (failures >= 8) break;
+      }
+      if (failures > 0 && mounted) setState(() =>
+          _sortLoadError = '$failures개 작품의 등록 날짜를 가져오지 못했어.');
+    } finally {
+      client.close();
+      if (mounted) setState(() => _publicationBusy = false);
+    }
+  }
 
   void _shuffleBannerCover() {
     if (!mounted) return;
@@ -241,6 +315,7 @@ class _HypDashboardState extends State<HypDashboard> {
     _preloadInput = TextEditingController(
       text: widget.readerSettings.preloadPages.toString());
     _search.addListener(_changedSearch);
+    _syncSortLookup();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshOffline());
     _bannerTimer = Timer.periodic(const Duration(seconds: 8), (_) {
       if (mounted && _page == HypPage.home &&
@@ -254,6 +329,9 @@ class _HypDashboardState extends State<HypDashboard> {
   @override
   void didUpdateWidget(covariant HypDashboard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.readerSettings.librarySort != widget.readerSettings.librarySort ||
+        oldWidget.readerSettings.popularityPeriod !=
+            widget.readerSettings.popularityPeriod) _syncSortLookup();
     if (oldWidget.readerSettings.preloadPages !=
         widget.readerSettings.preloadPages) {
       _preloadInput.text = widget.readerSettings.preloadPages.toString();
@@ -470,6 +548,7 @@ class _HypDashboardState extends State<HypDashboard> {
       orElse: () => LibrarySort.newest,
     ),
     descending: widget.readerSettings.librarySortDescending,
+    popularityRanks: _popularity[widget.readerSettings.popularityPeriod] ?? const {},
   );
 
   List<WorkEntry> get _favorites => _works.where((w) => w.favorite).toList();
@@ -1255,6 +1334,10 @@ class _HypDashboardState extends State<HypDashboard> {
           items: const [
             DropdownMenuItem(value: 'newest',
                 child: HypText('최신 추가순')),
+            DropdownMenuItem(value: 'published',
+                child: HypText('출시순 (히토미 등록일)')),
+            DropdownMenuItem(value: 'hitomiPopular',
+                child: HypText('히토미 인기순')),
             DropdownMenuItem(value: 'mostRead',
                 child: HypText('인기 (내 열람 횟수)')),
             DropdownMenuItem(value: 'title', child: HypText('이름순')),
@@ -1276,6 +1359,43 @@ class _HypDashboardState extends State<HypDashboard> {
               ? Icons.arrow_upward : Icons.arrow_downward),
         ),
       ]),
+      if (widget.readerSettings.librarySort == 'hitomiPopular')
+        Padding(padding: const EdgeInsets.only(top: 7), child: Row(children: [
+          Expanded(child: DropdownButtonFormField<String>(
+            key: const Key('library-popularity-period'),
+            initialValue: widget.readerSettings.popularityPeriod,
+            decoration: const InputDecoration(isDense: true,
+                labelText: '히토미 인기 기간'),
+            items: const [
+              DropdownMenuItem(value: 'today', child: Text('일간')),
+              DropdownMenuItem(value: 'week', child: Text('주간')),
+              DropdownMenuItem(value: 'month', child: Text('월간')),
+              DropdownMenuItem(value: 'year', child: Text('연간')),
+            ],
+            onChanged: (period) {
+              if (period != null) widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(popularityPeriod: period));
+            },
+          )),
+          IconButton(tooltip: '인기 순위 새로고침',
+              onPressed: _popularityBusy ? null :
+                  () => _loadPopularity(refresh: true),
+              icon: const Icon(Icons.refresh)),
+        ])),
+      if (widget.readerSettings.librarySort == 'published')
+        Align(alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: _publicationBusy ? null :
+                () => _loadPublicationDates(refresh: true),
+            icon: const Icon(Icons.refresh),
+            label: const Text('등록일 다시 가져오기'),
+          )),
+      if (_popularityBusy || _publicationBusy) const LinearProgressIndicator(),
+      if (_sortLoadError != null &&
+          {'hitomiPopular', 'published'}.contains(widget.readerSettings.librarySort))
+        Padding(padding: const EdgeInsets.only(top: 5),
+          child: Text(_sortLoadError!,
+            style: const TextStyle(color: Colors.orangeAccent, fontSize: 12))),
       const SizedBox(height: 10),
       Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton.icon(
