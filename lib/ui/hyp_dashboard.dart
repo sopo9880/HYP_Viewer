@@ -23,6 +23,7 @@ import 'hero_banner.dart';
 import 'hyp_theme.dart';
 import 'shorts_finder_panel.dart';
 import 'work_cards.dart';
+import 'work_group_card.dart';
 
 enum HypPage { home, library, favorites, downloads, history, settings }
 
@@ -212,6 +213,7 @@ class _HypDashboardState extends State<HypDashboard> {
   bool _openBackupSectionRequested = false;
   final Set<String> _offlineKeys = <String>{};
   bool _selectingWorks = false;
+  String? _openedGroupId;
   final Set<String> _selectedWorkIds = <String>{};
   bool get _canSelectWorks => _page == HypPage.library ||
       _page == HypPage.downloads || _search.text.trim().isNotEmpty;
@@ -368,6 +370,7 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   void _navigate(HypPage page) {
+    _openedGroupId = null;
     _lastHomeBack = null;
     _search.clear();
     setState(() {
@@ -391,6 +394,10 @@ class _HypDashboardState extends State<HypDashboard> {
     }
     if (_search.text.isNotEmpty) {
       _search.clear();
+      return;
+    }
+    if (_page == HypPage.library && _openedGroupId != null) {
+      setState(() => _openedGroupId = null);
       return;
     }
     if (_page != HypPage.home) {
@@ -987,6 +994,7 @@ class _HypDashboardState extends State<HypDashboard> {
     ],
   );
 
+  /// One visual grid for both single works and stacked series covers.
   Widget _groupedLibraryGrid(List<WorkEntry> works) {
     if (works.isEmpty) {
       return _gridOrEmpty(works,
@@ -999,56 +1007,112 @@ class _HypDashboardState extends State<HypDashboard> {
         groups.putIfAbsent(work.groupId, () => []).add(work);
       }
     }
-    final singles = works.where((w) => w.groupId.isEmpty).toList();
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final entry in groups.entries) ...[
-          HypPanel(child: ExpansionTile(
-            key: Key('work-group-' + entry.key),
-            title: HypText(entry.value.first.groupTitle.isEmpty
-                ? '작품 묶음' : entry.value.first.groupTitle),
-            subtitle: HypText(entry.value.length.toString() + '개 작품 · '
-                '작품별 읽기 기록 독립 유지'),
-            leading: const Icon(Icons.library_books_outlined),
-            trailing: PopupMenuButton<String>(
-              tooltip: '묶음 관리',
-              key: Key('work-group-menu-' + entry.key),
-              onSelected: (action) => _groupAction(action,
-                  entry.key, entry.value),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'rename', child: HypText('묶음 이름 수정')),
-                PopupMenuItem(value: 'reorder', child: HypText('회차 순서 변경')),
-                PopupMenuItem(value: 'ungroup', child: HypText('묶음만 해제')),
-              ],
-            ),
-            childrenPadding: const EdgeInsets.only(bottom: 12),
-            children: [
-              _gridOrEmpty(
-                [...entry.value]..sort((a, b) =>
-                    a.groupOrder.compareTo(b.groupOrder)),
-                emptyTitle: '묶음이 비어 있어',
-                emptyMessage: '다른 작품을 선택해서 추가해줘.',
-              ),
-            ],
-          )),
-          const SizedBox(height: 12),
-        ],
-        if (singles.isNotEmpty) _gridOrEmpty(singles,
-          emptyTitle: '서재 작품이 없어',
-          emptyMessage: '서재에 작품을 추가해줘.'),
-      ],
-    );
+    if (_openedGroupId != null) {
+      final selected = groups[_openedGroupId];
+      if (selected != null) {
+        final ordered = [...selected]..sort((a, b) {
+          if (a.groupOrder != b.groupOrder) {
+            return a.groupOrder.compareTo(b.groupOrder);
+          }
+          return WorkGrouping.compareChapters(a, b);
+        });
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              IconButton(key: const Key('library-group-back'),
+                tooltip: '서재로 돌아가기',
+                onPressed: () => setState(() => _openedGroupId = null),
+                icon: const Icon(Icons.arrow_back)),
+              Expanded(child: Text(
+                ordered.first.groupTitle.isEmpty
+                    ? '작품 묶음' : ordered.first.groupTitle,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium)),
+              PopupMenuButton<String>(
+                key: Key('work-group-menu-${_openedGroupId!}'),
+                tooltip: '묶음 관리',
+                onSelected: (action) => _groupAction(
+                    action, _openedGroupId!, selected),
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'rename', child: Text('묶음 이름 수정')),
+                  PopupMenuItem(value: 'reorder', child: Text('회차 순서 변경')),
+                  PopupMenuItem(value: 'ungroup', child: Text('묶음만 해제')),
+                ]),
+            ]),
+            const SizedBox(height: 10),
+            _gridOrEmpty(ordered, emptyTitle: '묶음이 비어 있어',
+                emptyMessage: '다른 작품을 선택해서 추가해줘.'),
+          ]);
+      }
+      _openedGroupId = null;
+    }
+    final entries = <Object>[];
+    final seenGroups = <String>{};
+    for (final work in works) {
+      if (work.groupId.isEmpty) {
+        entries.add(work);
+      } else if (seenGroups.add(work.groupId)) {
+        entries.add(work.groupId);
+      }
+    }
+    return LayoutBuilder(builder: (context, size) {
+      final w = size.maxWidth;
+      final columns = w >= 1100 ? 5 : w >= 850 ? 4 :
+          w >= 620 ? 3 : w >= 335 ? 2 : 1;
+      return GridView.builder(
+        key: const Key('library-mixed-grid'),
+        itemCount: entries.length,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns, crossAxisSpacing: 12, mainAxisSpacing: 12,
+          childAspectRatio: columns == 1 ? 1.15 : 0.68,
+        ),
+        itemBuilder: (context, index) {
+          final entry = entries[index];
+          if (entry is String) {
+            final members = groups[entry]!;
+            final ordered = [...members]
+              ..sort((a,b) => a.groupOrder.compareTo(b.groupOrder));
+            return HypWorkGroupCard(
+              key: Key('work-group-$entry'),
+              title: ordered.first.groupTitle.isEmpty
+                  ? '작품 묶음' : ordered.first.groupTitle,
+              members: ordered,
+              coverImages: _coverImages,
+              onOpen: () => setState(() => _openedGroupId = entry),
+              onAction: (action) => _groupAction(action, entry, members),
+            );
+          }
+          final work = entry as WorkEntry;
+          return HypWorkCard(
+            work: work,
+            isOffline: _offlineKeys.contains(work.key),
+            totalPages: _pageCounts[work.key],
+            coverBytes: _coverImages[work.key],
+            onOpen: () {
+              if (_offlineKeys.contains(work.key)) {
+                widget.onOpenGallery(work);
+              } else {
+                widget.onReadOnline(work);
+              }
+            },
+            onAction: (action) => _workAction(action, work),
+            selectionMode: _selectingWorks && _canSelectWorks,
+            selected: _selectedWorkIds.contains(work.workId),
+            onSelect: () => _toggleSelectedWork(work),
+            onLongPress: () => _startSelection(work),
+          );
+        },
+      );
+    });
   }
 
   Future<void> _groupSelectedWorks() async {
     final selected = _works.where((w) =>
         _selectedWorkIds.contains(w.workId) && w.groupId.isEmpty).toList();
     if (selected.length < 2) return;
-    selected.sort((a, b) {
-      final one = WorkGrouping.episodeNumber(a) ?? 10000;
-      final two = WorkGrouping.episodeNumber(b) ?? 10000;
-      return one.compareTo(two);
-    });
+    selected.sort(WorkGrouping.compareChapters);
     final input = TextEditingController(
         text: WorkGrouping.normalizedSeries(selected.first.title));
     String? title;

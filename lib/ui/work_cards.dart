@@ -259,8 +259,11 @@ class HypWorkCard extends StatelessWidget {
 
   Widget _cover() {
     if (coverBytes != null && work.coverMode != 'preset') {
-      return Image.memory(coverBytes!, fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _fallbackCover());
+      return ColoredBox(
+        color: const Color(0xFF171925),
+        child: Image.memory(coverBytes!, fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) => _fallbackCover()),
+      );
     }
     return _fallbackCover();
   }

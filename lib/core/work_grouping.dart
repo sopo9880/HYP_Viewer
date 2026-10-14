@@ -31,6 +31,23 @@ class WorkGrouping {
         .trim().toLowerCase();
   }
 
+  /// Episode numbers beat approximate upload dates. Dates beat gallery IDs.
+  /// Explicit groupOrder is persisted by the caller after the user confirms.
+  static int compareChapters(WorkEntry a, WorkEntry b) {
+    final ae = episodeNumber(a), be = episodeNumber(b);
+    if (ae != null && be != null && ae != be) return ae.compareTo(be);
+    if (ae != null && be == null) return -1;
+    if (be != null && ae == null) return 1;
+    if (a.sourceDate.isNotEmpty && b.sourceDate.isNotEmpty &&
+        a.sourceDate != b.sourceDate) {
+      return a.sourceDate.compareTo(b.sourceDate);
+    }
+    final ai = BigInt.tryParse(a.workId);
+    final bi = BigInt.tryParse(b.workId);
+    if (ai != null && bi != null) return ai.compareTo(bi);
+    return a.workId.compareTo(b.workId);
+  }
+
   static List<WorkGroupSuggestion> suggest(List<WorkEntry> works) {
     final ungrouped = works.where((w) => w.groupId.isEmpty).toList();
     final buckets = <String, List<WorkEntry>>{};
@@ -51,8 +68,7 @@ class WorkGrouping {
       if (group.length < 2 ||
           episodeNumbers.any((ep) => ep == null) ||
           episodeNumbers.toSet().length != group.length) continue;
-      group.sort((a, b) =>
-          episodeNumber(a)!.compareTo(episodeNumber(b)!));
+      group.sort(compareChapters);
       final longestName = group.map((w) => normalizedSeries(w.title))
           .where((name) => name.length > 3)
           .fold<String>('', (a, name) => name.length > a.length ? name : a);
