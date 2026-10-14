@@ -78,6 +78,8 @@ class _LibraryHomeState extends State<LibraryHome> {
   ReaderSettings readerSettings = const ReaderSettings();
   int coverEpoch = 0;
   Future<void> _libraryWrites = Future<void>.value();
+  final Completer<void> _initialLibraryRead = Completer<void>();
+  bool _libraryReadFailed = false;
   final Set<String> _coverCaptures = <String>{};
   int navigationEpoch = 0;
   int libraryNavigationEpoch = 0;
@@ -229,6 +231,12 @@ class _LibraryHomeState extends State<LibraryHome> {
     LibraryBackup Function(LibraryBackup) change,
   ) {
     final task = _libraryWrites.then((_) async {
+      // An ACTION_SEND may arrive before async JSON startup has finished.
+      // Saving the empty initial UI state would wipe the real library.
+      await _initialLibraryRead.future;
+      if (_libraryReadFailed) {
+        throw StateError('서재 파일 읽기 오류가 해결되기 전에는 저장할 수 없어.');
+      }
       final updated = change(library);
       await storage.save(updated);
       if (mounted) setState(() => library = updated);
@@ -387,7 +395,12 @@ class _LibraryHomeState extends State<LibraryHome> {
         const LibraryBackup(works: [], collections: []), data);
       if (mounted) setState(() => library = normalized);
     } catch (e) {
-      _status('기존 서재 읽기 실패: ' + e.toString());
+      _libraryReadFailed = true;
+      _status('기존 서재 읽기 실패: ' + e.toString() +
+          ' / 데이터 보호를 위해 새 서재 저장을 잠갔어. '
+          '원본과 .previous 파일을 확인해줘.');
+    } finally {
+      if (!_initialLibraryRead.isCompleted) _initialLibraryRead.complete();
     }
   }
 
