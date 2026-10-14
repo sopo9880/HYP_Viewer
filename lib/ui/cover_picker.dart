@@ -118,6 +118,9 @@ class _CoverPickerDialogState extends State<_CoverPickerDialog> {
                 hintText: '예: 5',
               ),
               onTap: () => setState(() => _mode = 'page'),
+              onChanged: (_) {
+                if (_mode != 'page') setState(() => _mode = 'page');
+              },
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
