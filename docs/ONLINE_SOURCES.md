@@ -15,7 +15,7 @@ interchangeable.
 
 The external web address is fixed by the app:
 
-    https://hitomi.la/reader/{workId}.html#1
+    https://hitomi.la/reader/{workId}.html#1-
     https://hitomi.la/reader/{workId}.html#2-3
     https://hitomi.la/reader/{workId}.html#3-4
 
