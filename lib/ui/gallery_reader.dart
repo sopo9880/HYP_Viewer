@@ -51,6 +51,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   final Map<int, Future<Uint8List>> _imageCache = {};
   GalleryDiskCache? _diskCache;
   int? _pendingWebtoonJump;
+  double? _scrubTarget;
   Timer? _jumpReleaseTimer;
   final ItemScrollController _webtoonController = ItemScrollController();
   final ItemPositionsListener _webtoonPositions = ItemPositionsListener.create();
@@ -208,11 +209,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     final target = (_currentUnit + delta).clamp(0, _units - 1).toInt();
     if (target == _currentUnit) return;
     if (widget.settings.webtoonMode) {
-      if (_webtoonController.isAttached) {
-        unawaited(_webtoonController.scrollTo(
-          index: target, duration: const Duration(milliseconds: 260),
-          curve: Curves.easeOut));
-      }
+      _jumpTo(target);
       return;
     }
     if (!_controller.hasClients) return;
@@ -579,12 +576,19 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                         textDirection: !_vertical && widget.settings.reverse
                             ? TextDirection.rtl : TextDirection.ltr,
                         child: Slider(
-                          value: (_currentUnit + 1).toDouble(),
+                          value: (_scrubTarget ?? (_currentUnit + 1).toDouble())
+                              .clamp(1, _units.toDouble()).toDouble(),
                           min: 1,
                           max: _units.toDouble(),
                           divisions: _units > 1 ? _units - 1 : null,
-                          onChanged: _units > 1
-                              ? (value) => _jumpTo(value.round() - 1) : null,
+                          onChanged: _units > 1 ? (value) =>
+                              setState(() => _scrubTarget = value) : null,
+                          // Dragging through 100+ positions must NOT
+                          // enqueue 100 HTTP downloads or record stale pages.
+                          onChangeEnd: _units > 1 ? (value) {
+                            setState(() => _scrubTarget = null);
+                            _jumpTo(value.round() - 1);
+                          } : null,
                         ),
                       )),
                       !_vertical && widget.settings.reverse
