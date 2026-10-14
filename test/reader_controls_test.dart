@@ -12,8 +12,8 @@ import 'package:hyp_viewer/ui/gallery_reader.dart';
 class _Pages implements GalleryPageSource {
   final List<int> requested = [];
   static final Uint8List pixel = base64Decode(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
-    'AAAADUlEQVQIHWP4z8DwHwAFgAI/ScLytQAAAABJRU5ErkJggg==',
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91Jpz'
+    'AAAAFklEQVR4nGP8//8/AwMDEwMDAwMDAwAkBgMB/DXemwAAAABJRU5ErkJggg==',
   );
 
   @override

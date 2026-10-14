@@ -243,7 +243,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
         unawaited(_bytesAt(index).then<void>((bytes) async {
           if (!mounted) return;
           try {
-            await precacheImage(MemoryImage(bytes), context);
+            await precacheImage(MemoryImage(bytes), context,
+                onError: (exception, stack) {});
           } catch (_) {
             // A corrupt/deleted image still surfaces normally in the reader.
           }
