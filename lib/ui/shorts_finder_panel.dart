@@ -47,6 +47,14 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
   final Set<String> _selectedCodes = <String>{};
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.candidates.length <= 2) {
+      _selectedCodes.addAll(widget.candidates.map((e) => e.code));
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant ShortsFinderPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     final before = oldWidget.candidates.map((e) => e.code).join(',');
