@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/i18n.dart';
 
 import '../core/number_extractor.dart';
 import 'hyp_theme.dart';
@@ -18,6 +19,7 @@ class ShortsFinderPanel extends StatefulWidget {
   final Future<void> Function() onFetch;
   final Future<void> Function() onOpenYoutube;
   final Future<void> Function() onSave;
+  final Future<void> Function(String code)? onQuickAddNumber;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
 
   const ShortsFinderPanel({
@@ -34,6 +36,7 @@ class ShortsFinderPanel extends StatefulWidget {
     required this.onFetch,
     required this.onOpenYoutube,
     required this.onSave,
+    this.onQuickAddNumber,
     required this.onSaveSelectedWorks,
   });
 
@@ -45,6 +48,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
   bool _showDetails = false;
   bool _revealApiKey = false;
   final Set<String> _selectedCodes = <String>{};
+  final GlobalKey _quickCandidateAnchor = GlobalKey();
 
   @override
   void initState() {
@@ -66,16 +70,35 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
       if (widget.candidates.length <= 2) {
         _selectedCodes.addAll(widget.candidates.map((e) => e.code));
       }
-      if (widget.candidates.isNotEmpty) _showDetails = true;
+      if (widget.candidates.isNotEmpty) {
+        _showDetails = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final anchor = _quickCandidateAnchor.currentContext;
+          if (anchor != null && mounted) {
+            Scrollable.ensureVisible(anchor,
+              duration: const Duration(milliseconds: 180),
+              alignment: 0.20,
+              alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+          }
+        });
+      }
     }
   }
 
   void _search() {
     // A new Shorts URL must be fetched even if an older comment is present.
     // Manual extraction has its own button inside the details section.
-    if (widget.url.text.trim().isNotEmpty) {
+    final input = widget.url.text.trim();
+    final workNumber = RegExp(r'^\d{1,12}$');
+    if (workNumber.hasMatch(input) && widget.onQuickAddNumber != null) {
+      widget.onQuickAddNumber!(input);
+    } else if (input.isNotEmpty) {
       setState(() => _showDetails = true);
       widget.onFetch();
+    } else if (workNumber.hasMatch(widget.workId.text.trim()) &&
+        widget.comment.text.trim().isEmpty &&
+        widget.onQuickAddNumber != null) {
+      widget.onQuickAddNumber!(widget.workId.text.trim());
     } else if (widget.comment.text.trim().isNotEmpty) {
       widget.onAnalyze();
     } else {
@@ -118,10 +141,10 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('쇼츠 작품 번호 찾기',
+                    HypText('쇼츠 작품 번호 찾기',
                         style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 4),
-                    Text(
+                    HypText(
                       'Shorts 링크만 붙여넣으면 공개 설명란·댓글에서 번호를 찾아봐. API 키는 필요 없어.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
@@ -141,8 +164,8 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               keyboardType: TextInputType.url,
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _search(),
-              decoration: const InputDecoration(
-                hintText: 'YouTube Shorts 링크 붙여넣기',
+              decoration: InputDecoration(
+                hintText: HypI18n.t(context, 'YouTube Shorts 링크 또는 작품 번호 입력'),
                 prefixIcon: Icon(Icons.link_rounded, color: HypColors.muted),
               ),
             );
@@ -150,7 +173,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               controller: widget.apiKey,
               obscureText: !_revealApiKey,
               decoration: InputDecoration(
-                hintText: '개인 YouTube Data API 키 (고급 · 선택)',
+                hintText: HypI18n.t(context, '개인 YouTube Data API 키 (고급 · 선택)'),
                 prefixIcon: const Icon(Icons.key_outlined, color: HypColors.muted),
                 suffixIcon: IconButton(
                   tooltip: _revealApiKey ? 'API 키 숨기기' : 'API 키 보기',
@@ -165,13 +188,13 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               key: const Key('shorts-search-button'),
               onPressed: widget.busy ? null : _search,
               icon: const Icon(Icons.search),
-              label: const Text('작품 찾기'),
+              label: const HypText('작품 찾기'),
             );
             final advanced = Material(
               color: Colors.transparent,
               child: ExpansionTile(
                 key: const Key('youtube-advanced-settings'),
-                title: const Text('고급 설정 · 내 YouTube Data API 키 사용 (선택)'),
+                title: const HypText('고급 설정 · 내 YouTube Data API 키 사용 (선택)'),
                 tilePadding: EdgeInsets.zero,
                 childrenPadding: const EdgeInsets.only(bottom: 8),
                 children: [apiKey],
@@ -200,8 +223,45 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               ],
             );
           }),
+          if (widget.candidates.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              key: _quickCandidateAnchor,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  HypText('발견된 번호 후보: ${widget.candidates.length}개',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 7),
+                  SizedBox(
+                    height: 42,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: widget.candidates.take(20).map((candidate) =>
+                        Padding(
+                          padding: const EdgeInsets.only(right: 7),
+                          child: ActionChip(
+                            key: Key('shorts-quick-candidate-${candidate.code}'),
+                            avatar: const Icon(Icons.tag, size: 15),
+                            label: HypText('#${candidate.code}'),
+                            onPressed: () => setState(() {
+                              widget.workId.text = candidate.code;
+                              _selectedCodes.add(candidate.code);
+                              _showDetails = true;
+                            }),
+                          ),
+                        ),
+                      ).toList(),
+                    ),
+                  ),
+                  const HypText('후보를 누르면 번호가 입력돼. 아래에서 확인 후 저장해줘.',
+                      style: TextStyle(fontSize: 12, color: HypColors.muted)),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
-          const Text(
+          const HypText(
             '기본 조회는 API 키 없이 YouTube 공개 페이지에서 댓글을 읽어. '
             '유튜브 제한으로 실패할 수도 있어. 이때는 직접 댓글을 복사해 붙여넣어줘.',
             style: TextStyle(fontSize: 12, color: HypColors.muted),
@@ -211,12 +271,12 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             OutlinedButton.icon(
               onPressed: widget.busy ? null : widget.onFetch,
               icon: const Icon(Icons.cloud_download_outlined, size: 19),
-              label: const Text('설명란 · 댓글 자동 조회'),
+              label: const HypText('설명란 · 댓글 자동 조회'),
             ),
             TextButton.icon(
               onPressed: widget.onOpenYoutube,
               icon: const Icon(Icons.open_in_new, size: 19),
-              label: const Text('유튜브 열고 댓글 복사'),
+              label: const HypText('유튜브 열고 댓글 복사'),
             ),
           ]),
           const SizedBox(height: 6),
@@ -225,7 +285,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             icon: Icon(showDetails
                 ? Icons.keyboard_arrow_up
                 : Icons.keyboard_arrow_down),
-            label: Text(showDetails
+            label: HypText(showDetails
                 ? '댓글·번호 입력 접기'
                 : '댓글 직접 입력 · 번호 확정'),
           ),
@@ -264,9 +324,9 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             controller: widget.comment,
             minLines: 3,
             maxLines: 7,
-            decoration: const InputDecoration(
-              labelText: '설명란 / 댓글 원문',
-              hintText: '댓글 내용을 붙여넣으면 숫자 후보를 추출할 수 있어.',
+            decoration: InputDecoration(
+              labelText: HypI18n.t(context, '설명란 / 댓글 원문'),
+              hintText: HypI18n.t(context, '댓글 내용을 붙여넣으면 숫자 후보를 추출할 수 있어.'),
               alignLabelWithHint: true,
             ),
           ),
@@ -276,12 +336,12 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             child: OutlinedButton.icon(
               onPressed: widget.onAnalyze,
               icon: const Icon(Icons.manage_search),
-              label: const Text('원문에서 번호 추출'),
+              label: const HypText('원문에서 번호 추출'),
             ),
           ),
           if (widget.candidates.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text('추출된 후보 · 여러 작품은 체크 후 함께 저장해줘',
+            HypText('추출된 후보 · 여러 작품은 체크 후 함께 저장해줘',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 7),
             Wrap(
@@ -292,7 +352,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
                   message: candidate.evidence,
                   child: FilterChip(
                     key: Key('shorts-candidate-' + candidate.code),
-                    label: Text(candidate.code),
+                    label: HypText(candidate.code),
                     selected: _selectedCodes.contains(candidate.code),
                     avatar: const Icon(Icons.numbers, size: 15),
                     onSelected: (selected) => setState(() {
@@ -317,10 +377,10 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
                             .where((e) => _selectedCodes.contains(e.code))
                             .map((e) => e.code).toList()),
                 icon: const Icon(Icons.library_add_outlined),
-                label: Text('선택한 작품 ${_selectedCodes.length}개 한 번에 저장'),
+                label: HypText('선택한 작품 ${_selectedCodes.length}개 한 번에 저장'),
               ),
               const SizedBox(height: 4),
-              const Text('추출된 모든 숫자가 실제 작품 번호는 아니야. '
+              const HypText('추출된 모든 숫자가 실제 작품 번호는 아니야. '
                   '선택된 번호를 확인하고 저장해줘.',
                   style: TextStyle(fontSize: 12, color: HypColors.muted)),
             ],
@@ -331,16 +391,16 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               key: const Key('confirmed-work-id'),
               controller: widget.workId,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: '확정 작품 번호 *'),
+              decoration: InputDecoration(labelText: HypI18n.t(context, '확정 작품 번호 *')),
             );
             final title = TextField(
               controller: widget.title,
-              decoration: const InputDecoration(labelText: '작품명 (선택)',
-                  helperText: '비워두면 작품 번호로 실제 제목을 조회해'),
+              decoration: InputDecoration(labelText: HypI18n.t(context, '작품명 (선택)'),
+                  helperText: HypI18n.t(context, '비워두면 작품 번호로 실제 제목을 조회해')),
             );
             final author = TextField(
               controller: widget.author,
-              decoration: const InputDecoration(labelText: '작가 (선택)'),
+              decoration: InputDecoration(labelText: HypI18n.t(context, '작가 (선택)')),
             );
             if (constraints.maxWidth >= 630) {
               return Row(children: [
@@ -362,10 +422,10 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             key: const Key('save-work-button'),
             onPressed: widget.busy ? null : widget.onSave,
             icon: const Icon(Icons.bookmark_add_outlined),
-            label: const Text('확정한 작품을 서재에 저장'),
+            label: const HypText('확정한 작품을 서재에 저장'),
           ),
           const SizedBox(height: 6),
-          Text(
+          HypText(
             '후보 번호는 자동 검증된 작품 번호가 아니야. 원문을 보고 직접 확인한 뒤 저장해줘.',
             style: Theme.of(context).textTheme.bodySmall,
           ),

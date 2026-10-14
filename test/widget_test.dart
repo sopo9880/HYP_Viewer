@@ -25,6 +25,9 @@ void main() {
     expect(find.byKey(const Key('hero-artwork-upload')), findsOneWidget);
     expect(find.byKey(const Key('reader-vertical-scroll-setting')),
         findsOneWidget);
+    expect(find.byKey(const Key('app-language-setting')), findsOneWidget);
+    expect(find.byKey(const Key('open-after-save-setting')), findsOneWidget);
+    expect(find.byKey(const Key('app-version-label')), findsOneWidget);
     expect(find.text('Excel 내보내기'), findsWidgets);
   });
 

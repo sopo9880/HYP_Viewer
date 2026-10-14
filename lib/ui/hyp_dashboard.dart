@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../core/gallery.dart';
 import '../core/cover_store.dart';
 import '../core/reader_settings.dart';
+import '../core/i18n.dart';
 import '../core/number_extractor.dart';
 import '../core/work.dart';
 import 'hero_banner.dart';
@@ -55,6 +56,8 @@ class HypDashboard extends StatefulWidget {
   final bool busy;
   final String message;
   final int navigationEpoch;
+  final int libraryNavigationEpoch;
+  final String appVersion;
   final bool downloadingUpdate;
   final double updateProgress;
   final String? downloadingGalleryKey;
@@ -64,6 +67,7 @@ class HypDashboard extends StatefulWidget {
   final VoidCallback onAnalyze;
   final Future<void> Function() onFetch;
   final Future<void> Function() onSaveWork;
+  final Future<void> Function(String code) onQuickAddNumber;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
   final Future<void> Function() onChooseHeroArtwork;
   final Future<void> Function() onClearHeroArtwork;
@@ -112,6 +116,8 @@ class HypDashboard extends StatefulWidget {
     required this.busy,
     required this.message,
     required this.navigationEpoch,
+    required this.libraryNavigationEpoch,
+    required this.appVersion,
     required this.downloadingUpdate,
     required this.updateProgress,
     required this.downloadingGalleryKey,
@@ -121,6 +127,7 @@ class HypDashboard extends StatefulWidget {
     required this.onAnalyze,
     required this.onFetch,
     required this.onSaveWork,
+    required this.onQuickAddNumber,
     required this.onSaveSelectedWorks,
     required this.onChooseHeroArtwork,
     required this.onClearHeroArtwork,
@@ -176,6 +183,10 @@ class _HypDashboardState extends State<HypDashboard> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.navigationEpoch != widget.navigationEpoch) {
       _page = HypPage.home;
+      _search.clear();
+    }
+    if (oldWidget.libraryNavigationEpoch != widget.libraryNavigationEpoch) {
+      _page = HypPage.library;
       _search.clear();
     }
     if (oldWidget.library.works.length != widget.library.works.length ||
@@ -321,7 +332,7 @@ class _HypDashboardState extends State<HypDashboard> {
       ),
       appBar: desktop ? null : AppBar(
         backgroundColor: HypColors.background,
-        title: const Text('HYP Viewer'),
+        title: const HypText('HYP Viewer'),
         actions: [
           IconButton(
             tooltip: '관리자 공지 확인',
@@ -358,7 +369,39 @@ class _HypDashboardState extends State<HypDashboard> {
                   ],
                 ),
               ),
-              child: _contents(),
+              child: Stack(children: [
+                Positioned.fill(child: _contents()),
+                if (widget.message.isNotEmpty)
+                  Positioned(
+                    top: 8, left: 12, right: 12,
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Material(
+                        key: const Key('viewport-notification'),
+                        color: HypColors.raised,
+                        elevation: 12,
+                        borderRadius: BorderRadius.circular(12),
+                        clipBehavior: Clip.antiAlias,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 5),
+                          child: Row(children: [
+                            const Icon(Icons.info_outline_rounded,
+                                color: HypColors.lightPurple, size: 19),
+                            const SizedBox(width: 10),
+                            Expanded(child: HypText(widget.message, maxLines: 4,
+                                overflow: TextOverflow.ellipsis)),
+                            IconButton(
+                              tooltip: '알림 닫기',
+                              onPressed: widget.onDismissMessage,
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                            ),
+                          ]),
+                        ),
+                      ),
+                    ),
+                  ),
+              ]),
             ),
           ),
         ])),
@@ -375,17 +418,22 @@ class _HypDashboardState extends State<HypDashboard> {
           HypPage.home, HypPage.library, HypPage.favorites,
           HypPage.downloads, HypPage.settings,
         ][index]),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded), label: '홈'),
-          NavigationDestination(icon: Icon(Icons.library_books_outlined),
-            selectedIcon: Icon(Icons.library_books), label: '서재'),
-          NavigationDestination(icon: Icon(Icons.favorite_outline),
-            selectedIcon: Icon(Icons.favorite), label: '즐겨찾기'),
-          NavigationDestination(icon: Icon(Icons.download_outlined),
-            selectedIcon: Icon(Icons.download), label: '다운로드'),
-          NavigationDestination(icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings), label: '설정'),
+        destinations: [
+          NavigationDestination(icon: const Icon(Icons.home_outlined),
+            selectedIcon: const Icon(Icons.home_rounded),
+            label: HypI18n.t(context, '홈')),
+          NavigationDestination(icon: const Icon(Icons.library_books_outlined),
+            selectedIcon: const Icon(Icons.library_books),
+            label: HypI18n.t(context, '서재')),
+          NavigationDestination(icon: const Icon(Icons.favorite_outline),
+            selectedIcon: const Icon(Icons.favorite),
+            label: HypI18n.t(context, '즐겨찾기')),
+          NavigationDestination(icon: const Icon(Icons.download_outlined),
+            selectedIcon: const Icon(Icons.download),
+            label: HypI18n.t(context, '다운로드')),
+          NavigationDestination(icon: const Icon(Icons.settings_outlined),
+            selectedIcon: const Icon(Icons.settings),
+            label: HypI18n.t(context, '설정')),
         ],
       ),
     );
@@ -421,10 +469,10 @@ class _HypDashboardState extends State<HypDashboard> {
         const Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('HYP Viewer', style: TextStyle(
+            HypText('HYP Viewer', style: TextStyle(
               fontSize: 17, fontWeight: FontWeight.w800)),
             SizedBox(height: 3),
-            Text('좋아하는 이야기를,\n더 가까이',
+            HypText('좋아하는 이야기를,\n더 가까이',
               style: TextStyle(color: HypColors.muted, fontSize: 11)),
           ],
         )),
@@ -457,7 +505,7 @@ class _HypDashboardState extends State<HypDashboard> {
                   Icon(page.icon, size: 22,
                     color: _page == page ? Colors.white : HypColors.muted),
                   const SizedBox(width: 15),
-                  Text(page.label, style: TextStyle(
+                  HypText(page.label, style: TextStyle(
                     fontSize: 14,
                     color: HypColors.text,
                     fontWeight: _page == page
@@ -472,7 +520,7 @@ class _HypDashboardState extends State<HypDashboard> {
       const Spacer(),
       const Divider(),
       const SizedBox(height: 8),
-      const Text('오프라인 보관함',
+      const HypText('오프라인 보관함',
         style: TextStyle(color: HypColors.muted, fontSize: 12)),
       const SizedBox(height: 8),
       LinearProgressIndicator(
@@ -484,7 +532,7 @@ class _HypDashboardState extends State<HypDashboard> {
                 .clamp(0.0, 1.0),
       ),
       const SizedBox(height: 8),
-      Text(
+      HypText(
         '내 서재 ' + widget.library.works.length.toString() +
         '개 중 ' + _offlineKeys.length.toString() + '개 저장됨',
         style: const TextStyle(fontSize: 11, color: HypColors.muted),
@@ -533,11 +581,11 @@ class _HypDashboardState extends State<HypDashboard> {
       );
 
   List<PopupMenuEntry<String>> get _toolsMenu => const [
-    PopupMenuItem(value: 'import', child: Text('JSON 서재 가져오기')),
-    PopupMenuItem(value: 'export', child: Text('JSON 내보내기')),
-    PopupMenuItem(value: 'excel', child: Text('Excel 내보내기')),
-    PopupMenuItem(value: 'history', child: Text('열람 기록')),
-    PopupMenuItem(value: 'settings', child: Text('설정')),
+    PopupMenuItem(value: 'import', child: HypText('JSON 서재 가져오기')),
+    PopupMenuItem(value: 'export', child: HypText('JSON 내보내기')),
+    PopupMenuItem(value: 'excel', child: HypText('Excel 내보내기')),
+    PopupMenuItem(value: 'history', child: HypText('열람 기록')),
+    PopupMenuItem(value: 'settings', child: HypText('설정')),
   ];
 
   void _toolsAction(String value) {
@@ -558,8 +606,8 @@ class _HypDashboardState extends State<HypDashboard> {
     key: const Key('library-search-input'),
     focusNode: _searchFocus,
     controller: _search,
-    decoration: const InputDecoration(
-      hintText: '작품 제목, 작가, 번호, 목록으로 검색하세요...',
+    decoration: InputDecoration(
+      hintText: HypI18n.t(context, '작품 제목, 작가, 번호, 목록으로 검색하세요...'),
       prefixIcon: Icon(Icons.search_rounded, color: HypColors.muted),
     ),
   );
@@ -584,28 +632,7 @@ class _HypDashboardState extends State<HypDashboard> {
     return ListView(
       key: ValueKey(_search.text.trim().isEmpty ? _page.name : 'search'),
       padding: const EdgeInsets.fromLTRB(22, 2, 22, 30),
-      children: [
-        if (widget.message.isNotEmpty) ...[
-          HypPanel(
-            color: HypColors.raised,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            child: Row(children: [
-              const Icon(Icons.info_outline_rounded,
-                color: HypColors.lightPurple, size: 19),
-              const SizedBox(width: 10),
-              Expanded(child: Text(widget.message, maxLines: 3,
-                overflow: TextOverflow.ellipsis)),
-              IconButton(
-                tooltip: '알림 닫기',
-                onPressed: widget.onDismissMessage,
-                icon: const Icon(Icons.close_rounded, size: 18),
-              ),
-            ]),
-          ),
-          const SizedBox(height: 14),
-        ],
-        pageContent,
-      ],
+      children: [pageContent],
     );
   }
 
@@ -631,6 +658,7 @@ class _HypDashboardState extends State<HypDashboard> {
         onFetch: widget.onFetch,
         onOpenYoutube: widget.onOpenShortsInput,
         onSave: widget.onSaveWork,
+        onQuickAddNumber: widget.onQuickAddNumber,
         onSaveSelectedWorks: widget.onSaveSelectedWorks,
       ),
       const SizedBox(height: 24),
@@ -759,7 +787,7 @@ class _HypDashboardState extends State<HypDashboard> {
         HypPanel(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('작품 다운로드 중',
+            const HypText('작품 다운로드 중',
               style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
             LinearProgressIndicator(
@@ -769,7 +797,7 @@ class _HypDashboardState extends State<HypDashboard> {
             ),
             const SizedBox(height: 8),
             Row(children: [
-              Expanded(child: Text(
+              Expanded(child: HypText(
                 widget.downloadedGalleryPages.toString() + ' / ' +
                 widget.totalGalleryPages.toString() + '장 · ' +
                 (widget.downloadedGalleryBytes / 1048576).toStringAsFixed(1) +
@@ -779,12 +807,12 @@ class _HypDashboardState extends State<HypDashboard> {
                 TextButton.icon(
                   onPressed: widget.onToggleDownloadPause,
                   icon: Icon(widget.downloadPaused ? Icons.play_arrow : Icons.pause),
-                  label: Text(widget.downloadPaused ? '계속' : '일시정지'),
+                  label: HypText(widget.downloadPaused ? '계속' : '일시정지'),
                 ),
               TextButton.icon(
                 onPressed: widget.onCancelGalleryDownload,
                 icon: const Icon(Icons.close),
-                label: const Text('취소'),
+                label: const HypText('취소'),
               ),
             ]),
           ],
@@ -811,7 +839,7 @@ class _HypDashboardState extends State<HypDashboard> {
             work.workId.contains(term) ||
             work.title.toLowerCase().contains(term)).toList();
           return AlertDialog(
-            title: const Text('표지를 바꿀 작품 선택'),
+            title: const HypText('표지를 바꿀 작품 선택'),
             content: SizedBox(
               width: 500,
               height: 420,
@@ -819,9 +847,9 @@ class _HypDashboardState extends State<HypDashboard> {
                 TextField(
                   key: const Key('cover-work-search'),
                   controller: search,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     prefixIcon: Icon(Icons.search),
-                    hintText: '작품 번호 또는 제목',
+                    hintText: HypI18n.t(context, '작품 번호 또는 제목'),
                   ),
                   onChanged: (_) => refresh(() {}),
                 ),
@@ -831,8 +859,8 @@ class _HypDashboardState extends State<HypDashboard> {
                   itemBuilder: (ctx, index) {
                     final work = filtered[index];
                     return ListTile(
-                      title: Text(work.title.isEmpty ? '작품 ' + work.workId : work.title),
-                      subtitle: Text('번호 ' + work.workId),
+                      title: HypText(work.title.isEmpty ? '작품 ' + work.workId : work.title),
+                      subtitle: HypText('번호 ' + work.workId),
                       onTap: () => Navigator.pop(ctx, work),
                     );
                   },
@@ -841,7 +869,7 @@ class _HypDashboardState extends State<HypDashboard> {
             ),
             actions: [TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('취소'),
+              child: const HypText('취소'),
             )],
           );
         }),
@@ -867,10 +895,39 @@ class _HypDashboardState extends State<HypDashboard> {
       HypPanel(child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('홈 배너 일러스트',
+          HypText('언어', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            key: const Key('app-language-setting'),
+            initialValue: widget.readerSettings.languageCode,
+            decoration: InputDecoration(
+              labelText: HypI18n.t(context, '앱 언어'),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'ko', child: HypText('한국어')),
+              DropdownMenuItem(value: 'en', child: HypText('영어')),
+              DropdownMenuItem(value: 'ja', child: HypText('일본어')),
+            ],
+            onChanged: (language) {
+              if (language != null) {
+                widget.onSaveReaderSettings(
+                    widget.readerSettings.copyWith(languageCode: language));
+              }
+            },
+          ),
+          const SizedBox(height: 7),
+          const HypText('언어를 바꾸면 메뉴와 버튼에 즉시 적용되고 다음 실행에도 유지돼.',
+              style: TextStyle(fontSize: 12, color: HypColors.muted)),
+        ],
+      )),
+      const SizedBox(height: 10),
+      HypPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          HypText('홈 배너 일러스트',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 9),
-          const Text('첫 화면의 "좋아하는 이야기를, 언제 어디서나" '
+          const HypText('첫 화면의 "좋아하는 이야기를, 언제 어디서나" '
               '배경 일러스트를 직접 설정할 수 있어.',
               style: TextStyle(fontSize: 12, color: HypColors.muted)),
           const SizedBox(height: 11),
@@ -890,7 +947,7 @@ class _HypDashboardState extends State<HypDashboard> {
               key: const Key('hero-artwork-upload'),
               onPressed: widget.onChooseHeroArtwork,
               icon: const Icon(Icons.add_photo_alternate_outlined),
-              label: Text(widget.heroArtwork == null
+              label: HypText(widget.heroArtwork == null
                   ? '일러스트 업로드' : '일러스트 교체'),
             ),
             if (widget.heroArtwork != null)
@@ -898,11 +955,11 @@ class _HypDashboardState extends State<HypDashboard> {
                 key: const Key('hero-artwork-reset'),
                 onPressed: widget.onClearHeroArtwork,
                 icon: const Icon(Icons.restore_rounded),
-                label: const Text('기본 배경으로 되돌리기'),
+                label: const HypText('기본 배경으로 되돌리기'),
               ),
           ]),
           const SizedBox(height: 7),
-          const Text('PNG · JPG · WebP (최대 12MB). 이미지 자체는 '
+          const HypText('PNG · JPG · WebP (최대 12MB). 이미지 자체는 '
               '이 기기에 저장되며 서재 JSON 백업에는 포함되지 않아.',
               style: TextStyle(fontSize: 12, color: HypColors.muted)),
         ],
@@ -911,20 +968,20 @@ class _HypDashboardState extends State<HypDashboard> {
       HypPanel(child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('이미지 뷰어 설정', style: Theme.of(context).textTheme.titleMedium),
+          HypText('이미지 뷰어 설정', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          const Text('읽기 방향을 정하면 화면 스와이프와 방향키도 함께 적용돼.',
+          const HypText('읽기 방향을 정하면 화면 스와이프와 방향키도 함께 적용돼.',
             style: TextStyle(fontSize: 12, color: HypColors.muted)),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             key: const Key('reader-direction-setting'),
             initialValue: widget.readerSettings.nextDirection,
-            decoration: const InputDecoration(labelText: '다음 페이지로 넘기는 방향'),
+            decoration: InputDecoration(labelText: HypI18n.t(context, '다음 페이지로 넘기는 방향')),
             items: const [
               DropdownMenuItem(value: 'left',
-                  child: Text('왼쪽으로 넘기기 (→ 다음 페이지)')),
+                  child: HypText('왼쪽으로 넘기기 (→ 다음 페이지)')),
               DropdownMenuItem(value: 'right',
-                  child: Text('오른쪽으로 넘기기 (← 다음 페이지)')),
+                  child: HypText('오른쪽으로 넘기기 (← 다음 페이지)')),
             ],
             onChanged: (v) {
               if (v != null) widget.onSaveReaderSettings(
@@ -935,10 +992,24 @@ class _HypDashboardState extends State<HypDashboard> {
           Material(
             color: Colors.transparent,
             child: SwitchListTile.adaptive(
+              key: const Key('open-after-save-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: const HypText('서재 추가 후 작품 자동 열기'),
+              subtitle: const HypText('기본값은 끔. 켜면 한 작품을 저장한 직후 뷰어를 열어. '
+                  '여러 작품을 한 번에 저장하면 서재로 이동해.'),
+              value: widget.readerSettings.openAfterSave,
+              onChanged: (v) => widget.onSaveReaderSettings(
+                  widget.readerSettings.copyWith(openAfterSave: v)),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Material(
+            color: Colors.transparent,
+            child: SwitchListTile.adaptive(
               key: const Key('reader-two-page-setting'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('2쪽 모아보기'),
-              subtitle: const Text('1-2, 3-4처럼 두 페이지를 한 화면에 표시'),
+              title: const HypText('2쪽 모아보기'),
+              subtitle: const HypText('1-2, 3-4처럼 두 페이지를 한 화면에 표시'),
               value: widget.readerSettings.twoPageSpread,
               onChanged: (v) => widget.onSaveReaderSettings(
                 widget.readerSettings.copyWith(twoPageSpread: v)),
@@ -950,8 +1021,8 @@ class _HypDashboardState extends State<HypDashboard> {
             child: SwitchListTile.adaptive(
               key: const Key('reader-vertical-scroll-setting'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('세로로 페이지 넘기기'),
-              subtitle: const Text('뷰어 오른쪽 위의 가로/세로 전환 버튼과 '
+              title: const HypText('세로로 페이지 넘기기'),
+              subtitle: const HypText('뷰어 오른쪽 위의 가로/세로 전환 버튼과 '
                   '같은 설정이야. 종료 후에도 유지돼. '
                   '2쪽 모아보기는 가로로 표시돼.'),
               value: widget.readerSettings.verticalScrolling,
@@ -966,14 +1037,14 @@ class _HypDashboardState extends State<HypDashboard> {
               key: const Key('reader-toolbar-settings'),
             tilePadding: EdgeInsets.zero,
             childrenPadding: EdgeInsets.zero,
-            title: const Text('뷰어 오른쪽 위 아이콘 구성'),
-            subtitle: const Text('각 버튼을 표시하거나 숨길 수 있어. 기본값은 모두 표시야.'),
+            title: const HypText('뷰어 오른쪽 위 아이콘 구성'),
+            subtitle: const HypText('각 버튼을 표시하거나 숨길 수 있어. 기본값은 모두 표시야.'),
             children: [
               SwitchListTile.adaptive(
                 key: const Key('reader-show-download-action-setting'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text('다운로드 버튼 표시'),
-                subtitle: const Text('온라인 이미지 저장 버튼'),
+                title: const HypText('다운로드 버튼 표시'),
+                subtitle: const HypText('온라인 이미지 저장 버튼'),
                 value: widget.readerSettings.showDownloadAction,
                 onChanged: (v) => widget.onSaveReaderSettings(
                     widget.readerSettings.copyWith(showDownloadAction: v)),
@@ -981,8 +1052,8 @@ class _HypDashboardState extends State<HypDashboard> {
               SwitchListTile.adaptive(
                 key: const Key('reader-show-cover-action-setting'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text('표지 지정 버튼 표시'),
-                subtitle: const Text('현재 페이지를 표지로 등록하는 버튼'),
+                title: const HypText('표지 지정 버튼 표시'),
+                subtitle: const HypText('현재 페이지를 표지로 등록하는 버튼'),
                 value: widget.readerSettings.showCoverAction,
                 onChanged: (v) => widget.onSaveReaderSettings(
                     widget.readerSettings.copyWith(showCoverAction: v)),
@@ -990,8 +1061,8 @@ class _HypDashboardState extends State<HypDashboard> {
               SwitchListTile.adaptive(
                 key: const Key('reader-show-page-controls-action-setting'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text('페이지 도구 버튼 표시'),
-                subtitle: const Text('하단 페이지 바 표시/숨기기 버튼'),
+                title: const HypText('페이지 도구 버튼 표시'),
+                subtitle: const HypText('하단 페이지 바 표시/숨기기 버튼'),
                 value: widget.readerSettings.showPageControlsAction,
                 onChanged: (v) => widget.onSaveReaderSettings(
                     widget.readerSettings.copyWith(showPageControlsAction: v)),
@@ -999,8 +1070,8 @@ class _HypDashboardState extends State<HypDashboard> {
               SwitchListTile.adaptive(
                 key: const Key('reader-show-web-reader-action-setting'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text('웹 리더 버튼 표시'),
-                subtitle: const Text('현재 페이지를 브라우저에서 열기'),
+                title: const HypText('웹 리더 버튼 표시'),
+                subtitle: const HypText('현재 페이지를 브라우저에서 열기'),
                 value: widget.readerSettings.showWebReaderAction,
                 onChanged: (v) => widget.onSaveReaderSettings(
                     widget.readerSettings.copyWith(showWebReaderAction: v)),
@@ -1008,8 +1079,8 @@ class _HypDashboardState extends State<HypDashboard> {
               SwitchListTile.adaptive(
                 key: const Key('reader-show-orientation-action-setting'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text('가로/세로 전환 버튼 표시'),
-                subtitle: const Text('뷰어 오른쪽 위 전환 버튼'),
+                title: const HypText('가로/세로 전환 버튼 표시'),
+                subtitle: const HypText('뷰어 오른쪽 위 전환 버튼'),
                 value: widget.readerSettings.showOrientationAction,
                 onChanged: (v) => widget.onSaveReaderSettings(
                     widget.readerSettings.copyWith(showOrientationAction: v)),
@@ -1020,12 +1091,12 @@ class _HypDashboardState extends State<HypDashboard> {
           DropdownButtonFormField<int>(
             key: const Key('reader-preload-setting'),
             initialValue: widget.readerSettings.preloadPages,
-            decoration: const InputDecoration(labelText: '앞뒤 미리 로딩 페이지'),
+            decoration: InputDecoration(labelText: HypI18n.t(context, '앞뒤 미리 로딩 페이지')),
             items: const [
-              DropdownMenuItem(value: 0, child: Text('끄기')),
-              DropdownMenuItem(value: 1, child: Text('1장씩')),
-              DropdownMenuItem(value: 2, child: Text('2장씩 (추천)')),
-              DropdownMenuItem(value: 3, child: Text('3장씩')),
+              DropdownMenuItem(value: 0, child: HypText('끄기')),
+              DropdownMenuItem(value: 1, child: HypText('1장씩')),
+              DropdownMenuItem(value: 2, child: HypText('2장씩 (추천)')),
+              DropdownMenuItem(value: 3, child: HypText('3장씩')),
             ],
             onChanged: (v) {
               if (v != null) widget.onSaveReaderSettings(
@@ -1033,7 +1104,7 @@ class _HypDashboardState extends State<HypDashboard> {
             },
           ),
           const SizedBox(height: 8),
-          const Text(
+          const HypText(
             '키보드(뷰어): ← / →, PageUp / PageDown, Space, Home / End, '
             'Esc(닫기). 서재의 작품 메뉴에서 표지 선택 가능.',
             style: TextStyle(fontSize: 12, color: HypColors.muted),
@@ -1044,14 +1115,14 @@ class _HypDashboardState extends State<HypDashboard> {
       HypPanel(child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('표지 자동 설정 및 편집', style: Theme.of(context).textTheme.titleMedium),
+          HypText('표지 자동 설정 및 편집', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           Material(color: Colors.transparent,
             child: SwitchListTile.adaptive(
               key: const Key('automatic-cover-setting'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('새 작품의 첫 페이지를 자동 표지로 사용'),
-              subtitle: const Text('끄면 새 작품은 기본 디자인 표지로 시작해. '
+              title: const HypText('새 작품의 첫 페이지를 자동 표지로 사용'),
+              subtitle: const HypText('끄면 새 작품은 기본 디자인 표지로 시작해. '
                   '기존에 직접 지정한 표지는 바뀌지 않아.'),
               value: widget.readerSettings.autoCoverEnabled,
               onChanged: (v) => widget.onSaveReaderSettings(
@@ -1063,10 +1134,10 @@ class _HypDashboardState extends State<HypDashboard> {
             key: const Key('settings-cover-manager'),
             icon: const Icon(Icons.photo_library_outlined),
             onPressed: _chooseCoverFromSettings,
-            label: const Text('서재 작품 표지 편집 · 이미지 업로드 및 자르기'),
+            label: const HypText('서재 작품 표지 편집 · 이미지 업로드 및 자르기'),
           ),
           const SizedBox(height: 8),
-          const Text('이미지를 선택하거나 작품 페이지를 불러온 뒤, '
+          const HypText('이미지를 선택하거나 작품 페이지를 불러온 뒤, '
               '미리보기 영역에서 드래그·확대·축소하여 표지를 만들 수 있어.',
               style: TextStyle(fontSize: 12, color: HypColors.muted)),
         ],
@@ -1075,13 +1146,13 @@ class _HypDashboardState extends State<HypDashboard> {
       HypPanel(child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Android 뷰어 동작', style: Theme.of(context).textTheme.titleMedium),
+          HypText('Android 뷰어 동작', style: Theme.of(context).textTheme.titleMedium),
           Material(color: Colors.transparent,
             child: SwitchListTile.adaptive(
               key: const Key('volume-keys-setting'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('볼륨키로 페이지 넘기기'),
-              subtitle: const Text('뷰어가 열려 있을 때 볼륨+는 이전, '
+              title: const HypText('볼륨키로 페이지 넘기기'),
+              subtitle: const HypText('뷰어가 열려 있을 때 볼륨+는 이전, '
                   '볼륨−는 다음 페이지. 소리 조절은 일시적으로 대신 사용돼.'),
               value: widget.readerSettings.volumeKeyNavigation,
               onChanged: (v) => widget.onSaveReaderSettings(
@@ -1092,8 +1163,8 @@ class _HypDashboardState extends State<HypDashboard> {
             child: SwitchListTile.adaptive(
               key: const Key('landscape-spread-setting'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('2쪽 보기에서 가로 화면 고정'),
-              subtitle: const Text('Android에서 2쪽 모아보기일 때만 가로 방향으로 열어. '
+              title: const HypText('2쪽 보기에서 가로 화면 고정'),
+              subtitle: const HypText('Android에서 2쪽 모아보기일 때만 가로 방향으로 열어. '
                   '끄면 휴대폰을 돌려 자유롭게 회전할 수 있어.'),
               value: widget.readerSettings.forceLandscapeForSpreads,
               onChanged: (v) => widget.onSaveReaderSettings(
@@ -1106,13 +1177,13 @@ class _HypDashboardState extends State<HypDashboard> {
       HypPanel(child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('관리자 공지', style: Theme.of(context).textTheme.titleMedium),
+          HypText('관리자 공지', style: Theme.of(context).textTheme.titleMedium),
           Material(color: Colors.transparent,
             child: SwitchListTile.adaptive(
               key: const Key('announcements-setting'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('관리자 공지 수신 (동의)'),
-              subtitle: const Text('앱 실행 중이나 재실행 시 공개 공지를 확인해. '
+              title: const HypText('관리자 공지 수신 (동의)'),
+              subtitle: const HypText('앱 실행 중이나 재실행 시 공개 공지를 확인해. '
                   '앱을 종료한 상태의 시스템 푸시 알림은 아직 지원하지 않아.'),
               value: widget.readerSettings.receiveAnnouncements,
               onChanged: (v) => widget.onSaveReaderSettings(
@@ -1123,14 +1194,14 @@ class _HypDashboardState extends State<HypDashboard> {
             key: const Key('announcements-open'),
             onPressed: widget.onCheckAnnouncements,
             icon: const Icon(Icons.campaign_outlined),
-            label: const Text('공지 목록 확인'),
+            label: const HypText('공지 목록 확인'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
             key: const Key('android-security-help'),
             onPressed: widget.onSecurityHelp,
             icon: const Icon(Icons.security),
-            label: const Text('Android 설치 및 보안 위험 자동 차단 안내'),
+            label: const HypText('Android 설치 및 보안 위험 자동 차단 안내'),
           ),
         ],
       )),
@@ -1138,19 +1209,19 @@ class _HypDashboardState extends State<HypDashboard> {
       HypPanel(child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('기본 웹 리더 (주소 고정)',
+          HypText('기본 웹 리더 (주소 고정)',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 7),
-          const Text(
+          const HypText(
             '기본 온라인 읽기는 이미지 메타데이터를 이용해 앱 안에서 열어. '
             '작품 메뉴의 웹 리더를 선택하면 브라우저에서 고정 링크를 열 수 있어. '
             '1페이지는 #1-, 2페이지부터는 #2-3 형식이야.',
             style: TextStyle(fontSize: 12, color: HypColors.muted),
           ),
           const SizedBox(height: 8),
-          const SelectableText('https://hitomi.la/reader/{작품번호}.html#1-'),
+          const SelectableText('https://hitomi.la/reader/{workId}.html#1-'),
           const SizedBox(height: 4),
-          const Text(
+          const HypText(
             '앱 안에서 읽는 경우에는 페이지 진행도가 저장돼. '
             '외부 브라우저에서 넘긴 페이지는 자동 기록되지 않아.',
             style: TextStyle(fontSize: 12, color: HypColors.muted),
@@ -1161,9 +1232,9 @@ class _HypDashboardState extends State<HypDashboard> {
       HypPanel(child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('추가 JSON 이미지 소스 (선택)', style: Theme.of(context).textTheme.titleMedium),
+          HypText('추가 JSON 이미지 소스 (선택)', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 7),
-          const Text(
+          const HypText(
             '자체 보유하거나 이용 허가된 JSON 이미지 서버를 통해 오프라인 저장하려는 경우에만 설정해줘. 기본 온라인 읽기나 웹 리더에 필요하지 않아.',
             style: TextStyle(fontSize: 12, color: HypColors.muted),
           ),
@@ -1171,10 +1242,10 @@ class _HypDashboardState extends State<HypDashboard> {
           TextField(
             key: const Key('online-source-input'),
             controller: widget.onlineSourceInput,
-            decoration: const InputDecoration(
-              labelText: '추가 JSON 소스 URL 패턴',
-              hintText: 'https://gallery.example/galleries/{workId}.json',
-              helperText: '추가 JSON 소스로 다운로드할 때만 사용하는 고급 설정이야.',
+            decoration: InputDecoration(
+              labelText: HypI18n.t(context, '추가 JSON 소스 URL 패턴'),
+              hintText: HypI18n.t(context, 'https://gallery.example/galleries/{workId}.json'),
+              helperText: HypI18n.t(context, '추가 JSON 소스로 다운로드할 때만 사용하는 고급 설정이야.'),
             ),
           ),
           const SizedBox(height: 12),
@@ -1182,7 +1253,7 @@ class _HypDashboardState extends State<HypDashboard> {
             child: FilledButton.icon(
               onPressed: widget.onSaveOnlineSource,
               icon: const Icon(Icons.save_outlined),
-              label: const Text('소스 설정 저장'),
+              label: const HypText('소스 설정 저장'),
             )),
         ],
       )),
@@ -1190,26 +1261,26 @@ class _HypDashboardState extends State<HypDashboard> {
       HypPanel(child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('서재 데이터', style: Theme.of(context).textTheme.titleMedium),
+          HypText('서재 데이터', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
-          const Text('JSON은 백업·기기 이전용, Excel은 확인용이야.',
+          const HypText('JSON은 백업·기기 이전용, Excel은 확인용이야.',
             style: TextStyle(fontSize: 12, color: HypColors.muted)),
           const SizedBox(height: 14),
           Wrap(spacing: 10, runSpacing: 10, children: [
             OutlinedButton.icon(
               onPressed: widget.onExportJson,
               icon: const Icon(Icons.file_download_outlined),
-              label: const Text('JSON 백업'),
+              label: const HypText('JSON 백업'),
             ),
             OutlinedButton.icon(
               onPressed: widget.onImportJson,
               icon: const Icon(Icons.file_upload_outlined),
-              label: const Text('JSON 가져오기'),
+              label: const HypText('JSON 가져오기'),
             ),
             OutlinedButton.icon(
               onPressed: widget.onExportExcel,
               icon: const Icon(Icons.table_chart_outlined),
-              label: const Text('Excel 내보내기'),
+              label: const HypText('Excel 내보내기'),
             ),
           ]),
         ],
@@ -1218,15 +1289,19 @@ class _HypDashboardState extends State<HypDashboard> {
       HypPanel(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('업데이트', style: Theme.of(context).textTheme.titleMedium),
+          HypText('업데이트', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
-          const Text('최신 0.x 업데이트 · GitHub Releases',
+          const HypText('최신 0.x 업데이트 · GitHub Releases',
             style: TextStyle(color: HypColors.muted, fontSize: 12)),
+          const SizedBox(height: 9),
+          HypText('현재 버전: ${widget.appVersion}',
+              key: const Key('app-version-label'),
+              style: const TextStyle(color: HypColors.muted, fontSize: 12)),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: widget.onCheckRelease,
             icon: const Icon(Icons.system_update_alt_rounded),
-            label: const Text('업데이트 확인'),
+            label: const HypText('업데이트 확인'),
           ),
         ],
       )),

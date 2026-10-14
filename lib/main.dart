@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -14,6 +15,7 @@ import 'core/gallery.dart';
 import 'core/cover_store.dart';
 import 'core/hero_artwork_store.dart';
 import 'core/reader_settings.dart';
+import 'core/i18n.dart';
 import 'core/reader_downloader.dart';
 import 'core/announcements.dart';
 import 'core/android_controls.dart';
@@ -41,12 +43,22 @@ void main() {
 class HypViewerApp extends StatelessWidget {
   const HypViewerApp({super.key});
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'HYP Viewer',
-    debugShowCheckedModeBanner: false,
-    theme: HypTheme.dark,
-    themeMode: ThemeMode.dark,
-    home: const LibraryHome(),
+  Widget build(BuildContext context) => ValueListenableBuilder<String>(
+    valueListenable: HypLanguage.selected,
+    builder: (context, language, _) => MaterialApp(
+      title: 'HYP Viewer',
+      locale: Locale(language),
+      supportedLocales: const [Locale('ko'), Locale('en'), Locale('ja')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      debugShowCheckedModeBanner: false,
+      theme: HypTheme.dark,
+      themeMode: ThemeMode.dark,
+      home: const LibraryHome(),
+    ),
   );
 }
 
@@ -67,6 +79,8 @@ class _LibraryHomeState extends State<LibraryHome> {
   Future<void> _libraryWrites = Future<void>.value();
   final Set<String> _coverCaptures = <String>{};
   int navigationEpoch = 0;
+  int libraryNavigationEpoch = 0;
+  String appVersion = '—';
   final galleryStore = GalleryStore();
   final sourceSettings = OnlineSourceSettings();
   final onlineSourceInput = TextEditingController();
@@ -97,12 +111,25 @@ class _LibraryHomeState extends State<LibraryHome> {
     _load();
     _loadOnlineSource();
     _loadReaderSettings();
+    _loadVersionInfo();
     _loadHeroArtwork();
     _listenForSharedShorts();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _automaticUpdateCheck();
       if (Platform.isAndroid) _showSecurityNoticeOnce();
     });
+  }
+
+  Future<void> _loadVersionInfo() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() => appVersion =
+          'v${info.version} (build ${info.buildNumber})');
+      }
+    } catch (_) {
+      // Test hosts and unsupported platforms may not supply package metadata.
+    }
   }
 
   void _syncNoticesTimer() {
@@ -120,6 +147,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     try {
       final result = await readerSettingsStorage.load();
       if (mounted) setState(() => readerSettings = result);
+      HypLanguage.selected.value = result.languageCode;
       _syncNoticesTimer();
       if (result.receiveAnnouncements) {
         unawaited(_checkAnnouncements(silent: true));
@@ -178,6 +206,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     try {
       await readerSettingsStorage.save(updated);
       if (mounted) setState(() => readerSettings = updated);
+      HypLanguage.selected.value = updated.languageCode;
       _syncNoticesTimer();
       if (updated.receiveAnnouncements && !wasSubscribed) {
         unawaited(_checkAnnouncements(silent: true));
@@ -225,7 +254,7 @@ class _LibraryHomeState extends State<LibraryHome> {
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('HYP Viewer 관리자 공지'),
+          title: const HypText('HYP Viewer 관리자 공지'),
           content: SizedBox(
             width: 480,
             height: 330,
@@ -235,10 +264,10 @@ class _LibraryHomeState extends State<LibraryHome> {
               itemBuilder: (_, index) {
                 final n = notices[index];
                 return ListTile(
-                  title: Text(n.title),
+                  title: HypText(n.title),
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: Text(n.message),
+                    child: HypText(n.message),
                   ),
                   isThreeLine: true,
                 );
@@ -248,7 +277,7 @@ class _LibraryHomeState extends State<LibraryHome> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('확인'),
+              child: const HypText('확인'),
             ),
           ],
         ),
@@ -266,8 +295,8 @@ class _LibraryHomeState extends State<LibraryHome> {
     final open = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('안드로이드 설치 보안 안내'),
-        content: const Text(
+        title: const HypText('안드로이드 설치 보안 안내'),
+        content: const HypText(
           '삼성 갤럭시의 보안 위험 자동 차단 기능은 일부 APK 설치를 '
           '막을 수 있어. 이는 기기를 보호하는 중요한 기능이야.\\n\\n'
           '앱에서는 보안 차단을 자동 해제할 수 없어. '
@@ -278,12 +307,12 @@ class _LibraryHomeState extends State<LibraryHome> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('알겠어')),
+              child: const HypText('알겠어')),
           if (Platform.isAndroid)
             FilledButton.icon(
               onPressed: () => Navigator.pop(ctx, true),
               icon: const Icon(Icons.settings),
-              label: const Text('보안 설정 확인'),
+              label: const HypText('보안 설정 확인'),
             ),
         ],
       ),
@@ -404,6 +433,17 @@ class _LibraryHomeState extends State<LibraryHome> {
   Future<void> _saveWork() =>
       _saveSelectedWorks([numberInput.text.trim()]);
 
+  Future<void> _quickAddNumber(String code) async {
+    // The top search field accepts either a Shorts URL or a gallery ID.
+    // A numeric entry must never be sent to YouTube as a video URL.
+    urlInput.text = code;
+    numberInput.text = code;
+    titleInput.clear();
+    authorInput.clear();
+    commentInput.clear();
+    await _saveSelectedWorks([code]);
+  }
+
   Future<void> _saveSelectedWorks(List<String> selectedCodes) async {
     if (busy) return;
     final codes = selectedCodes.map((code) => code.trim()).toSet().toList();
@@ -414,6 +454,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
     setState(() => busy = true);
     final client = http.Client();
+    WorkEntry? openAfterSave;
     try {
       final videoId = ShortsLink.videoId(urlInput.text) ?? '';
       final works = <WorkEntry>[];
@@ -445,6 +486,10 @@ class _LibraryHomeState extends State<LibraryHome> {
       }
       await _commitLibrary((latest) => LibraryBackup.merge(latest,
           LibraryBackup(works: works, collections: const [])));
+      if (mounted) setState(() => libraryNavigationEpoch++);
+      if (readerSettings.openAfterSave && works.length == 1) {
+        openAfterSave = works.single;
+      }
       if (readerSettings.autoCoverEnabled) {
         for (final work in works) {
           unawaited(_prepareAutomaticCover(work));
@@ -459,6 +504,14 @@ class _LibraryHomeState extends State<LibraryHome> {
     } finally {
       client.close();
       if (mounted) setState(() => busy = false);
+    }
+    if (openAfterSave != null && mounted) {
+      final entry = openAfterSave;
+      if (await galleryStore.exists(entry.workId)) {
+        await _openGallery(entry);
+      } else {
+        await _readOnline(entry);
+      }
     }
   }
 
@@ -556,12 +609,12 @@ class _LibraryHomeState extends State<LibraryHome> {
       final incoming = LibraryBackup.decode(utf8.decode(bytes));
       if (!mounted) return;
       final mode = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
-        title: const Text('JSON 서재 복원'),
-        content: Text('작품 ' + incoming.works.length.toString() + '개를 가져왔어.'),
+        title: const HypText('JSON 서재 복원'),
+        content: HypText('작품 ' + incoming.works.length.toString() + '개를 가져왔어.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
-          TextButton(onPressed: () => Navigator.pop(ctx, 'merge'), child: const Text('병합')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, 'replace'), child: const Text('전체 복원')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const HypText('취소')),
+          TextButton(onPressed: () => Navigator.pop(ctx, 'merge'), child: const HypText('병합')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, 'replace'), child: const HypText('전체 복원')),
         ],
       ));
       if (mode == null) return;
@@ -746,19 +799,19 @@ class _LibraryHomeState extends State<LibraryHome> {
     final selected = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('웹 리더 시작 페이지'),
+        title: const HypText('웹 리더 시작 페이지'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('1페이지는 #1-, 2페이지부터는 #2-3처럼 열어. '
+            const HypText('1페이지는 #1-, 2페이지부터는 #2-3처럼 열어. '
                 '외부 브라우저에서 넘긴 페이지는 자동 기록되지 않아.'),
             const SizedBox(height: 12),
             TextFormField(
               key: const Key('reader-page-input'),
               initialValue: input,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: '시작 페이지'),
+              decoration: InputDecoration(labelText: HypI18n.t(context, '시작 페이지')),
               onChanged: (value) => input = value,
             ),
           ],
@@ -766,11 +819,11 @@ class _LibraryHomeState extends State<LibraryHome> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('취소'),
+            child: const HypText('취소'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, input),
-            child: const Text('웹에서 열기'),
+            child: const HypText('웹에서 열기'),
           ),
         ],
       ),
@@ -800,33 +853,33 @@ class _LibraryHomeState extends State<LibraryHome> {
         context: context,
         builder: (dialog) => StatefulBuilder(
           builder: (context, update) => AlertDialog(
-            title: const Text('온라인 작품을 오프라인으로 저장'),
+            title: const HypText('온라인 작품을 오프라인으로 저장'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(remote.pageCount.toString() + '장의 이미지를 CBZ로 저장해. ' +
+                HypText(remote.pageCount.toString() + '장의 이미지를 CBZ로 저장해. ' +
                     (existing ? '기존 오프라인 파일은 완성 후 교체돼.' :
                         '완료하면 네트워크 없이도 읽을 수 있어.')),
                 const SizedBox(height: 10),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('이 콘텐츠를 저장할 권한이 있어'),
+                  title: const HypText('이 콘텐츠를 저장할 권한이 있어'),
                   value: confirmedRights,
                   onChanged: (v) =>
                       update(() => confirmedRights = v == true),
                 ),
-                const Text('다운로드는 작품별로 직접 승인해야 해. '
+                const HypText('다운로드는 작품별로 직접 승인해야 해. '
                     '사이트가 접근을 제한하면 우회하지 않고 실패해.',
                     style: TextStyle(fontSize: 12)),
               ],
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(dialog, false),
-                  child: const Text('취소')),
+                  child: const HypText('취소')),
               FilledButton(
                 onPressed: confirmedRights
                     ? () => Navigator.pop(dialog, true) : null,
-                child: const Text('다운로드'),
+                child: const HypText('다운로드'),
               ),
             ],
           ),
@@ -905,20 +958,20 @@ class _LibraryHomeState extends State<LibraryHome> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (ctx, updateDialog) => AlertDialog(
-          title: const Text('서재에서 작품 삭제'),
+          title: const HypText('서재에서 작품 삭제'),
           content: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 430),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(work.title.isNotEmpty
+                HypText(work.title.isNotEmpty
                     ? work.title : '작품 ${work.workId}',
                     style: const TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
-                Text('작품 번호 ${work.workId}'),
+                HypText('작품 번호 ${work.workId}'),
                 const SizedBox(height: 12),
-                const Text('서재 목록에서 제거하면 이 작품의 즐겨찾기와 '
+                const HypText('서재 목록에서 제거하면 이 작품의 즐겨찾기와 '
                     '읽기 기록도 함께 제거돼. 다른 작품은 유지돼.'),
                 const SizedBox(height: 12),
                 CheckboxListTile(
@@ -929,8 +982,8 @@ class _LibraryHomeState extends State<LibraryHome> {
                   onChanged: (checked) => updateDialog(
                     () => alsoDeleteFiles = checked == true,
                   ),
-                  title: const Text('로컬 파일도 함께 삭제'),
-                  subtitle: const Text('다운로드한 CBZ와 기기 내 표지 미리보기까지 삭제. '
+                  title: const HypText('로컬 파일도 함께 삭제'),
+                  subtitle: const HypText('다운로드한 CBZ와 기기 내 표지 미리보기까지 삭제. '
                       '선택하지 않으면 파일은 남아서 작품 재등록 시 다시 사용할 수 있어.'),
                 ),
               ],
@@ -939,13 +992,13 @@ class _LibraryHomeState extends State<LibraryHome> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('취소'),
+              child: const HypText('취소'),
             ),
             FilledButton.icon(
               key: const Key('confirm-delete-work'),
               onPressed: () => Navigator.pop(dialogContext, true),
               icon: const Icon(Icons.delete_outline_rounded),
-              label: const Text('서재에서 삭제'),
+              label: const HypText('서재에서 삭제'),
             ),
           ],
         ),
@@ -981,14 +1034,14 @@ class _LibraryHomeState extends State<LibraryHome> {
     final approved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('오프라인 파일 삭제'),
-        content: const Text('CBZ 이미지만 삭제할까? '
+        title: const HypText('오프라인 파일 삭제'),
+        content: const HypText('CBZ 이미지만 삭제할까? '
             '서재 기록·즐겨찾기·표지는 그대로 유지돼.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('취소')),
+              child: const HypText('취소')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('파일 삭제')),
+              child: const HypText('파일 삭제')),
         ],
       ),
     );
@@ -1024,16 +1077,16 @@ class _LibraryHomeState extends State<LibraryHome> {
       final approved = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('오프라인 다운로드'),
-          content: Text('이 작품의 이미지 ' + remote.pageCount.toString() +
+          title: const HypText('오프라인 다운로드'),
+          content: HypText('이 작품의 이미지 ' + remote.pageCount.toString() +
               '장을 다운로드해 로컬 CBZ 파일로 저장할까?\n' +
               '본인이 저장 권한을 가진 작품만 다운로드해야 해. '
               '기존 오프라인 파일이 있다면 교체돼.'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('취소')),
+                child: const HypText('취소')),
             FilledButton(onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('다운로드')),
+                child: const HypText('다운로드')),
           ],
         ),
       );
@@ -1161,16 +1214,16 @@ class _LibraryHomeState extends State<LibraryHome> {
         install = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('보안 설정 확인 후 설치'),
-            content: const Text('보안 설정 화면에서 앱으로 돌아왔어. '
+            title: const HypText('보안 설정 확인 후 설치'),
+            content: const HypText('보안 설정 화면에서 앱으로 돌아왔어. '
                 'HYP Viewer는 보안 위험 자동 차단이나 출처 확인 기능을 '
                 '자동으로 끄지 않아. 설치를 계속하면 Android의 '
                 '시스템 설치 승인 화면이 열려. 계속할까?'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('나중에')),
+                  child: const HypText('나중에')),
               FilledButton(onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('설치 화면 열기')),
+                  child: const HypText('설치 화면 열기')),
             ],
           ),
         ) == true;
@@ -1178,14 +1231,14 @@ class _LibraryHomeState extends State<LibraryHome> {
         install = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('업데이트 파일 검증 완료'),
-            content: const Text('다운로드한 파일의 SHA-256을 확인했어. '
+            title: const HypText('업데이트 파일 검증 완료'),
+            content: const HypText('다운로드한 파일의 SHA-256을 확인했어. '
                 'Windows 설치 프로그램을 열기 전에 앱을 종료할게. 계속할까?'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('나중에')),
+                  child: const HypText('나중에')),
               FilledButton(onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('설치 시작')),
+                  child: const HypText('설치 시작')),
             ],
           ),
         ) == true;
@@ -1237,18 +1290,18 @@ class _LibraryHomeState extends State<LibraryHome> {
       final asset = next.installerFor(defaultTargetPlatform);
       final choice = await showDialog<String>(context: context, builder: (ctx) =>
         AlertDialog(
-          title: Text('업데이트 v' + next.version),
-          content: Text(next.notes.isEmpty
+          title: HypText('업데이트 v' + next.version),
+          content: HypText(next.notes.isEmpty
               ? '새 버전이 공개됐어. 설치 파일을 다운로드할까?'
               : next.notes),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx),
-                child: const Text('취소')),
+                child: const HypText('취소')),
             TextButton(onPressed: () => Navigator.pop(ctx, 'web'),
-                child: const Text('릴리스 보기')),
+                child: const HypText('릴리스 보기')),
             if (asset != null) FilledButton(
               onPressed: () => Navigator.pop(ctx, 'download'),
-              child: Text(Platform.isAndroid
+              child: HypText(Platform.isAndroid
                   ? '다운로드 → 보안 설정 확인' : '다운로드 및 검증'),
             ),
           ],
@@ -1294,6 +1347,8 @@ class _LibraryHomeState extends State<LibraryHome> {
     busy: busy,
     message: message,
     navigationEpoch: navigationEpoch,
+    libraryNavigationEpoch: libraryNavigationEpoch,
+    appVersion: appVersion,
     downloadingUpdate: downloadingUpdate,
     updateProgress: updateProgress,
     downloadingGalleryKey: downloadingGalleryKey,
@@ -1303,6 +1358,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     onAnalyze: _analyze,
     onFetch: _fetch,
     onSaveWork: _saveWork,
+    onQuickAddNumber: _quickAddNumber,
     onSaveSelectedWorks: _saveSelectedWorks,
     onChooseHeroArtwork: _chooseHeroArtwork,
     onClearHeroArtwork: _clearHeroArtwork,

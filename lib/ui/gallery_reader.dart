@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../core/i18n.dart';
 import 'package:flutter/services.dart';
 
 import '../core/gallery.dart';
@@ -208,13 +209,13 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       await choose(page, bytes);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(page.toString() + '페이지를 서재 표지로 지정했어.')),
+          SnackBar(content: HypText(page.toString() + '페이지를 서재 표지로 지정했어.')),
         );
       }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('표지 저장 실패: ' + error.toString())),
+          SnackBar(content: HypText('표지 저장 실패: ' + error.toString())),
         );
       }
     }
@@ -243,7 +244,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
             const Icon(Icons.broken_image_outlined,
                 color: Colors.white70, size: 42),
             const SizedBox(height: 10),
-            Text((index + 1).toString() + '페이지를 불러오지 못했어.',
+            HypText((index + 1).toString() + '페이지를 불러오지 못했어.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white,
                     fontWeight: FontWeight.bold)),
@@ -258,7 +259,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 key: const Key('reader-retry-page'),
                 onPressed: () => _retryPage(index),
                 icon: const Icon(Icons.refresh),
-                label: const Text('다시 시도'),
+                label: const HypText('다시 시도'),
               ),
               if (widget.settings.showWebReaderAction &&
                 widget.onOpenInBrowser != null)
@@ -266,7 +267,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                   key: const Key('reader-web-fallback'),
                   onPressed: () { widget.onOpenInBrowser?.call(index + 1); },
                   icon: const Icon(Icons.open_in_new),
-                  label: const Text('웹 리더로 열기'),
+                  label: const HypText('웹 리더로 열기'),
                 ),
             ]),
           ],
@@ -285,7 +286,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 12),
-            Text('이미지를 불러오는 중…',
+            HypText('이미지를 불러오는 중…',
                 style: TextStyle(color: Colors.white70)),
           ],
         ));
@@ -349,7 +350,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
         appBar: AppBar(
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
-          title: Text(widget.work.title.isEmpty
+          title: HypText(widget.work.title.isEmpty
               ? widget.work.workId : widget.work.title,
               overflow: TextOverflow.ellipsis),
           actions: [
@@ -417,7 +418,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                     child: Row(children: [
                       // In RTL books the NEXT action starts on the left.
                       widget.settings.reverse ? nextButton() : previousButton(),
-                      Text('$_currentPage / $total',
+                      HypText('$_currentPage / $total',
                           style: const TextStyle(color: Colors.white)),
                       Expanded(child: Directionality(
                         textDirection: widget.settings.reverse

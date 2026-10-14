@@ -19,6 +19,8 @@ class ReaderSettings {
   final bool volumeKeyNavigation;
   final bool forceLandscapeForSpreads;
   final bool receiveAnnouncements;
+  final bool openAfterSave;
+  final String languageCode; // ko, en, ja
 
   const ReaderSettings({
     this.nextDirection = 'left',
@@ -34,6 +36,8 @@ class ReaderSettings {
     this.volumeKeyNavigation = false,
     this.forceLandscapeForSpreads = false,
     this.receiveAnnouncements = false,
+    this.openAfterSave = false,
+    this.languageCode = 'ko',
   });
 
   bool get reverse => nextDirection == 'right';
@@ -52,6 +56,8 @@ class ReaderSettings {
     bool? volumeKeyNavigation,
     bool? forceLandscapeForSpreads,
     bool? receiveAnnouncements,
+    bool? openAfterSave,
+    String? languageCode,
   }) => ReaderSettings(
     nextDirection: nextDirection ?? this.nextDirection,
     twoPageSpread: twoPageSpread ?? this.twoPageSpread,
@@ -66,6 +72,8 @@ class ReaderSettings {
     volumeKeyNavigation: volumeKeyNavigation ?? this.volumeKeyNavigation,
     forceLandscapeForSpreads: forceLandscapeForSpreads ?? this.forceLandscapeForSpreads,
     receiveAnnouncements: receiveAnnouncements ?? this.receiveAnnouncements,
+    openAfterSave: openAfterSave ?? this.openAfterSave,
+    languageCode: languageCode ?? this.languageCode,
   );
 
   Map<String, Object> toJson() => {
@@ -82,6 +90,8 @@ class ReaderSettings {
     'volumeKeyNavigation': volumeKeyNavigation,
     'forceLandscapeForSpreads': forceLandscapeForSpreads,
     'receiveAnnouncements': receiveAnnouncements,
+    'openAfterSave': openAfterSave,
+    'languageCode': languageCode,
   };
 
   factory ReaderSettings.fromJson(Map<String, dynamic> data) =>
@@ -98,6 +108,9 @@ class ReaderSettings {
         volumeKeyNavigation: data['volumeKeyNavigation'] == true,
         forceLandscapeForSpreads: data['forceLandscapeForSpreads'] == true,
         receiveAnnouncements: data['receiveAnnouncements'] == true,
+        openAfterSave: data['openAfterSave'] == true,
+        languageCode: {'ko', 'en', 'ja'}.contains(data['languageCode'])
+            ? data['languageCode'] as String : 'ko',
         preloadPages: data['preloadPages'] is num
             ? (data['preloadPages'] as num).toInt().clamp(0, 3).toInt()
             : 2,

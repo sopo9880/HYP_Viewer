@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/i18n.dart';
 
 /// A single, reusable visual language for Windows and Android.
 /// No screenshots, third-party illustrations or fabricated cover art.
@@ -155,16 +156,16 @@ class HypSectionTitle extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: Theme.of(context).textTheme.titleLarge),
+                HypText(title, style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 3),
-                Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                HypText(subtitle, style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),
           if (actionLabel != null && onAction != null)
             TextButton.icon(
               onPressed: onAction,
-              label: Text(actionLabel!),
+              label: HypText(actionLabel!),
               iconAlignment: IconAlignment.end,
               icon: const Icon(Icons.chevron_right, size: 19),
             ),
@@ -200,14 +201,14 @@ class HypEmptyState extends StatelessWidget {
               children: [
                 Icon(icon, color: HypColors.lightPurple, size: 38),
                 const SizedBox(height: 10),
-                Text(title, textAlign: TextAlign.center,
+                HypText(title, textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 6),
-                Text(message, textAlign: TextAlign.center,
+                HypText(message, textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall),
                 if (actionLabel != null && onAction != null) ...[
                   const SizedBox(height: 15),
-                  OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+                  OutlinedButton(onPressed: onAction, child: HypText(actionLabel!)),
                 ],
               ],
             ),

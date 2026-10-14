@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../core/i18n.dart';
 
 import '../core/work.dart';
 import 'hyp_theme.dart';
@@ -105,7 +106,7 @@ class HypWorkCard extends StatelessWidget {
                         color: HypColors.background.withValues(alpha: 0.85),
                         borderRadius: BorderRadius.circular(30),
                       ),
-                      child: Text(
+                      child: HypText(
                         (progress * 100).round().toString() + '%',
                         style: const TextStyle(
                             fontSize: 11, fontWeight: FontWeight.w800),
@@ -117,13 +118,13 @@ class HypWorkCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 9, 5, 8),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text(
+                HypText(
                   work.title.isEmpty ? '작품 ' + work.workId : work.title,
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                Text(
+                HypText(
                   work.author.isNotEmpty
                       ? '작가 ' + work.author
                       : '번호 ' + work.workId,
@@ -133,7 +134,7 @@ class HypWorkCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Row(children: [
                   Expanded(
-                    child: Text(
+                    child: HypText(
                       work.completed
                           ? '완독'
                           : totalPages != null
@@ -155,30 +156,30 @@ class HypWorkCard extends StatelessWidget {
                       itemBuilder: (_) => [
                         if (isOffline)
                           const PopupMenuItem(
-                              value: 'offline', child: Text('오프라인 읽기')),
+                              value: 'offline', child: HypText('오프라인 읽기')),
                         const PopupMenuItem(
-                            value: 'online', child: Text('앱 내 온라인 읽기')),
+                            value: 'online', child: HypText('앱 내 온라인 읽기')),
                         const PopupMenuItem(
-                            value: 'page', child: Text('웹 리더 · 시작 페이지 선택')),
+                            value: 'page', child: HypText('웹 리더 · 시작 페이지 선택')),
                         const PopupMenuItem(
-                            value: 'download', child: Text('온라인 작품 오프라인 저장')),
+                            value: 'download', child: HypText('온라인 작품 오프라인 저장')),
                         const PopupMenuItem(
-                            value: 'download_json', child: Text('추가 JSON 소스 다운로드')),
+                            value: 'download_json', child: HypText('추가 JSON 소스 다운로드')),
                         if (isOffline)
                           const PopupMenuItem(
-                            value: 'delete_offline', child: Text('오프라인 파일 삭제')),
+                            value: 'delete_offline', child: HypText('오프라인 파일 삭제')),
                         const PopupMenuItem(
-                            value: 'import', child: Text('CBZ/ZIP 연결')),
+                            value: 'import', child: HypText('CBZ/ZIP 연결')),
                         const PopupMenuItem(
-                            value: 'cover', child: Text('표지 선택')), 
+                            value: 'cover', child: HypText('표지 선택')), 
                         PopupMenuItem(
                           value: 'favorite',
-                          child: Text(work.favorite
+                          child: HypText(work.favorite
                               ? '즐겨찾기 해제' : '즐겨찾기'),
                         ),
                         if (work.videoUrl.isNotEmpty)
                           const PopupMenuItem(
-                              value: 'original', child: Text('원본 쇼츠')),
+                              value: 'original', child: HypText('원본 쇼츠')),
                         const PopupMenuDivider(),
                         const PopupMenuItem(
                           value: 'delete_work',
@@ -186,7 +187,7 @@ class HypWorkCard extends StatelessWidget {
                             Icon(Icons.delete_outline_rounded,
                                 size: 19, color: Colors.redAccent),
                             SizedBox(width: 9),
-                            Text('서재에서 작품 삭제',
+                            HypText('서재에서 작품 삭제',
                                 style: TextStyle(color: Colors.redAccent)),
                           ]),
                         ),
@@ -248,7 +249,7 @@ class HypWorkCard extends StatelessWidget {
               child: Icon(Icons.favorite, color: HypColors.lightPurple, size: 18)),
         Positioned(
           bottom: 9, left: 10, right: 10,
-          child: Text(work.title.isEmpty ? 'HYP Viewer' : work.title,
+          child: HypText(work.title.isEmpty ? 'HYP Viewer' : work.title,
               maxLines: 2, overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.86),
