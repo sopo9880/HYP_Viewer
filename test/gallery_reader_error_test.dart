@@ -27,6 +27,7 @@ void main() {
   testWidgets('shows actionable error instead of a blank reader', (tester) async {
     final archive = _FailingGallery();
     int? browserPage;
+    var downloadRequests = 0;
     await tester.pumpWidget(MaterialApp(
       theme: ThemeData.dark(),
       home: GalleryReader(
@@ -35,6 +36,7 @@ void main() {
         settings: const ReaderSettings(preloadPages: 0),
         onPageChanged: (_) {},
         onOpenInBrowser: (page) async { browserPage = page; },
+        onDownloadOffline: () async { downloadRequests++; },
       ),
     ));
     await tester.pump();
@@ -46,6 +48,10 @@ void main() {
     expect(tester.getCenter(find.byType(Slider)).dy, greaterThan(400));
     expect(find.textContaining('1페이지를 불러오지 못했어.'), findsOneWidget);
     expect(find.textContaining('HTTP 404'), findsOneWidget);
+    expect(find.byKey(const Key('reader-download-offline')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('reader-download-offline')));
+    await tester.pump();
+    expect(downloadRequests, 1);
     expect(find.byKey(const Key('reader-retry-page')), findsOneWidget);
     expect(find.byKey(const Key('reader-web-fallback')), findsOneWidget);
     expect(archive.attempts, 1);
