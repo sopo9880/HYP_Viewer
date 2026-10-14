@@ -148,12 +148,15 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               icon: const Icon(Icons.search),
               label: const Text('작품 찾기'),
             );
-            final advanced = ExpansionTile(
-              key: const Key('youtube-advanced-settings'),
-              title: const Text('고급 설정 · 내 YouTube Data API 키 사용 (선택)'),
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: 8),
-              children: [apiKey],
+            final advanced = Material(
+              color: Colors.transparent,
+              child: ExpansionTile(
+                key: const Key('youtube-advanced-settings'),
+                title: const Text('고급 설정 · 내 YouTube Data API 키 사용 (선택)'),
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 8),
+                children: [apiKey],
+              ),
             );
             if (wide) {
               return Column(
