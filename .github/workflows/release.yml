@@ -151,20 +151,30 @@ jobs:
           cat > release-notes.md <<EOF
           # HYP Viewer $RELEASE_TAG (0.x preview)
 
-          First experimental 0.x release. This app is not yet feature-complete.
+          Experimental 0.x update. Install over the previous release to test
+          the new functionality; back up your library to JSON first.
 
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Features: YouTube Shorts share handling, deterministic work-number
-          candidates, local library and reading progress, portable JSON
-          backup/import and XLSX export, local CBZ/ZIP reader, and an
-          opt-in HTTPS image manifest source for online reading / permitted
-          manual CBZ downloads.
+          Changes:
+          - Attempt to fetch publicly accessible YouTube Shorts comments
+            automatically without requiring a personal YouTube Data API key.
+            Optional manual API-key fallback remains under Advanced Settings.
+          - Open numbered Hitomi galleries inside the Flutter reader with page
+            progress saving, using the public metadata/image routing format.
+          - Open the external web reader with fixed URL fragments:
+            first page #1-, page 2 #2-3, page 3 #3-4, and so on.
+          - Preserve JSON backup/import, Excel export, local CBZ/ZIP reader,
+            favorites, and optional authorized JSON-manifest CBZ downloads.
 
-          Known limitations: No built-in Hitomi gallery scraper. Automatic
-          YouTube comments require a user-provided YouTube Data API key.
-          Downloaded CBZ files are not included in JSON backups.
+          Known limitations: YouTube web-client comment collection and Hitomi
+          image access are experimental and may fail due to source website
+          changes or restrictions. These have automated mock tests, but live
+          device testing is still required. The built-in Hitomi reader does
+          not bulk-download works. Externally navigated pages do not
+          synchronize automatically. Downloaded CBZ files are not included in
+          JSON backups.
 
           Verify assets using SHA256SUMS.txt. Only download from sources
           you have permission to access and retain.
