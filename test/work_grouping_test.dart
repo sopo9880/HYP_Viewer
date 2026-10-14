@@ -30,6 +30,7 @@ void main() {
       originalComment: '3편 - 341/912/0',).copyWith(groupId: 'existing');
     final groups = WorkGrouping.suggest([one, two, three]);
     expect(groups, hasLength(1));
+    expect(groups.first.existingGroupId, 'existing');
     expect(groups.first.workIds, ['2900756', '3172801']);
     expect(three.groupId, 'existing');
   });
