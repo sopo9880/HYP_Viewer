@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -21,6 +22,7 @@ class GalleryReader extends StatefulWidget {
   final ReaderSettings settings;
   // Test seam: production always uses the on-disk reader cache.
   final bool diskCacheEnabled;
+  final Directory? persistentCacheDirectory;
   final Future<void> Function(int page)? onOpenInBrowser;
   final Future<void> Function()? onDownloadOffline;
   final void Function(int page, Uint8List bytes)? onPageLoaded;
@@ -35,6 +37,7 @@ class GalleryReader extends StatefulWidget {
     required this.onPageChanged,
     this.settings = const ReaderSettings(),
     this.diskCacheEnabled = true,
+    this.persistentCacheDirectory,
     this.onOpenInBrowser,
     this.onDownloadOffline,
     this.onPageLoaded,
@@ -107,7 +110,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     // Data saver uses one request at a time, regardless of preload setting.
     _diskCache = GalleryDiskCache(widget.archive,
         concurrency: widget.settings.dataSaverMode ? 1 : 2,
-        cacheToDisk: widget.diskCacheEnabled);
+        cacheToDisk: widget.diskCacheEnabled,
+        persistentDirectory: widget.persistentCacheDirectory);
     _webtoonPositions.itemPositions.addListener(_onWebtoonPosition);
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -134,11 +138,14 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     }
     if (oldWidget.archive != widget.archive ||
         oldWidget.settings.dataSaverMode != widget.settings.dataSaverMode ||
-        oldWidget.diskCacheEnabled != widget.diskCacheEnabled) {
+        oldWidget.diskCacheEnabled != widget.diskCacheEnabled ||
+        oldWidget.persistentCacheDirectory?.path !=
+            widget.persistentCacheDirectory?.path) {
       final oldDisk = _diskCache;
       _diskCache = GalleryDiskCache(widget.archive,
           concurrency: widget.settings.dataSaverMode ? 1 : 2,
-        cacheToDisk: widget.diskCacheEnabled);
+        cacheToDisk: widget.diskCacheEnabled,
+        persistentDirectory: widget.persistentCacheDirectory);
       _imageCache.clear();
       if (oldDisk != null) unawaited(oldDisk.dispose());
     }
