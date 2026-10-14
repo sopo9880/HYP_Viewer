@@ -44,7 +44,7 @@ class HypWorkGrid extends StatelessWidget {
             crossAxisCount: columns,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: columns == 1 ? 1.35 : 0.76,
+            childAspectRatio: columns == 1 ? 1.15 : 0.68,
           ),
           itemBuilder: (context, index) => HypWorkCard(
             work: works[index],
@@ -92,8 +92,9 @@ class HypWorkCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final progress = work.completed
         ? 1.0
-        : totalPages != null && totalPages! > 0
-            ? (work.currentPage / totalPages!).clamp(0.0, 1.0).toDouble()
+        : (totalPages ?? work.totalPages) > 0
+            ? ((work.currentPage - 1) /
+                (totalPages ?? work.totalPages)).clamp(0.0, 1.0).toDouble()
             : null;
     return Material(
       color: HypColors.surface,
@@ -173,11 +174,10 @@ class HypWorkCard extends StatelessWidget {
                   Expanded(
                     child: HypText(
                       work.completed
-                          ? '완독'
-                          : totalPages != null
-                              ? work.currentPage.toString() + ' / ' +
-                                  totalPages.toString() + ' 페이지'
-                              : work.currentPage.toString() + '페이지부터',
+                          ? '완독 · 100%'
+                          : work.currentPage.toString() + '페이지부터' +
+                              (progress == null
+                                ? '' : ' · ' + (progress * 100).round().toString() + '%'),
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 11),
                     ),
@@ -200,17 +200,15 @@ class HypWorkCard extends StatelessWidget {
                             value: 'page', child: HypText('웹 리더 · 시작 페이지 선택')),
                         const PopupMenuItem(
                             value: 'download', child: HypText('온라인 작품 오프라인 저장')),
-                        const PopupMenuItem(
-                            value: 'download_json', child: HypText('추가 JSON 소스 다운로드')),
+
                         if (isOffline)
                           const PopupMenuItem(
                             value: 'delete_offline', child: HypText('오프라인 파일 삭제')),
-                        const PopupMenuItem(
-                            value: 'import', child: HypText('CBZ/ZIP 연결')),
+
                         const PopupMenuItem(
                             value: 'cover', child: HypText('표지 선택')),
                         const PopupMenuItem(
-                            value: 'edit_details', child: HypText('작품 정보 수정')), 
+                            value: 'info', child: HypText('작품 정보')), 
                         PopupMenuItem(
                           value: 'favorite',
                           child: HypText(work.favorite
@@ -218,7 +216,7 @@ class HypWorkCard extends StatelessWidget {
                         ),
                         if (work.videoUrl.isNotEmpty)
                           const PopupMenuItem(
-                              value: 'original', child: HypText('원본 쇼츠')),
+                              value: 'original', child: HypText('소개 쇼츠')),
                         const PopupMenuDivider(),
                         const PopupMenuItem(
                           value: 'delete_work',
