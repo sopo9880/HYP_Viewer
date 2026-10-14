@@ -161,7 +161,12 @@ class HypWorkCard extends StatelessWidget {
                         const PopupMenuItem(
                             value: 'page', child: Text('웹 리더 · 시작 페이지 선택')),
                         const PopupMenuItem(
-                            value: 'download', child: Text('JSON 소스 다운로드')),
+                            value: 'download', child: Text('온라인 작품 오프라인 저장')),
+                        const PopupMenuItem(
+                            value: 'download_json', child: Text('추가 JSON 소스 다운로드')),
+                        if (isOffline)
+                          const PopupMenuItem(
+                            value: 'delete_offline', child: Text('오프라인 파일 삭제')),
                         const PopupMenuItem(
                             value: 'import', child: Text('CBZ/ZIP 연결')),
                         const PopupMenuItem(
