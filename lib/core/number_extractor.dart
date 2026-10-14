@@ -28,6 +28,8 @@ class NumberExtractor {
   );
   static final RegExp _tenThousands =
       RegExp(r'(\d{1,4})\s*만\s*(\d{1,4})');
+  static final RegExp _slashSequence =
+      RegExp(r'(?<!\d)\d{1,4}(?:\s*[/／]\s*\d{1,4}){1,5}(?!\d)');
   static final RegExp _hints = RegExp(
     r'(번호|품번|코드|날짜|시간|년|월|일|만|컬렉션|작품|편|파트)',
     caseSensitive: false,
@@ -72,7 +74,17 @@ class NumberExtractor {
       }
       // A standalone full-length ID must not be contaminated with the next
       // timestamp, and one numbered episode must not join the next episode.
-      final remaining = text.replaceAll(_complete, ' ');
+      var remaining = text.replaceAll(_complete, ' ');
+      // Slash-separated mnemonic fields are one intentional identifier:
+      // "341/912/0" is 3419120, not also the truncated 341912.
+      for (final match in _slashSequence.allMatches(remaining)) {
+        final encoded = _digits.allMatches(match.group(0)!)
+            .map((m) => m.group(0)!).join();
+        add(encoded, line, episode,
+            crossLine ? 'cross-line-slash' : 'slash-sequence',
+            crossLine ? 35 : 83);
+      }
+      remaining = remaining.replaceAll(_slashSequence, ' ');
       final groups = _digits.allMatches(remaining)
           .map((m) => m.group(0)!).toList();
 
