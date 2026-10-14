@@ -686,9 +686,15 @@ class _LibraryHomeState extends State<LibraryHome> {
       final remote = await HitomiGalleryProvider(client).load(work.workId);
       if (!mounted) return;
       await _touchRead(work);
+      final missingTitle =
+          work.title.isEmpty || work.title == '작품 ${work.workId}';
+      if (missingTitle && remote.title.trim().isNotEmpty) {
+        await _updateWork(work.copyWith(title: remote.title.trim()));
+      }
       final readerWork = work.copyWith(
         currentPage: work.currentPage.clamp(1, remote.pageCount).toInt(),
-        title: work.title.isEmpty ? remote.title : work.title,
+        title: missingTitle && remote.title.trim().isNotEmpty
+            ? remote.title.trim() : work.title,
       );
       if (!mounted) return;
       await Navigator.push<void>(
@@ -700,6 +706,10 @@ class _LibraryHomeState extends State<LibraryHome> {
           onOpenInBrowser: (page) => _openWebReader(work, page: page),
           onDownloadOffline: () => _downloadOnline(work),
           settings: readerSettings,
+          onVerticalScrollingChanged: (vertical) {
+            unawaited(_saveReaderSettings(
+                readerSettings.copyWith(verticalScrolling: vertical)));
+          },
           onPageLoaded: (page, bytes) {
             unawaited(_captureAutomaticCover(work, page, bytes));
           },
@@ -1008,6 +1018,10 @@ class _LibraryHomeState extends State<LibraryHome> {
             _touchRead(work, page: page);
           },
           settings: readerSettings,
+          onVerticalScrollingChanged: (vertical) {
+            unawaited(_saveReaderSettings(
+                readerSettings.copyWith(verticalScrolling: vertical)));
+          },
           onPageLoaded: (page, bytes) {
             unawaited(_captureAutomaticCover(work, page, bytes));
           },
@@ -1144,6 +1158,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     coverStore: coverStore,
     coverEpoch: coverEpoch,
     readerSettings: readerSettings,
+    heroArtwork: heroArtwork,
     urlInput: urlInput,
     apiKeyInput: apiKeyInput,
     commentInput: commentInput,
@@ -1164,6 +1179,9 @@ class _LibraryHomeState extends State<LibraryHome> {
     onAnalyze: _analyze,
     onFetch: _fetch,
     onSaveWork: _saveWork,
+    onSaveSelectedWorks: _saveSelectedWorks,
+    onChooseHeroArtwork: _chooseHeroArtwork,
+    onClearHeroArtwork: _clearHeroArtwork,
     onSaveOnlineSource: _saveOnlineSource,
     onExportJson: () => _export(false),
     onExportExcel: () => _export(true),
