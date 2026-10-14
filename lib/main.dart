@@ -558,6 +558,135 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   Future<void> _downloadOnline(WorkEntry work) async {
     if (galleryDownloadToken != null) {
+      _status('이미 진행 중인 다운로드가 있어. 먼저 완료하거나 취소해줘.');
+      return;
+    }
+    final client = http.Client();
+    GalleryTransfer? transfer;
+    try {
+      final remote = await HitomiGalleryProvider(client).load(work.workId);
+      if (!mounted) return;
+      final existing = await galleryStore.exists(work.workId);
+      var confirmedRights = false;
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => StatefulBuilder(
+          builder: (context, update) => AlertDialog(
+            title: const Text('온라인 작품을 오프라인으로 저장'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(remote.pageCount.toString() + '장의 이미지를 CBZ로 저장해. ' +
+                    (existing ? '기존 오프라인 파일은 완성 후 교체돼.' :
+                        '완료하면 네트워크 없이도 읽을 수 있어.')),
+                const SizedBox(height: 10),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('이 콘텐츠를 저장할 권한이 있어'),
+                  value: confirmedRights,
+                  onChanged: (v) =>
+                      update(() => confirmedRights = v == true),
+                ),
+                const Text('다운로드는 작품별로 직접 승인해야 해. '
+                    '사이트가 접근을 제한하면 우회하지 않고 실패해.',
+                    style: TextStyle(fontSize: 12)),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog, false),
+                  child: const Text('취소')),
+              FilledButton(
+                onPressed: confirmedRights
+                    ? () => Navigator.pop(dialog, true) : null,
+                child: const Text('다운로드'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (accepted != true || !mounted) return;
+      transfer = GalleryTransfer();
+      setState(() {
+        galleryDownloadToken = transfer;
+        readerTransfer = transfer;
+        downloadingGalleryKey = work.key;
+        downloadedGalleryPages = 0;
+        downloadedGalleryBytes = 0;
+        totalGalleryPages = remote.pageCount;
+        isReaderTransferPaused = false;
+      });
+      final downloaded = await ReaderGalleryDownloader(galleryStore).download(
+        work.workId, remote,
+        transfer: transfer,
+        onProgress: (completed, total, bytes) {
+          if (mounted) {
+            setState(() {
+              downloadedGalleryPages = completed;
+              totalGalleryPages = total;
+              downloadedGalleryBytes = bytes;
+            });
+          }
+        },
+      );
+      if (mounted) setState(() => coverEpoch++);
+      _status('오프라인 저장 완료! ' +
+          downloaded.pageCount.toString() + '페이지를 인터넷 없이 읽을 수 있어.');
+    } on DownloadCancelled {
+      _status('다운로드가 취소됐어. 기존 오프라인 파일은 유지했어.');
+    } catch (e) {
+      _status('오프라인 저장 실패: ' + e.toString());
+    } finally {
+      client.close();
+      if (mounted && transfer != null) {
+        setState(() {
+          galleryDownloadToken = null;
+          readerTransfer = null;
+          downloadingGalleryKey = null;
+          isReaderTransferPaused = false;
+        });
+      }
+    }
+  }
+
+  void _pauseOrResumeReaderDownload() {
+    final active = readerTransfer;
+    if (active == null) return;
+    if (active.isPaused) {
+      active.resume();
+    } else {
+      active.pause();
+    }
+    if (mounted) setState(() => isReaderTransferPaused = active.isPaused);
+  }
+
+  Future<void> _deleteOffline(WorkEntry work) async {
+    if (!await galleryStore.exists(work.workId) || !mounted) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('오프라인 파일 삭제'),
+        content: const Text('CBZ 이미지만 삭제할까? '
+            '서재 기록·즐겨찾기·표지는 그대로 유지돼.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('취소')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('파일 삭제')),
+        ],
+      ),
+    );
+    if (approved != true) return;
+    try {
+      await galleryStore.delete(work.workId);
+      if (mounted) setState(() => coverEpoch++);
+      _status('오프라인 이미지를 삭제했어. 서재 기록은 유지했어.');
+    } catch (e) {
+      _status('오프라인 파일 삭제 실패: ' + e.toString());
+    }
+  }
+
+  Future<void> _downloadJsonSource(WorkEntry work) async {
+    if (galleryDownloadToken != null) {
       _status('이미 다른 다운로드가 실행 중이야.');
       return;
     }
