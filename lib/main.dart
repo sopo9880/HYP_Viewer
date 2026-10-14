@@ -345,7 +345,11 @@ class _LibraryHomeState extends State<LibraryHome> {
   Future<void> _load() async {
     try {
       final data = await storage.load();
-      if (mounted) setState(() => library = data);
+      // Old backups may contain one gallery linked from several different
+      // Shorts. Consolidate by work ID while retaining favorites and progress.
+      final normalized = LibraryBackup.merge(
+        const LibraryBackup(works: [], collections: []), data);
+      if (mounted) setState(() => library = normalized);
     } catch (e) {
       _status('기존 서재 읽기 실패: ' + e.toString());
     }
