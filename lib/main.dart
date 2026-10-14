@@ -232,7 +232,7 @@ class _LibraryHomeState extends State<LibraryHome> {
         title: titleInput.text,
         author: authorInput.text,
         originalComment: commentInput.text,
-      );
+      ).copyWith(coverMode: readerSettings.autoCoverEnabled ? 'auto' : 'preset');
       await _commitLibrary((latest) => LibraryBackup.merge(latest,
           LibraryBackup(works: [work], collections: const [])));
       // Start preparing the first-page thumbnail, without blocking Save.
@@ -391,22 +391,48 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
-  Future<void> _usePageAsCover(
-      WorkEntry work, int page, Uint8List bytes) async {
-    await coverStore.save(work.workId, bytes, mode: 'page', page: page);
-    await _updateWork(work.copyWith(coverMode: 'page', coverPage: page));
+  Future<void> _saveCroppedCover(
+      WorkEntry work, Uint8List source, {int page = 1}) async {
+    if (!mounted) return;
+    final cropped = await showCoverCropper(context, source);
+    if (cropped == null || !mounted) return;
+    await coverStore.save(work.workId, cropped, mode: 'custom');
+    await _updateWork(work.copyWith(coverMode: 'custom', coverPage: page));
     if (mounted) {
       setState(() => coverEpoch++);
-      _status('작품 ' + page.toString() + '페이지를 서재 표지로 설정했어.');
+      _status('보이는 영역을 작품 표지로 저장했어.');
+    }
+  }
+
+  Future<void> _usePageAsCover(
+      WorkEntry work, int page, Uint8List bytes) async {
+    try {
+      await _saveCroppedCover(work, bytes, page: page);
+    } catch (e) {
+      _status('표지 변경 실패: ' + e.toString());
     }
   }
 
   Future<void> _chooseCover(WorkEntry work) async {
     final choice = await showCoverPicker(context, work);
     if (choice == null || !mounted) return;
-    final mode = choice.mode;
     try {
-      if (mode == 'page') {
+      if (choice.mode == 'upload') {
+        final picked = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'],
+          withData: true,
+        );
+        if (picked == null || picked.files.isEmpty) return;
+        final chosen = picked.files.single;
+        if (chosen.size > GalleryArchive.maxSingleImageBytes) {
+          throw const FormatException('이미지 파일은 최대 35MB까지 지원해.');
+        }
+        final bytes = chosen.bytes ??
+            (chosen.path != null ? await File(chosen.path!).readAsBytes() : null);
+        if (bytes == null) throw const FormatException('선택한 이미지를 읽지 못했어.');
+        await _saveCroppedCover(work, bytes);
+      } else if (choice.mode == 'page') {
         final client = http.Client();
         try {
           final GalleryPageSource gallery =
@@ -418,30 +444,20 @@ class _LibraryHomeState extends State<LibraryHome> {
                 '페이지 중에서 선택해야 해.');
           }
           final bytes = await gallery.loadPage(choice.page - 1);
-          await _usePageAsCover(work, choice.page, bytes);
+          await _saveCroppedCover(work, bytes, page: choice.page);
         } finally {
           client.close();
         }
       } else {
         await _updateWork(work.copyWith(
-          coverMode: mode, coverPreset: choice.preset,
+          coverMode: choice.mode,
+          coverPreset: choice.preset,
           coverPage: choice.page,
         ));
         if (mounted) setState(() => coverEpoch++);
-        if (mode == 'auto' && !await coverStore.exists(work.workId)) {
-          final client = http.Client();
-          try {
-            final GalleryPageSource gallery =
-                await galleryStore.exists(work.workId)
-                    ? await galleryStore.read(work.workId)
-                    : await HitomiGalleryProvider(client).load(work.workId);
-            await coverStore.save(work.workId, await gallery.loadPage(0));
-            if (mounted) setState(() => coverEpoch++);
-          } catch (_) {
-            _status('자동 표지를 선택했어. 첫 페이지를 열면 미리보기를 생성할게.');
-          } finally {
-            client.close();
-          }
+        if (choice.mode == 'auto' && readerSettings.autoCoverEnabled &&
+            !await coverStore.exists(work.workId)) {
+          unawaited(_prepareAutomaticCover(work));
         }
       }
     } catch (e) {
