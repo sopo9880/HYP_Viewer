@@ -38,6 +38,8 @@ void main() {
     expect(find.byKey(const Key('data-saver-setting')), findsOneWidget);
     expect(find.byKey(const Key('reader-tap-navigation-setting')), findsOneWidget);
     await tester.ensureVisible(find.text('서재 데이터·백업'));
+    // ensureVisible updates scroll position; allow a frame for layout/hit testing.
+    await tester.pumpAndSettle();
     await tester.tap(find.text('서재 데이터·백업'));
     await tester.pumpAndSettle();
     expect(find.text('JSON 백업'), findsWidgets);

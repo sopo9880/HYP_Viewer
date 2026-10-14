@@ -64,8 +64,7 @@ void main() {
         work: WorkEntry.create(workId: '2711759'),
         archive: _Pages(),
         diskCacheEnabled: false,
-        settings: const ReaderSettings(
-            nextDirection: 'right', verticalScrolling: true),
+        settings: const ReaderSettings(nextDirection: 'right'),
         onPageChanged: (_) {},
         onVerticalScrollingChanged: changes.add,
       ),
@@ -76,10 +75,16 @@ void main() {
             find.byKey(const Key('reader-previous'))).dx));
     expect(Directionality.of(tester.element(find.byType(Slider))),
         TextDirection.rtl);
-    await tester.tap(find.byTooltip('가로 넘기기'));
+    // Switching to vertical reading must keep next BELOW/forward, not RTL.
+    await tester.tap(find.byTooltip('세로 넘기기'));
     await tester.pumpAndSettle();
-    expect(changes, [false]);
-    expect(find.byTooltip('세로 넘기기'), findsOneWidget);
+    expect(changes, [true]);
+    expect(find.byTooltip('가로 넘기기'), findsOneWidget);
+    expect(tester.getTopLeft(find.byKey(const Key('reader-next'))).dx,
+        greaterThan(tester.getTopLeft(
+            find.byKey(const Key('reader-previous'))).dx));
+    expect(Directionality.of(tester.element(find.byType(Slider))),
+        TextDirection.ltr);
   });
 
   testWidgets('viewer upper-right toolbar visibility follows settings',
