@@ -157,16 +157,17 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes:
-          - Attempt to fetch publicly accessible YouTube Shorts comments
-            automatically without requiring a personal YouTube Data API key.
-            Optional manual API-key fallback remains under Advanced Settings.
-          - Open numbered Hitomi galleries inside the Flutter reader with page
-            progress saving, using the public metadata/image routing format.
-          - Open the external web reader with fixed URL fragments:
-            first page #1-, page 2 #2-3, page 3 #3-4, and so on.
-          - Preserve JSON backup/import, Excel export, local CBZ/ZIP reader,
-            favorites, and optional authorized JSON-manifest CBZ downloads.
+          Changes in v0.1.2:
+          - Fix full-size WebP/AVIF image URLs (remove the incorrect
+            /webp/ and /avif/ path segments). Preserve the image-host
+            routing and strict HTTPS source checks.
+          - If a preferred WebP image fails, try the publicly available
+            original JPEG/PNG where the metadata declares it.
+          - Replace a blank failed page with a visible error explanation,
+            retry action and an external web-reader fallback.
+          - Keep v0.1.1 keyless YouTube Shorts extraction, fixed web
+            reader fragments (#1-, #2-3, etc.), and existing local
+            library / backup features.
 
           Known limitations: YouTube web-client comment collection and Hitomi
           image access are experimental and may fail due to source website
