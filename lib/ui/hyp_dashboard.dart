@@ -1044,7 +1044,6 @@ class _HypDashboardState extends State<HypDashboard> {
                   ),
               ]),
             )),
-          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialog, false),
                 child: const HypText('취소')),
@@ -1122,7 +1121,7 @@ class _HypDashboardState extends State<HypDashboard> {
                   title: Text((index + 1).toString() + '. ' +
                       ordered[index].title),
                   subtitle: Text('#' + ordered[index].workId),
-                  trailing: Wrap(mainAxisSize: MainAxisSize.min,
+                  trailing: Row(mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
                         tooltip: '위로',
