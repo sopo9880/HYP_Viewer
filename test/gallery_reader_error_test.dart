@@ -39,6 +39,9 @@ void main() {
     await tester.pump();
 
     expect(find.text('1 / 32'), findsOneWidget);
+    // Regression: previously the unconstrained Slider covered the page
+    // and appeared in the center of the entire window.
+    expect(tester.getCenter(find.byType(Slider)).dy, greaterThan(400));
     expect(find.textContaining('1페이지 이미지를 불러오지 못했어.'), findsOneWidget);
     expect(find.textContaining('HTTP 404'), findsOneWidget);
     expect(find.byKey(const Key('reader-retry-page')), findsOneWidget);
