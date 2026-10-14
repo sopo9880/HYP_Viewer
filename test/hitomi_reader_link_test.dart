@@ -2,10 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hyp_viewer/core/hitomi_reader_link.dart';
 
 void main() {
-  test('first page uses a single-page fragment', () {
+  test('first page uses trailing-dash #1- fragment', () {
     expect(
       HitomiReaderLink.forWork('2711759').toString(),
-      'https://hitomi.la/reader/2711759.html#1',
+      'https://hitomi.la/reader/2711759.html#1-',
     );
   });
 
