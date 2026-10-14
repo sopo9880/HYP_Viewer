@@ -22,6 +22,9 @@ void main() {
     await tester.tap(find.byKey(const Key('nav-settings')));
     await tester.pump();
     expect(find.byKey(const Key('online-source-input')), findsOneWidget);
+    expect(find.byKey(const Key('hero-artwork-upload')), findsOneWidget);
+    expect(find.byKey(const Key('reader-vertical-scroll-setting')),
+        findsOneWidget);
     expect(find.text('Excel 내보내기'), findsWidgets);
   });
 
