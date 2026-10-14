@@ -60,7 +60,9 @@ class WorkEntry {
     );
   }
 
-  String get key => videoId.isNotEmpty ? 'video:$videoId' : 'work:$workId';
+  // Each work has its own shelf entry even when several share one Shorts URL.
+  // Covers, downloads and progress are also indexed by the work identifier.
+  String get key => 'work:$workId';
 
   WorkEntry copyWith({
     String? workId,
