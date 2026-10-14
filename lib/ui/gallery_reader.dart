@@ -29,6 +29,7 @@ class _GalleryReaderState extends State<GalleryReader> {
   late int _currentPage;
   bool _vertical = false;
   bool _controlsVisible = true;
+  int _pageReloadGeneration = 0;
   final Map<int, Future<Uint8List>> _imageCache = {};
 
   @override
@@ -59,7 +60,12 @@ class _GalleryReaderState extends State<GalleryReader> {
   }
 
   void _retryPage(int index) {
-    setState(() { _imageCache.remove(index); });
+    setState(() {
+      _imageCache.remove(index);
+      // PageView preserves its built children across parent setState calls.
+      // Re-create it so FutureBuilder sees the new image request.
+      _pageReloadGeneration++;
+    });
   }
 
   Widget _failedImage(int index, Object error) {
@@ -178,7 +184,7 @@ class _GalleryReaderState extends State<GalleryReader> {
       body: GestureDetector(
         onDoubleTap: () => setState(() => _controlsVisible = !_controlsVisible),
         child: PageView.builder(
-          key: ValueKey(_vertical),
+          key: ValueKey('$_vertical-$_pageReloadGeneration'),
           controller: _controller,
           scrollDirection: _vertical ? Axis.vertical : Axis.horizontal,
           itemCount: total,
