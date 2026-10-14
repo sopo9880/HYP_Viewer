@@ -18,6 +18,11 @@ void main() {
       webtoonMode: true,
       autoDownloadOnSave: true,
       preloadPages: -1,
+      dataSaverMode: true,
+      librarySort: 'mostRead',
+      librarySortDescending: true,
+      recentCollapsed: true,
+      expandedSettings: ['backup', 'viewer'],
     );
     final output = ReaderSettings.fromJson(prefs.toJson());
     expect(output.reverse, true);
@@ -32,6 +37,11 @@ void main() {
     expect(output.webtoonMode, true);
     expect(output.autoDownloadOnSave, true);
     expect(output.preloadPages, -1);
+    expect(output.dataSaverMode, true);
+    expect(output.librarySort, 'mostRead');
+    expect(output.librarySortDescending, true);
+    expect(output.recentCollapsed, true);
+    expect(output.expandedSettings, contains('backup'));
 
     final bad = ReaderSettings.fromJson({
       'nextDirection': 'nonsense',
@@ -58,7 +68,7 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('hyp-reader-');
     addTearDown(() => dir.delete(recursive: true));
     final settings = ReaderSettingsStorage(baseDirectory: dir);
-    expect((await settings.load()).preloadPages, 2);
+    expect((await settings.load()).preloadPages, -1);
     await settings.save(const ReaderSettings(
         nextDirection: 'right', twoPageSpread: true,
         verticalScrolling: true, preloadPages: 1,

@@ -157,34 +157,43 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.1.11:
-          - New portable JSON schema v2 includes library entries and all
-            ReaderSettings by default; optional bounded (22 MB) base64
-            cover previews and home banner. Offline CBZ, API credentials,
-            machine-specific paths and Android security permissions excluded.
-          - Export options: library, settings, optional images. Import modes:
-            1) merge/add works without changing settings,
-            2) replace settings while preserving local works, or
-            3) explicitly overwrite works AND settings after confirmation.
-          - Old v1 JSON files remain importable (merge works only).
-            On restoring settings, sensitive permissions such as automatic
-            downloads and admin notices must be re-enabled manually.
-          - Library multi-select with toolbar and long-press Android
-            selection; choose individual works, visible-search-results only
-            select-all, clear selection, edit selected entry or delete many
-            in a single serialized library commit.
-          - Local CBZ and cover deletion remains OFF by default, with a
-            separate confirmation checkbox; untouched entries retain
-            favorites and reading positions.
-          - Edit saved work IDs, titles, creators and source comments from
-            the card menu or one selected card. Work ID metadata check,
-            explicit remote-title copy, warning for unverified IDs, and
-            user-approved merge on duplicate IDs (preserve max progress,
-            favorites and collections).
-          - Work ID changes never silently rekey local CBZ or cached covers;
-            original files remain attached to the original ID.
-          - Preserve all v0.1.10 features and existing Android signing
-            identity / Windows update path.
+          Changes in v0.2.0:
+          - Consolidated webtoon and regular reader image loading in one
+            2-concurrent-request priority queue; 503/429 transient
+            errors retry with bounded exponential backoff and cooldown.
+            Unloaded webtoon panels reserve space to avoid request floods.
+          - Far-page jumps take precedence over full prefetch. Slider
+            commits only on drag-end so scrubbing does not fetch 100 pages.
+            Vertical pages ALWAYS move down, ignoring horizontal RTL.
+          - New installation default preload is -1 (whole work cached to
+            temporary disk with bounded concurrent reads). Existing user
+            values stay intact. Data saver reduces to 1 request and
+            suspends full-preload while enabled.
+          - Android Back exits a viewer to its parent; non-Home root
+            tabs return Home; a second Back at Home within two seconds
+            exits after an explicit snackbar. Selection closes first.
+          - Mobile bottom tabs: Favorites / Library / HOME / Downloads /
+            Settings. Mobile top-right notifications replaced with Update.
+            Menu reduced to Settings / Reading History / Backup Settings.
+          - Taller cover cards with completion percentage beside pages.
+            Home recent section shows up to four items, is collapsible,
+            and no longer mislabels favorites as recommendations.
+          - Persistent collapsible settings with backup deep-link.
+            Library supports added-date, local read-popularity, title
+            and numeric-ID sorting; never invent remote views.
+          - Explicit multi-work series grouping (manual and Auto wizard),
+            expandable chapters, rename/reorder/ungroup without deleting
+            progress; already grouped works never altered by Auto.
+          - Work Info displays genuine available remote gallery metadata:
+            artist, tags, series, type, language, dates, page count,
+            local reading history. Remote view counts show unavailable.
+            Simplified work menus remove CBZ/ZIP bind and JSON download
+            entries and rename original Shorts to Intro Shorts.
+          - Downloads adds library-style selection and read-only export
+            to user-chosen folders as individual .cbz ZIP-compatible
+            archives; Android folder export uses native SAF.
+          - JSON portable backups and existing signed upgrades preserved.
+            New optional per-work metadata/series fields migrate safely.
 
           Known limitations: Automated tests use mocked images and notices;
           actual remote sites, Android devices and Samsung firmware may
@@ -192,8 +201,9 @@ jobs:
           access is restricted. Automatic downloads are not permitted
           without user confirmation of rights. Pause is between pages, not
           a resumable network transfer after restarting the app.
-          Image PNG previews and downloaded CBZ archives are kept locally
-          and are not included in JSON backups; cover metadata is preserved.
+          Downloaded CBZ archives stay local and are not included in JSON.
+          Optional PNG cover previews and banner art may be included in
+          portable JSON backups within their existing size limits.
           Administrator notices are in-app only, not FCM/system background
           push notifications. Installing an APK can be blocked by Android
           security policies, which cannot be bypassed by HYP Viewer.

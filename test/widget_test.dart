@@ -26,18 +26,21 @@ void main() {
     expect(find.byKey(const Key('library-edit-selected')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('nav-settings')));
-    await tester.pump();
-    expect(find.byKey(const Key('online-source-input')), findsOneWidget);
-    expect(find.byKey(const Key('hero-artwork-upload')), findsOneWidget);
-    expect(find.byKey(const Key('reader-vertical-scroll-setting')),
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings-section-viewer-closed')),
         findsOneWidget);
-    expect(find.byKey(const Key('app-language-setting')), findsOneWidget);
-    expect(find.byKey(const Key('hero-artwork-source-setting')), findsOneWidget);
-    expect(find.byKey(const Key('reader-tap-navigation-setting')), findsOneWidget);
+    expect(find.byKey(const Key('settings-section-backup-closed')),
+        findsOneWidget);
+    await tester.ensureVisible(find.text('뷰어·로딩 설정'));
+    await tester.tap(find.text('뷰어·로딩 설정'));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('reader-webtoon-setting')), findsOneWidget);
-    expect(find.byKey(const Key('auto-download-on-save-setting')), findsOneWidget);
-    expect(find.byKey(const Key('open-after-save-setting')), findsOneWidget);
-    expect(find.byKey(const Key('app-version-label')), findsOneWidget);
+    expect(find.byKey(const Key('data-saver-setting')), findsOneWidget);
+    expect(find.byKey(const Key('reader-tap-navigation-setting')), findsOneWidget);
+    await tester.ensureVisible(find.text('서재 데이터·백업'));
+    await tester.tap(find.text('서재 데이터·백업'));
+    await tester.pumpAndSettle();
+    expect(find.text('JSON 백업'), findsWidgets);
     expect(find.text('Excel 내보내기'), findsWidgets);
   });
 
