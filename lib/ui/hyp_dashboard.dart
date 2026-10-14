@@ -785,14 +785,17 @@ class _HypDashboardState extends State<HypDashboard> {
             },
           ),
           const SizedBox(height: 9),
-          SwitchListTile.adaptive(
-            key: const Key('reader-two-page-setting'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('2쪽 모아보기'),
-            subtitle: const Text('1-2, 3-4처럼 두 페이지를 한 화면에 표시'),
-            value: widget.readerSettings.twoPageSpread,
-            onChanged: (v) => widget.onSaveReaderSettings(
-              widget.readerSettings.copyWith(twoPageSpread: v)),
+          Material(
+            color: Colors.transparent,
+            child: SwitchListTile.adaptive(
+              key: const Key('reader-two-page-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('2쪽 모아보기'),
+              subtitle: const Text('1-2, 3-4처럼 두 페이지를 한 화면에 표시'),
+              value: widget.readerSettings.twoPageSpread,
+              onChanged: (v) => widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(twoPageSpread: v)),
+            ),
           ),
           const SizedBox(height: 9),
           DropdownButtonFormField<int>(
