@@ -99,6 +99,12 @@ class _LibraryHomeState extends State<LibraryHome> {
       _automaticUpdateCheck();
       if (Platform.isAndroid) _showSecurityNoticeOnce();
     });
+  }
+
+  void _syncNoticesTimer() {
+    _noticesTimer?.cancel();
+    _noticesTimer = null;
+    if (!readerSettings.receiveAnnouncements) return;
     _noticesTimer = Timer.periodic(const Duration(minutes: 15), (_) {
       if (mounted && readerSettings.receiveAnnouncements) {
         _checkAnnouncements(silent: true);
@@ -110,6 +116,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     try {
       final result = await readerSettingsStorage.load();
       if (mounted) setState(() => readerSettings = result);
+      _syncNoticesTimer();
       if (result.receiveAnnouncements) {
         unawaited(_checkAnnouncements(silent: true));
       }
@@ -123,6 +130,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     try {
       await readerSettingsStorage.save(updated);
       if (mounted) setState(() => readerSettings = updated);
+      _syncNoticesTimer();
       if (updated.receiveAnnouncements && !wasSubscribed) {
         unawaited(_checkAnnouncements(silent: true));
       }
