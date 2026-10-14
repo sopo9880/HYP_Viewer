@@ -20,6 +20,7 @@ class ReaderSettings {
   final bool autoDownloadOnSave;
   final bool dataSaverMode;
   final String librarySort;
+  final String popularityPeriod; // today, week, month, year
   final bool librarySortDescending;
   final bool recentCollapsed;
   final List<String> expandedSettings;
@@ -46,6 +47,7 @@ class ReaderSettings {
     this.autoDownloadOnSave = false,
     this.dataSaverMode = false,
     this.librarySort = 'newest',
+    this.popularityPeriod = 'month',
     this.librarySortDescending = false,
     this.recentCollapsed = false,
     this.expandedSettings = const [],
@@ -75,6 +77,7 @@ class ReaderSettings {
     bool? autoDownloadOnSave,
     bool? dataSaverMode,
     String? librarySort,
+    String? popularityPeriod,
     bool? librarySortDescending,
     bool? recentCollapsed,
     List<String>? expandedSettings,
@@ -100,6 +103,7 @@ class ReaderSettings {
     autoDownloadOnSave: autoDownloadOnSave ?? this.autoDownloadOnSave,
     dataSaverMode: dataSaverMode ?? this.dataSaverMode,
     librarySort: librarySort ?? this.librarySort,
+    popularityPeriod: popularityPeriod ?? this.popularityPeriod,
     librarySortDescending: librarySortDescending ?? this.librarySortDescending,
     recentCollapsed: recentCollapsed ?? this.recentCollapsed,
     expandedSettings: expandedSettings ?? this.expandedSettings,
@@ -127,6 +131,7 @@ class ReaderSettings {
     'autoDownloadOnSave': autoDownloadOnSave,
     'dataSaverMode': dataSaverMode,
     'librarySort': librarySort,
+    'popularityPeriod': popularityPeriod,
     'librarySortDescending': librarySortDescending,
     'recentCollapsed': recentCollapsed,
     'expandedSettings': expandedSettings,
@@ -160,7 +165,11 @@ class ReaderSettings {
         webtoonMode: data['webtoonMode'] == true,
         autoDownloadOnSave: data['autoDownloadOnSave'] == true,
         dataSaverMode: data['dataSaverMode'] == true,
-        librarySort: const {'newest', 'mostRead', 'title', 'number'}
+        popularityPeriod: const {'today', 'week', 'month', 'year'}
+                .contains(data['popularityPeriod'])
+            ? data['popularityPeriod'] as String : 'month',
+        librarySort: const {'newest', 'published', 'hitomiPopular',
+                'mostRead', 'title', 'number'}
                 .contains(data['librarySort'])
             ? data['librarySort'] as String : 'newest',
         librarySortDescending: data['librarySortDescending'] == true,

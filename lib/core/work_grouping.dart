@@ -68,16 +68,25 @@ class WorkGrouping {
   }
 }
 
-enum LibrarySort { newest, mostRead, title, number }
+enum LibrarySort { newest, published, hitomiPopular, mostRead, title, number }
 
 class WorkSorting {
   static List<WorkEntry> sort(Iterable<WorkEntry> values, LibrarySort mode,
-      {bool descending = false}) {
+      {bool descending = false, Map<String, int> popularityRanks = const {}}) {
     final result = values.toList();
     int compare(WorkEntry a, WorkEntry b) {
       switch (mode) {
         case LibrarySort.newest:
           return b.addedAt.compareTo(a.addedAt);
+        case LibrarySort.published:
+          return b.sourceDate.compareTo(a.sourceDate);
+        case LibrarySort.hitomiPopular:
+          final ar = popularityRanks[a.workId];
+          final br = popularityRanks[b.workId];
+          if (ar == null && br == null) return 0;
+          if (ar == null) return 1;
+          if (br == null) return -1;
+          return ar.compareTo(br);
         case LibrarySort.mostRead:
           final rank = b.openCount.compareTo(a.openCount);
           return rank == 0 ? b.lastOpenedAt.toString().compareTo(
@@ -93,6 +102,16 @@ class WorkSorting {
     }
     result.sort((a, b) {
       final n = compare(a, b);
+      // Entries without public rank/date must always sort last.
+      if (mode == LibrarySort.published &&
+          (a.sourceDate.isEmpty != b.sourceDate.isEmpty)) {
+        return a.sourceDate.isEmpty ? 1 : -1;
+      }
+      if (mode == LibrarySort.hitomiPopular &&
+          ((popularityRanks[a.workId] == null) !=
+              (popularityRanks[b.workId] == null))) {
+        return popularityRanks[a.workId] == null ? 1 : -1;
+      }
       if (n != 0) return descending ? -n : n;
       return a.workId.compareTo(b.workId);
     });
