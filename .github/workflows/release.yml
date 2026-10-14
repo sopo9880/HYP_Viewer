@@ -163,7 +163,9 @@ jobs:
             routing and strict HTTPS source checks.
           - If a preferred WebP image fails, try the publicly available
             original JPEG/PNG where the metadata declares it.
-          - Replace a blank failed page with a visible error explanation,
+          - Constrain the reader's bottom page slider so it no longer
+            fills the whole window and hides the page contents.
+          - Replace a failed page with a visible error explanation,
             retry action and an external web-reader fallback.
           - Keep v0.1.1 keyless YouTube Shorts extraction, fixed web
             reader fragments (#1-, #2-3, etc.), and existing local
