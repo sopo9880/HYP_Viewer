@@ -15,12 +15,16 @@ class HitomiGallery implements GalleryPageSource {
   final String workId;
   final String title;
   final List<Uri> pageUrls;
+  final List<Uri> thumbnailUrls;
+  final bool dataSaver;
   final http.Client _client;
 
   HitomiGallery({
     required this.workId,
     required this.title,
     required this.pageUrls,
+    this.thumbnailUrls = const [],
+    this.dataSaver = false,
     required http.Client client,
   }) : _client = client;
 
@@ -40,19 +44,30 @@ class HitomiGallery implements GalleryPageSource {
     if (index < 0 || index >= pageUrls.length) {
       throw RangeError.index(index, pageUrls);
     }
-    final url = pageUrls[index];
-    // Do not trust remote URLs without a strict HTTPS host allowlist.
-    if (url.scheme != 'https' ||
-        !RegExp(r'^w[12]\.gold-usergeneratedcontent\.net$').hasMatch(url.host)) {
+    final original = pageUrls[index];
+    if (dataSaver && index < thumbnailUrls.length) {
+      try {
+        return await _loadAllowed(thumbnailUrls[index]);
+      } catch (_) {
+        // A missing/blocked thumbnail never makes the book unreadable.
+        // Retry the actual image with the same bounded request policy.
+      }
+    }
+    return _loadAllowed(original);
+  }
+
+  Future<Uint8List> _loadAllowed(Uri url) async {
+    final origin = RegExp(r'^w[12]\.gold-usergeneratedcontent\.net$')
+        .hasMatch(url.host);
+    final thumbnail = RegExp(r'^[ab]tn\.gold-usergeneratedcontent\.net$')
+        .hasMatch(url.host);
+    if (url.scheme != 'https' || !(origin || thumbnail)) {
       throw const FormatException('허용되지 않은 웹 이미지 서버야.');
     }
     try {
-      return await BoundedWebImages.load(
-        _client,
-        url,
+      return await BoundedWebImages.load(_client, url,
         maxBytes: GalleryArchive.maxSingleImageBytes,
-        headers: const {'Referer': 'https://hitomi.la/'},
-      );
+        headers: const {'Referer': 'https://hitomi.la/'});
     } catch (error) {
       final reason = error.toString();
       if (reason.contains('Failed host lookup') ||
@@ -60,16 +75,14 @@ class HitomiGallery implements GalleryPageSource {
           reason.contains('Name or service not known')) {
         throw FormatException(
           'WebP 이미지 서버 DNS 조회 실패 (${url.host}). '
-          '서버 주소를 확인할 수 없어. 네트워크 DNS 설정 또는 도메인 접근 제한일 수 있어. '
-          '웹 리더로 열기를 시도해 줘. 원본 오류: $reason',
-        );
+          '웹 리더를 시도해 줘. 원본 오류: $reason');
       }
       throw FormatException(
         'WebP 이미지 로딩 실패 (${url.host}). '
-        '웹 리더로 열기를 시도해 줘. 원본 오류: $reason',
-      );
+        '웹 리더로 열기를 시도해 줘. 원본 오류: $reason');
     }
   }
+
 }
 
 /// Metadata supplied by the gallery's existing .js response. View counts
@@ -184,7 +197,7 @@ class HitomiGalleryProvider {
     return GalleryInfo.parse(workId, decoded);
   }
 
-  Future<HitomiGallery> load(String workId) async {
+  Future<HitomiGallery> load(String workId, {bool dataSaver = false}) async {
     if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
       throw const FormatException('작품 번호는 숫자 1~12자리여야 해.');
     }
@@ -210,16 +223,20 @@ class HitomiGalleryProvider {
     final ggScript = await _readScript(Uri.https(_host, '/gg.js'));
     final gg = _HitomiGg.fromScript(ggScript);
     final urls = <Uri>[];
+    final thumbnails = <Uri>[];
     for (final item in files) {
       if (item is! Map) {
         throw const FormatException('이미지 파일 정보가 올바르지 않아.');
       }
       urls.add(gg.urlFor(item));
+      thumbnails.add(gg.thumbnailFor(item));
     }
     return HitomiGallery(
       workId: workId,
       title: decoded['title'] is String ? decoded['title'] as String : '',
       pageUrls: List.unmodifiable(urls),
+      thumbnailUrls: List.unmodifiable(thumbnails),
+      dataSaver: dataSaver,
       client: client,
     );
   }
@@ -296,6 +313,21 @@ class _HitomiGg {
       throw const FormatException('이미지 경로 정보가 올바르지 않아.');
     }
     return _HitomiGg(defaultOffset, map, prefix);
+  }
+
+  /// Compact WebP thumbnails from the site's dedicated thumbnail servers.
+  /// The hash-based layout is independent of the original image dimensions.
+  Uri thumbnailFor(Map file) {
+    final hash = file['hash']?.toString().toLowerCase() ?? '';
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(hash)) {
+      throw const FormatException('이미지 해시 정보가 잘못됐어.');
+    }
+    final last = hash.substring(hash.length - 3);
+    final group = int.parse(last.substring(2) + last.substring(0, 2),
+        radix: 16);
+    final which = String.fromCharCode(97 + (offsets[group] ?? defaultOffset));
+    return Uri.https('${which}tn.gold-usergeneratedcontent.net',
+        '/webpsmalltn/${last[2]}/${last.substring(0, 2)}/$hash.webp');
   }
 
   Uri urlFor(Map file) {
