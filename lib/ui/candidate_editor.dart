@@ -29,6 +29,7 @@ class _Slot {
 class CandidateEditor extends StatefulWidget {
   final List<NumberCandidate> suggestions;
   final CandidateBatchVerify? onVerify;
+  final List<NumberCandidate> Function()? onCrossLineFallback;
   final Future<void> Function(List<String>) onSave;
   final bool busy;
 
@@ -38,6 +39,7 @@ class CandidateEditor extends StatefulWidget {
     required this.onSave,
     required this.busy,
     this.onVerify,
+    this.onCrossLineFallback,
   });
 
   @override
@@ -48,13 +50,24 @@ class CandidateEditorState extends State<CandidateEditor> {
   final List<_Slot> _slots = [];
   int _nextId = 0;
   bool _checking = false;
+  bool _fallbackAttempted = false;
+  int _verifiedCount = 0;
+  int _verificationTotal = 0;
+  String _fallbackMessage = '';
   static final _valid = RegExp(r'^\d{6,9}$');
 
   @override
   void initState() {
     super.initState();
     _appendSuggestions(widget.suggestions);
-    if (widget.suggestions.isNotEmpty) _scheduleVerify();
+    if (widget.suggestions.isNotEmpty) {
+      _scheduleVerify();
+    } else if (widget.onCrossLineFallback != null &&
+        widget.onVerify != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _startFallback();
+      });
+    }
   }
 
   @override
@@ -63,14 +76,29 @@ class CandidateEditorState extends State<CandidateEditor> {
     final oldCodes = oldWidget.suggestions.map((e) => e.code).join(',');
     final nextCodes = widget.suggestions.map((e) => e.code).join(',');
     if (oldCodes != nextCodes) {
+      // A new paste/video is a new scan: no stale suggestions carry over.
+      for (final slot in _slots) {
+        WidgetsBinding.instance.addPostFrameCallback((_) =>
+            slot.controller.dispose());
+      }
+      _slots.clear();
+      _fallbackAttempted = false;
+      _fallbackMessage = '';
       _appendSuggestions(widget.suggestions);
-      _scheduleVerify();
+      if (widget.suggestions.isNotEmpty) _scheduleVerify();
+      else if (widget.onCrossLineFallback != null &&
+          widget.onVerify != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _startFallback();
+        });
+      }
     }
   }
 
   void _appendSuggestions(List<NumberCandidate> suggestions) {
-    final autoSelect = suggestions.length <= 3;
-    for (final candidate in suggestions.take(24)) {
+    final autoSelect = widget.onVerify == null && suggestions.length <= 3;
+    for (final candidate in suggestions) {
+      if (_slots.length >= 160) break;
       if (_slots.any((slot) => slot.controller.text == candidate.code)) {
         continue;
       }
@@ -116,21 +144,63 @@ class CandidateEditorState extends State<CandidateEditor> {
         slot.controller.dispose());
   }
 
+  void _startFallback() {
+    if (_fallbackAttempted || !mounted ||
+        widget.onCrossLineFallback == null || _checking) return;
+    _fallbackAttempted = true;
+    final extra = widget.onCrossLineFallback!().where((candidate) =>
+        candidate.rule.startsWith('cross-line') &&
+        !_slots.any((s) => s.controller.text.trim() == candidate.code))
+        .toList();
+    if (extra.isEmpty) {
+      setState(() => _fallbackMessage = '1차 결과 없음 · 2차 인접 줄 후보도 없어.');
+      return;
+    }
+    setState(() {
+      _fallbackMessage = '1차 작품 미발견 · 인접 줄 2차 검증 중 (' +
+          extra.length.toString() + '개 후보)';
+      _appendSuggestions(extra);
+    });
+    _scheduleVerify();
+  }
+
   Future<void> _verifyAll() async {
     if (_checking || widget.onVerify == null) return;
-    final matching = _slots.where((s) => _valid.hasMatch(
-        s.controller.text.trim())).take(24).toList();
-    if (matching.isEmpty) return;
+    final matching = _slots.where((s) =>
+        _valid.hasMatch(s.controller.text.trim())).take(160).toList();
+    if (matching.isEmpty) {
+      _startFallback();
+      return;
+    }
     final checked = {for (final s in matching) s.id: s.controller.text.trim()};
+    final uniqueCodes = checked.values.toSet().toList();
+    final results = <String, CandidateVerification>{};
     setState(() {
       _checking = true;
+      _verifiedCount = 0;
+      _verificationTotal = uniqueCodes.length;
       for (final slot in matching) slot.checking = true;
     });
-    Map<String, CandidateVerification> responses;
-    try {
-      responses = await widget.onVerify!(checked.values.toSet().toList());
-    } catch (_) {
-      responses = {};
+    var unavailableCount = 0;
+    for (var start = 0; start < uniqueCodes.length; start += 24) {
+      if (!mounted) return;
+      final batch = uniqueCodes.skip(start).take(24).toList();
+      Map<String, CandidateVerification> response;
+      try {
+        response = await widget.onVerify!(batch);
+      } catch (_) {
+        response = {};
+      }
+      for (final code in batch) {
+        final check = response[code] ?? const CandidateVerification(
+            CandidateCheck.unavailable, reason: 'request-failed');
+        results[code] = check;
+        if (check.status == CandidateCheck.unavailable) unavailableCount++;
+      }
+      if (!mounted) return;
+      setState(() => _verifiedCount = results.length);
+      // Stop issuing whole-comment traffic during a server outage.
+      if (unavailableCount >= 8) break;
     }
     if (!mounted) return;
     setState(() {
@@ -138,21 +208,26 @@ class CandidateEditorState extends State<CandidateEditor> {
       for (final slot in matching) {
         if (!_slots.contains(slot)) continue;
         slot.checking = false;
-        final number = checked[slot.id]!;
-        // A stale request must NEVER overwrite an edited number.
-        if (slot.controller.text.trim() != number) continue;
-        slot.checkedCode = number;
-        slot.result = responses[number] ??
+        final code = checked[slot.id]!;
+        if (slot.controller.text.trim() != code) continue;
+        slot.checkedCode = code;
+        slot.result = results[code] ??
             const CandidateVerification(CandidateCheck.unavailable);
         if (!slot.touched) {
-          if (slot.result!.status == CandidateCheck.verified) {
-            slot.selected = true;
-          } else if (slot.result!.status == CandidateCheck.notFound) {
-            slot.selected = false;
-          }
+          slot.selected = slot.result!.status == CandidateCheck.verified;
         }
       }
     });
+    // Only a definitive "not found" first pass triggers cross-line scans.
+    // A 429/503/timeout is unavailable, not proof of absence.
+    if (!_fallbackAttempted && results.isNotEmpty &&
+        results.length == uniqueCodes.length &&
+        results.values.every((item) => item.status == CandidateCheck.notFound)) {
+      _startFallback();
+    } else if (unavailableCount > 0 && !_fallbackAttempted) {
+      setState(() => _fallbackMessage =
+          '서버 확인 실패가 있어 2차 확장은 보류했어. 나중에 재검증해 줘.');
+    }
   }
 
   List<String> get selectedCodes {
@@ -305,6 +380,14 @@ class CandidateEditorState extends State<CandidateEditor> {
             }).toList(),
           ),
         ],
+        if (_checking)
+          Padding(padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text('작품 확인 중: $_verifiedCount / $_verificationTotal',
+              style: Theme.of(context).textTheme.bodySmall)),
+        if (_fallbackMessage.isNotEmpty)
+          Padding(padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(_fallbackMessage,
+              style: Theme.of(context).textTheme.bodySmall)),
         const SizedBox(height: 8),
         for (final slot in _slots) _slotCard(slot),
         const SizedBox(height: 10),
