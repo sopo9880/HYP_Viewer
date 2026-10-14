@@ -230,6 +230,8 @@ class _LibraryHomeState extends State<LibraryHome> {
       );
       await _commitLibrary((latest) => LibraryBackup.merge(latest,
           LibraryBackup(works: [work], collections: const [])));
+      // Start preparing the first-page thumbnail, without blocking Save.
+      unawaited(_prepareAutomaticCover(work));
       _status('서재에 저장했어.');
     } catch (e) {
       _status('저장 실패: ' + e.toString());
@@ -344,6 +346,24 @@ class _LibraryHomeState extends State<LibraryHome> {
       _status('서재 가져오기 완료');
     } catch (e) {
       _status('복원 실패: ' + e.toString());
+    }
+  }
+
+  Future<void> _prepareAutomaticCover(WorkEntry work) async {
+    if (work.coverMode != 'auto') return;
+    final client = http.Client();
+    try {
+      if (await coverStore.exists(work.workId)) return;
+      final GalleryPageSource source =
+          await galleryStore.exists(work.workId)
+              ? await galleryStore.read(work.workId)
+              : await HitomiGalleryProvider(client).load(work.workId);
+      final first = await source.loadPage(0);
+      await _captureAutomaticCover(work, 1, first);
+    } catch (_) {
+      // Unavailable remote thumbnails must never prevent saving a work.
+    } finally {
+      client.close();
     }
   }
 
