@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -346,6 +347,80 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
+  Future<void> _captureAutomaticCover(
+      WorkEntry work, int page, Uint8List bytes) async {
+    if (page != 1 || work.coverMode != 'auto' ||
+        !_coverCaptures.add(work.workId)) return;
+    try {
+      if (!await coverStore.exists(work.workId)) {
+        await coverStore.save(work.workId, bytes);
+        if (mounted) setState(() => coverEpoch++);
+      }
+    } catch (_) {
+      // Image reading remains usable even if generating a cover fails.
+    } finally {
+      _coverCaptures.remove(work.workId);
+    }
+  }
+
+  Future<void> _usePageAsCover(
+      WorkEntry work, int page, Uint8List bytes) async {
+    await coverStore.save(work.workId, bytes, mode: 'page', page: page);
+    await _updateWork(work.copyWith(coverMode: 'page', coverPage: page));
+    if (mounted) {
+      setState(() => coverEpoch++);
+      _status('작품 ' + page.toString() + '페이지를 서재 표지로 설정했어.');
+    }
+  }
+
+  Future<void> _chooseCover(WorkEntry work) async {
+    final choice = await showCoverPicker(context, work);
+    if (choice == null || !mounted) return;
+    final mode = choice.mode;
+    try {
+      if (mode == 'page') {
+        final client = http.Client();
+        try {
+          final GalleryPageSource gallery =
+              await galleryStore.exists(work.workId)
+                  ? await galleryStore.read(work.workId)
+                  : await HitomiGalleryProvider(client).load(work.workId);
+          if (choice.page > gallery.pageCount) {
+            throw FormatException('전체 ' + gallery.pageCount.toString() +
+                '페이지 중에서 선택해야 해.');
+          }
+          final bytes = await gallery.loadPage(choice.page - 1);
+          await _usePageAsCover(work, choice.page, bytes);
+        } finally {
+          client.close();
+        }
+      } else {
+        await _updateWork(work.copyWith(
+          coverMode: mode, coverPreset: choice.preset,
+          coverPage: choice.page,
+        ));
+        if (mounted) setState(() => coverEpoch++);
+        if (mode == 'auto' && !await coverStore.exists(work.workId)) {
+          final client = http.Client();
+          try {
+            final GalleryPageSource gallery =
+                await galleryStore.exists(work.workId)
+                    ? await galleryStore.read(work.workId)
+                    : await HitomiGalleryProvider(client).load(work.workId);
+            await coverStore.save(work.workId, await gallery.loadPage(0));
+            if (mounted) setState(() => coverEpoch++);
+          } catch (_) {
+            _status('자동 표지를 선택했어. 첫 페이지를 열면 미리보기를 생성할게.');
+          } finally {
+            client.close();
+          }
+        }
+      }
+    } catch (e) {
+      _status('표지 설정 실패: ' + e.toString());
+    }
+  }
+
   /// Stream images in the shared Flutter reader; no JSON URL setup required.
   /// If the remote source blocks the client, the web-reader action is available.
   Future<void> _readOnline(WorkEntry work) async {
@@ -366,6 +441,11 @@ class _LibraryHomeState extends State<LibraryHome> {
           archive: remote,
           onPageChanged: (page) { _touchRead(work, page: page); },
           onOpenInBrowser: (page) => _openWebReader(work, page: page),
+          settings: readerSettings,
+          onPageLoaded: (page, bytes) {
+            unawaited(_captureAutomaticCover(work, page, bytes));
+          },
+          onChooseCover: (page, bytes) => _usePageAsCover(work, page, bytes),
         )),
       );
     } catch (e) {
@@ -399,7 +479,7 @@ class _LibraryHomeState extends State<LibraryHome> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('1페이지는 #1, 2페이지부터는 #2-3처럼 열어. '
+            const Text('1페이지는 #1-, 2페이지부터는 #2-3처럼 열어. '
                 '외부 브라우저에서 넘긴 페이지는 자동 기록되지 않아.'),
             const SizedBox(height: 12),
             TextFormField(
@@ -540,7 +620,12 @@ class _LibraryHomeState extends State<LibraryHome> {
           onPageChanged: (page) {
             _touchRead(work, page: page);
           },
-        )),
+          settings: readerSettings,
+          onPageLoaded: (page, bytes) {
+            unawaited(_captureAutomaticCover(work, page, bytes));
+          },
+          onChooseCover: (page, bytes) => _usePageAsCover(work, page, bytes),
+        )), 
       );
     } catch (e) {
       _status('읽기 실패: ' + e.toString() + ' / CBZ 또는 ZIP 파일을 먼저 연결해줘.');
@@ -668,6 +753,9 @@ class _LibraryHomeState extends State<LibraryHome> {
   Widget build(BuildContext context) => HypDashboard(
     library: library,
     galleryStore: galleryStore,
+    coverStore: coverStore,
+    coverEpoch: coverEpoch,
+    readerSettings: readerSettings,
     urlInput: urlInput,
     apiKeyInput: apiKeyInput,
     commentInput: commentInput,
@@ -699,6 +787,8 @@ class _LibraryHomeState extends State<LibraryHome> {
     onDownloadOnline: _downloadOnline,
     onImportGallery: _importGallery,
     onUpdateWork: _updateWork,
+    onChooseCover: _chooseCover,
+    onSaveReaderSettings: _saveReaderSettings,
     onOpenOriginal: _openOriginal,
     onOpenShortsInput: _openShortsInput,
     onCancelGalleryDownload: () => galleryDownloadToken?.cancel(),
