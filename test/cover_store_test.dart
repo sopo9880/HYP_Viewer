@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dart:ui' as ui;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -14,10 +14,18 @@ void main() {
     expect(images, isNull);
 
     final store = CoverStore(baseDirectory: dir);
-    final bytes = base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
-      'AAAADUlEQVQIHWP4z8DwHwAFgAI/ScLytQAAAABJRU5ErkJggg==',
-    );
+    // Generate an actual valid PNG instead of relying on a tiny fixture
+    // that may be rejected by the Flutter engine on Windows/Linux.
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    canvas.drawRect(const ui.Rect.fromLTWH(0, 0, 2, 2),
+        ui.Paint()..color = const ui.Color(0xFF925BFF));
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(2, 2);
+    final raw = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    picture.dispose();
+    final bytes = raw!.buffer.asUint8List();
     final first = await store.save('2711759', bytes);
     final chosen = await store.save('2711759', bytes,
         mode: 'page', page: 7);
