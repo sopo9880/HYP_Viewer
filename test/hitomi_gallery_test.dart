@@ -145,4 +145,37 @@ void main() {
     await expectLater(HitomiGalleryProvider(clientWithBadHash).load(id), throwsFormatException);
     clientWithBadHash.close();
   });
+  test('data saver uses small WebP thumbnail and falls back when missing', () async {
+    final requests = <Uri>[];
+    var thumbnailStatus = 200;
+    final client = MockClient((request) async {
+      if (request.url.path == '/galleries/2711759.js') {
+        return http.Response(metadata([
+          {'hash': hash, 'name': 'first.jpg', 'haswebp': 1},
+        ]), 200);
+      }
+      if (request.url.path == '/gg.js') {
+        return http.Response("var o = 0; var x={b: '2026/'};", 200);
+      }
+      requests.add(request.url);
+      if (request.url.host.endsWith('tn.gold-usergeneratedcontent.net')) {
+        return http.Response.bytes([9, 8, 7], thumbnailStatus,
+            headers: {'content-type': 'image/webp'});
+      }
+      return http.Response.bytes([1, 2, 3], 200,
+          headers: {'content-type': 'image/webp'});
+    });
+    final gallery = await HitomiGalleryProvider(client)
+        .load(id, dataSaver: true);
+    expect(gallery.thumbnailUrls.single.host,
+        matches(RegExp(r'^[ab]tn\.gold-usergeneratedcontent\.net$')));
+    expect(await gallery.loadPage(0), [9, 8, 7]);
+    expect(requests.single.path, contains('/webpsmalltn/'));
+    requests.clear();
+    thumbnailStatus = 404;
+    expect(await gallery.loadPage(0), [1, 2, 3]);
+    expect(requests.map((url) => url.host).toList(), hasLength(2));
+    expect(requests.last.host, startsWith('w'));
+    client.close();
+  });
 }

@@ -157,7 +157,25 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.2.0:
+          Changes in v0.2.1:
+          - Published-date sorting and site popularity ranks with daily,
+            weekly, monthly and yearly periods; unknown ranks remain unknown.
+          - Series displayed as stacked covers in the same grid as singles;
+            chapter numbers precede date/ID when suggesting an order.
+          - Full-cover fit without cropping the library art or title footer.
+          - Space hides/restores the PC viewer chrome; center taps toggle the
+            immersive UI on touch screens, while side taps turn pages.
+          - Pinch or wheel zoom within a five-fold limit. Webtoon retains
+            ordinary wheel scroll and supports Ctrl+wheel zoom.
+          - Last-page progress now reaches 100 percent; completed status is
+            persisted only after the final image has rendered successfully.
+          - Data saver requests smaller site thumbnails, falling back to
+            original images when unavailable; other modes favor full quality.
+          - Foreground image requests receive priority over background
+            prefetch. Nearby pages are decoded ahead of display and reusable
+            persistent caches are pruned by age and storage budget.
+
+          Previous v0.2.0 features retained:
           - Consolidated webtoon and regular reader image loading in one
             2-concurrent-request priority queue; 503/429 transient
             errors retry with bounded exponential backoff and cooldown.
