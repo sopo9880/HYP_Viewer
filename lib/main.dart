@@ -1047,8 +1047,11 @@ class _LibraryHomeState extends State<LibraryHome> {
     final client = http.Client();
     GalleryTransfer? transfer;
     try {
+      if (rightsApproved && await galleryStore.exists(work.workId)) {
+        return true;
+      }
       final remote = await HitomiGalleryProvider(client).load(work.workId);
-      if (!mounted) return false;
+      if (!mounted || (rightsApproved && _downloadQueueCancelled)) return false;
       final existing = await galleryStore.exists(work.workId);
       if (rightsApproved && existing) return true;
       var confirmedRights = false;

@@ -870,10 +870,18 @@ class _HypDashboardState extends State<HypDashboard> {
       ),
       const SizedBox(height: 15),
       if (widget.queuedDownloadCount > 0) ...[
-        HypPanel(child: HypText(
-          '추가 다운로드 대기: ${widget.queuedDownloadCount}개 작품',
-          key: const Key('download-queue-count'),
-        )),
+        HypPanel(child: Row(children: [
+          Expanded(child: HypText(
+            '추가 다운로드 대기: ${widget.queuedDownloadCount}개 작품',
+            key: const Key('download-queue-count'),
+          )),
+          TextButton.icon(
+            key: const Key('cancel-download-queue'),
+            onPressed: widget.onCancelGalleryDownload,
+            icon: const Icon(Icons.close_rounded),
+            label: const HypText('대기열 취소'),
+          ),
+        ])),
         const SizedBox(height: 12),
       ],
       if (widget.downloadingGalleryKey != null) ...[
