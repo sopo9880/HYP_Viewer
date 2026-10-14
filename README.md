@@ -2,7 +2,7 @@
 
 Local-first **Windows setup.exe + Android APK** app for finding and organizing references from YouTube Shorts. No AI service, login, or cloud library required.
 
-**Status:** v0.1.2 reader hotfix preview; earlier 0.x releases remain available. The workflow is **release → update → live test → fix in the next 0.x release**. See [v0.1.2 smoke test](docs/SMOKE_TEST_V0.1.2.md).
+**Status:** v0.1.3 image-host diagnostics update (0.x preview); previous 0.x releases remain available. We follow **release → update → live test → next 0.x fix**. See [v0.1.3 smoke test](docs/SMOKE_TEST_V0.1.3.md).
 
 ## Features implemented in the MVP
 
@@ -56,3 +56,14 @@ The reviewed 0.x release request in `.github/release-request.txt` triggers Windo
 ## Privacy & backups
 
 Data lives on each user's device. Excel is never accepted as a restore file; app-to-app migration only accepts the versioned JSON format. API credentials, secrets, images, and device-specific paths are excluded from exported libraries.
+
+### Current public image-host routing (v0.1.3)
+
+The built-in online reader now attempts full-sized WebP images on only the
+`w1` and `w2` public image hostnames. The previous numeric-subdomain
+JPG fallback (`1.gold-usergeneratedcontent.net`,
+`2.gold-usergeneratedcontent.net`) was obsolete and could obscure
+WebP errors with `Failed host lookup`. If WebP itself fails, the reader
+shows the actual failing host and error, plus Retry and Open in Web Reader.
+A successful CI run **does not establish** that a user's DNS/network or
+Hitomi's current image servers are reachable.

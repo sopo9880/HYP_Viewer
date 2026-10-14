@@ -7,115 +7,142 @@ import 'package:hyp_viewer/core/hitomi_gallery.dart';
 
 void main() {
   const id = '2711759';
-  final hash = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabc';
-  // Last three hex digits are "abc" => swapped hex "cab".
-  const expectedGroup = 0xcab;
+  final hash = List.filled(61, 'a').join() + 'abc';
+  final otherHash = List.filled(61, 'b').join() + 'def';
+  const selectedGroup = 0xcab;
+  const defaultGroup = 0xfde;
 
-  test('gallery metadata and gg.js resolve in-app WebP pages', () async {
-    final requested = <String>[];
+  String metadata(List<Map<String, dynamic>> files) {
+    return 'var galleryinfo = ' + jsonEncode({
+      'id': 2711759,
+      'title': 'Test gallery',
+      'files': files,
+    }) + ';';
+  }
+
+  test('current gg.js chooses WebP w1/w2, never numeric JPG hosts', () async {
+    final requests = <Uri>[];
     final client = MockClient((request) async {
-      requested.add(request.url.toString());
+      requests.add(request.url);
       if (request.url.path == '/galleries/2711759.js') {
-        return http.Response(
-          'var galleryinfo = ' + jsonEncode({
-            'id': 2711759,
-            'title': 'Test gallery',
-            'files': [
-              {'hash': hash, 'name': 'first.jpg', 'haswebp': 1},
-              {'hash': hash, 'name': 'second.jpg', 'haswebp': 0},
-            ],
-          }) + ';',
-          200, headers: {'content-type': 'application/javascript'},
-        );
+        return http.Response(metadata([
+          {'hash': hash, 'name': 'first.jpg', 'haswebp': 1},
+          {'hash': otherHash, 'name': 'second.jpg', 'haswebp': 0},
+        ]), 200);
       }
       if (request.url.path == '/gg.js') {
-        return http.Response('var o = 0; case $expectedGroup: o = 2; break; '
-            "var x = {b: '2026/'};", 200);
+        return http.Response(
+          "var o = 0; case $selectedGroup: o = 1; break; "
+          "var x = {b: '2026/'};", 200);
       }
       expect(request.headers['referer'], 'https://hitomi.la/');
       return http.Response.bytes([1, 2, 3, 4], 200,
           headers: {'content-type': 'image/webp'});
     });
-
     final gallery = await HitomiGalleryProvider(client).load(id);
     expect(gallery.title, 'Test gallery');
     expect(gallery.pageCount, 2);
-    expect(gallery.pageUrls[0].host, 'w3.gold-usergeneratedcontent.net');
-    expect(gallery.pageUrls[0].path,
-        '/2026/$expectedGroup/$hash.webp');
-    expect(gallery.pageUrls[1].host, '3.gold-usergeneratedcontent.net');
-    expect(gallery.pageUrls[1].path,
-        '/2026/$expectedGroup/$hash.jpg');
+    expect(gallery.pageUrls[0].host, 'w2.gold-usergeneratedcontent.net');
+    expect(gallery.pageUrls[0].path, '/2026/$selectedGroup/$hash.webp');
+    expect(gallery.pageUrls[1].host, 'w1.gold-usergeneratedcontent.net');
+    expect(gallery.pageUrls[1].path, '/2026/$defaultGroup/$otherHash.webp');
+    expect(gallery.pageUrls.every((u) => u.path.endsWith('.webp')), isTrue);
     expect(await gallery.loadPage(0), [1, 2, 3, 4]);
-    expect(requested.length, 3);
+    expect(await gallery.loadPage(1), [1, 2, 3, 4]);
+    expect(requests.length, 4);
     client.close();
   });
 
-  test('falls back to a supported original image when WebP fails', () async {
-    final attempts = <Uri>[];
+  test('legacy JPEG host is not attempted if WebP image request fails', () async {
+    final requests = <Uri>[];
     final client = MockClient((request) async {
-      if (request.url.path.endsWith('/galleries/2711759.js')) {
-        return http.Response('var galleryinfo = ' + jsonEncode({
-          'id': 2711759, 'title': 'Fallback test',
-          'files': [{'hash': hash, 'name': 'page.jpg', 'haswebp': 1}],
-        }) + ';', 200);
+      if (request.url.path == '/galleries/2711759.js') {
+        return http.Response(metadata([
+          {'hash': hash, 'name': 'first.jpg', 'haswebp': 0},
+        ]), 200);
       }
       if (request.url.path == '/gg.js') {
-        return http.Response('var o = 0; case $expectedGroup: o = 2; break; '
-            "var x = {b: '2026/'};", 200);
+        return http.Response("var o = 0; case $selectedGroup: o = 1; break;"
+            " var x = {b: '2026/'};", 200);
       }
-      attempts.add(request.url);
-      expect(request.headers['referer'], 'https://hitomi.la/');
-      if (request.url.path.endsWith('.webp')) {
-        return http.Response('Not Found', 404);
-      }
-      return http.Response.bytes([0xff, 0xd8, 0xff, 0xd9], 200,
-          headers: {'content-type': 'image/jpeg'});
+      requests.add(request.url);
+      return http.Response('Not found', 404);
     });
     final gallery = await HitomiGalleryProvider(client).load(id);
-    expect(gallery.pageUrls.single.host, 'w3.gold-usergeneratedcontent.net');
-    expect(gallery.pageUrls.single.path, '/2026/$expectedGroup/$hash.webp');
-    expect(gallery.fallbackPageUrls?.single?.host,
-        '3.gold-usergeneratedcontent.net');
-    expect(await gallery.loadPage(0), [0xff, 0xd8, 0xff, 0xd9]);
-    expect(attempts.map((u) => u.path).toList(), [
-      '/2026/$expectedGroup/$hash.webp',
-      '/2026/$expectedGroup/$hash.jpg',
-    ]);
+    await expectLater(gallery.loadPage(0), throwsFormatException);
+    expect(requests, hasLength(1));
+    expect(requests.single.host, 'w2.gold-usergeneratedcontent.net');
     client.close();
   });
 
-  test('refuses arbitrary image hosts and invalid work IDs', () async {
-    final client = MockClient((request) async =>
-        http.Response('not needed', 500));
-    expect(
-      () => HitomiGalleryProvider(client).load('../private'),
-      throwsFormatException,
-    );
-    final bad = HitomiGallery(
-      workId: '123', title: 'Invalid',
-      pageUrls: [Uri.parse('https://other.example.org/image.webp')],
-      client: client,
-    );
-    expect(() => bad.loadPage(0), throwsFormatException);
-    client.close();
-  });
-
-  test('invalid image hashes are rejected before download', () async {
+  test('DNS errors identify the exact active WebP host', () async {
     final client = MockClient((request) async {
-      if (request.url.path.endsWith('/gg.js')) {
-        return http.Response("var o = 0; var x={b: '2026/'};", 200);
+      if (request.url.path == '/galleries/2711759.js') {
+        return http.Response(metadata([
+          {'hash': hash, 'name': 'first.jpg', 'haswebp': 1},
+        ]), 200);
       }
-      return http.Response(
-        'var galleryinfo = ' + jsonEncode({
-          'id': 2711759,
-          'title': 'Bad data',
-          'files': [{'hash': '../traversal', 'name': 'test.jpg', 'haswebp': 1}],
-        }) + ';', 200,
+      if (request.url.path == '/gg.js') {
+        return http.Response("var o = 0; case $selectedGroup: o = 1; break;"
+            " var x = {b: '2026/'};", 200);
+      }
+      throw http.ClientException(
+        "SocketException: Failed host lookup: 'w2.gold-usergeneratedcontent.net'",
+        request.url,
       );
     });
-    expect(() => HitomiGalleryProvider(client).load(id),
-        throwsFormatException);
+    final gallery = await HitomiGalleryProvider(client).load(id);
+    await expectLater(
+      gallery.loadPage(0),
+      throwsA(isA<FormatException>().having(
+          (e) => e.message, 'message',
+          allOf(contains('DNS 조회 실패'), contains('w2.gold-usergeneratedcontent.net')))),
+    );
     client.close();
+  });
+
+  test('does not allow hosts outside current image server names', () async {
+    final client = MockClient((request) async => http.Response('No', 500));
+    final bad = HitomiGallery(
+      workId: '123', title: 'Invalid',
+      pageUrls: [Uri.parse('https://2.gold-usergeneratedcontent.net/1/a.jpg')],
+      client: client,
+    );
+    await expectLater(bad.loadPage(0), throwsFormatException);
+    final unknown = HitomiGallery(
+      workId: '123', title: 'Invalid',
+      pageUrls: [Uri.parse('https://host.other.example.org/1/a.webp')],
+      client: client,
+    );
+    await expectLater(unknown.loadPage(0), throwsFormatException);
+    await expectLater(
+      HitomiGalleryProvider(client).load('../private'),
+      throwsFormatException,
+    );
+    client.close();
+  });
+
+  test('out-of-range routing and image hashes fail rather than invent hosts', () async {
+    final client = MockClient((request) async {
+      if (request.url.path == '/gg.js') {
+        return http.Response("var o = 2; var x={b: '2026/'};", 200);
+      }
+      return http.Response(metadata([
+        {'hash': hash, 'name': 'page.jpg'},
+      ]), 200);
+    });
+    await expectLater(HitomiGalleryProvider(client).load(id), throwsFormatException);
+    client.close();
+
+    final clientWithBadHash = MockClient((request) async {
+      if (request.url.path == '/gg.js') {
+        return http.Response("var o = 0; var x={b: '2026/'};", 200);
+      }
+      return http.Response(metadata([
+        {'hash': '../traversal', 'name': 'page.jpg'},
+      ]), 200);
+    });
+    await expectLater(HitomiGalleryProvider(clientWithBadHash).load(id), throwsFormatException);
+    clientWithBadHash.close();
   });
 }

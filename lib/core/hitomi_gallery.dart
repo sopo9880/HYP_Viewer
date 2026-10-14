@@ -7,22 +7,20 @@ import 'package:http/http.dart' as http;
 import 'gallery.dart';
 import 'online_gallery.dart';
 
-/// Online image reader adapted independently from the public Hitomi gallery
-/// metadata / gg.js URL scheme described in lanyeeee/hitomi-downloader (MIT).
-/// No DRM or login bypass. No automatic offline downloading is provided here.
+/// In-app reader for public galleries.
+/// Current full-size images use WebP on w1/w2 hosts. Legacy numeric-host
+/// JPEG fallbacks (e.g. 2.gold-usergeneratedcontent.net) are not used:
+/// they can fail DNS lookup even when the gallery metadata loads.
 class HitomiGallery implements GalleryPageSource {
   final String workId;
   final String title;
   final List<Uri> pageUrls;
-  // A supported original image is used only when the preferred WebP fails.
-  final List<Uri?>? fallbackPageUrls;
   final http.Client _client;
 
   HitomiGallery({
     required this.workId,
     required this.title,
     required this.pageUrls,
-    this.fallbackPageUrls,
     required http.Client client,
   }) : _client = client;
 
@@ -34,21 +32,7 @@ class HitomiGallery implements GalleryPageSource {
     if (index < 0 || index >= pageUrls.length) {
       throw RangeError.index(index, pageUrls);
     }
-    final extension = pageUrls[index].pathSegments.last.split('.').last;
-    return 'page_' + (index + 1).toString().padLeft(5, '0') + '.' + extension;
-  }
-
-  Future<Uint8List> _loadImage(Uri url) {
-    if (!RegExp(r'^(?:w|a)?[0-9]+\.gold-usergeneratedcontent\.net$')
-        .hasMatch(url.host)) {
-      throw const FormatException('허용되지 않은 이미지 서버야.');
-    }
-    return BoundedWebImages.load(
-      _client,
-      url,
-      maxBytes: GalleryArchive.maxSingleImageBytes,
-      headers: const {'Referer': 'https://hitomi.la/'},
-    );
+    return 'page_${(index + 1).toString().padLeft(5, '0')}.webp';
   }
 
   @override
@@ -56,22 +40,34 @@ class HitomiGallery implements GalleryPageSource {
     if (index < 0 || index >= pageUrls.length) {
       throw RangeError.index(index, pageUrls);
     }
-    final primary = pageUrls[index];
+    final url = pageUrls[index];
+    // Do not trust remote URLs without a strict HTTPS host allowlist.
+    if (url.scheme != 'https' ||
+        !RegExp(r'^w[12]\.gold-usergeneratedcontent\.net$').hasMatch(url.host)) {
+      throw const FormatException('허용되지 않은 웹 이미지 서버야.');
+    }
     try {
-      return await _loadImage(primary);
-    } catch (primaryError) {
-      final fallback = fallbackPageUrls != null &&
-              index < fallbackPageUrls!.length
-          ? fallbackPageUrls![index]
-          : null;
-      if (fallback == null || fallback == primary) rethrow;
-      try {
-        return await _loadImage(fallback);
-      } catch (fallbackError) {
+      return await BoundedWebImages.load(
+        _client,
+        url,
+        maxBytes: GalleryArchive.maxSingleImageBytes,
+        headers: const {'Referer': 'https://hitomi.la/'},
+      );
+    } catch (error) {
+      final reason = error.toString();
+      if (reason.contains('Failed host lookup') ||
+          reason.contains('No address associated with hostname') ||
+          reason.contains('Name or service not known')) {
         throw FormatException(
-            '선호 이미지와 원본 이미지 요청이 모두 실패했어. '
-            '첫 요청: $primaryError / 원본 요청: $fallbackError');
+          'WebP 이미지 서버 DNS 조회 실패 (${url.host}). '
+          '서버 주소를 확인할 수 없어. 네트워크 DNS 설정 또는 도메인 접근 제한일 수 있어. '
+          '웹 리더로 열기를 시도해 줘. 원본 오류: $reason',
+        );
       }
+      throw FormatException(
+        'WebP 이미지 로딩 실패 (${url.host}). '
+        '웹 리더로 열기를 시도해 줘. 원본 오류: $reason',
+      );
     }
   }
 }
@@ -109,21 +105,16 @@ class HitomiGalleryProvider {
     final ggScript = await _readScript(Uri.https(_host, '/gg.js'));
     final gg = _HitomiGg.fromScript(ggScript);
     final urls = <Uri>[];
-    final originalUrls = <Uri?>[];
     for (final item in files) {
       if (item is! Map) {
         throw const FormatException('이미지 파일 정보가 올바르지 않아.');
       }
-      final url = gg.urlFor(item);
-      final original = gg.originalUrlFor(item);
-      urls.add(url);
-      originalUrls.add(original == url ? null : original);
+      urls.add(gg.urlFor(item));
     }
     return HitomiGallery(
       workId: workId,
       title: decoded['title'] is String ? decoded['title'] as String : '',
       pageUrls: List.unmodifiable(urls),
-      fallbackPageUrls: List.unmodifiable(originalUrls),
       client: client,
     );
   }
@@ -159,8 +150,9 @@ class HitomiGalleryProvider {
   }
 }
 
-/// Hitomi's public image host layout depends on a mapping in gg.js.
-/// It can change; failures must be reported, not silently skipped.
+/// Parses the current public gg.js routing information.
+/// Host suffixes are limited to w1/w2, as in the current public WebP client;
+/// do not generate numeric legacy JPEG image domains from an original filename.
 class _HitomiGg {
   final int defaultOffset;
   final Map<int, int> offsets;
@@ -172,70 +164,48 @@ class _HitomiGg {
     final fallback = RegExp(r'var\s+o\s*=\s*(\d+)').firstMatch(script);
     final override = RegExp(r'o\s*=\s*(\d+)\s*;\s*break\s*;')
         .firstMatch(script);
+    final cases = RegExp(r'case\s+(\d+)\s*:').allMatches(script).toList();
     final b = RegExp(r"b:\s*'([^']*)'").firstMatch(script);
     if (fallback == null || b == null ||
-        (override == null && RegExp(r'case\s+\d+\s*:').hasMatch(script))) {
-      throw const FormatException('이미지 서버 주소 설정 형식이 바뀌었어.');
+        (override == null && cases.isNotEmpty)) {
+      throw const FormatException('이미지 서버 라우팅 형식이 변경됐어.');
     }
-    final offset = int.parse(fallback.group(1)!);
-    final overrideOffset = override == null ? offset : int.parse(override.group(1)!);
-    if (offset > 100 || overrideOffset > 100) {
-      throw const FormatException('이미지 서버 번호가 올바르지 않아.');
+    final defaultOffset = int.parse(fallback.group(1)!);
+    final overrideOffset = override == null
+        ? defaultOffset : int.parse(override.group(1)!);
+    if (defaultOffset < 0 || defaultOffset > 1 ||
+        overrideOffset < 0 || overrideOffset > 1) {
+      throw const FormatException(
+          '이미지 서버 선택 값이 범위를 벗어났어. 최신 gg.js 형식을 확인해 줘.');
     }
     final map = <int, int>{};
-    for (final caseMatch in RegExp(r'case\s+(\d+)\s*:').allMatches(script)) {
-      map[int.parse(caseMatch.group(1)!)] = overrideOffset;
+    for (final caseMatch in cases) {
+      final hashCode = int.parse(caseMatch.group(1)!);
+      if (hashCode < 0 || hashCode > 4095) {
+        throw const FormatException('이미지 해시 라우팅 값이 유효하지 않아.');
+      }
+      map[hashCode] = overrideOffset;
     }
     final prefix = b.group(1)!;
-    if (!RegExp(r'^[a-zA-Z0-9/_-]{0,60}$').hasMatch(prefix)) {
+    if (!RegExp(r'^[a-zA-Z0-9/_-]{1,60}$').hasMatch(prefix)) {
       throw const FormatException('이미지 경로 정보가 올바르지 않아.');
     }
-    return _HitomiGg(offset, map, prefix);
+    return _HitomiGg(defaultOffset, map, prefix);
   }
 
-  Uri? originalUrlFor(Map file) {
-    final name = file['name']?.toString().toLowerCase() ?? '';
-    final ext = name.split('.').last;
-    const supported = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
-    if (!supported.contains(ext)) {
-      return null;
-    }
-    return urlFor(file, forceOriginal: true);
-  }
-
-  Uri urlFor(Map file, {bool forceOriginal = false}) {
+  Uri urlFor(Map file) {
     final hash = file['hash']?.toString().toLowerCase() ?? '';
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(hash)) {
       throw const FormatException('이미지 해시 정보가 잘못됐어.');
     }
     final last = hash.substring(hash.length - 3);
     final group = int.parse(last.substring(2) + last.substring(0, 2), radix: 16);
-    final subdomain = 1 + (offsets[group] ?? defaultOffset);
-    final basePath = pathPrefix + group.toString() + '/' + hash;
-
-    final originalName = file['name']?.toString().toLowerCase() ?? '';
-    final originalExt = originalName.split('.').last;
-    final hasWebp = file['haswebp'] == 1 || file['haswebp'] == '1';
-    final hasAvif = file['hasavif'] == 1 || file['hasavif'] == '1';
-    String dir;
-    String ext;
-    String hostPrefix;
-    if (hasWebp && !forceOriginal) {
-      dir = '/';
-      ext = 'webp';
-      hostPrefix = 'w';
-    } else if (const {'jpg', 'jpeg', 'png', 'gif', 'webp'}.contains(originalExt)) {
-      dir = '/';
-      ext = originalExt;
-      hostPrefix = '';
-    } else if (hasAvif && !forceOriginal) {
-      dir = '/';
-      ext = 'avif';
-      hostPrefix = 'a';
-    } else {
-      throw const FormatException('지원하지 않는 이미지 형식이야.');
-    }
-    return Uri.https(hostPrefix + subdomain.toString() +
-        '.gold-usergeneratedcontent.net', dir + basePath + '.' + ext);
+    final hostSuffix = 1 + (offsets[group] ?? defaultOffset);
+    // WebP is supplied by the current public gallery image servers even for
+    // entries lacking an old 'haswebp' flag.
+    return Uri.https(
+      'w$hostSuffix.gold-usergeneratedcontent.net',
+      '/$pathPrefix$group/$hash.webp',
+    );
   }
 }
