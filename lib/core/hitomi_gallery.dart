@@ -196,7 +196,8 @@ class _HitomiGg {
   Uri? originalUrlFor(Map file) {
     final name = file['name']?.toString().toLowerCase() ?? '';
     final ext = name.split('.').last;
-    if (!const {'jpg', 'jpeg', 'png', 'gif', 'webp'}.contains(ext)) {
+    const supported = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
+    if (!supported.contains(ext)) {
       return null;
     }
     return urlFor(file, forceOriginal: true);
