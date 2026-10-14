@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../core/hero_cover_picker.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -173,6 +175,12 @@ class _HypDashboardState extends State<HypDashboard> {
   final Map<String, int> _pageCounts = <String, int>{};
   final Map<String, Uint8List> _coverImages = <String, Uint8List>{};
   int _offlineRefreshEpoch = 0;
+  String? _randomBannerCoverKey;
+
+  void _shuffleBannerCover() {
+    setState(() => _randomBannerCoverKey = pickRandomLibraryCover(
+        _coverImages.keys, previous: _randomBannerCoverKey));
+  }
 
   @override
   void initState() {
@@ -272,6 +280,12 @@ class _HypDashboardState extends State<HypDashboard> {
       _coverImages
         ..clear()
         ..addAll(images);
+      // Keep the same randomly chosen work during scrolling/navigation.
+      // Pick another only if it was removed from the library.
+      if (_randomBannerCoverKey == null ||
+          !images.containsKey(_randomBannerCoverKey)) {
+        _randomBannerCoverKey = pickRandomLibraryCover(images.keys);
+      }
     });
   }
 
@@ -643,7 +657,11 @@ class _HypDashboardState extends State<HypDashboard> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       HypHeroBanner(
-        artwork: widget.heroArtwork,
+        artwork: switch (widget.readerSettings.heroArtworkSource) {
+          'default' => null,
+          'random' => _coverImages[_randomBannerCoverKey],
+          _ => widget.heroArtwork,
+        },
         onOpenLibrary: () => _navigate(HypPage.library),
         onOpenDownloads: () => _navigate(HypPage.downloads),
       ),
@@ -907,10 +925,12 @@ class _HypDashboardState extends State<HypDashboard> {
             decoration: InputDecoration(
               labelText: HypI18n.t(context, '앱 언어'),
             ),
+            // Native names are deliberately NOT translated by the selected
+            // language: the chooser always reads 한국어 / English / 日本語.
             items: const [
-              DropdownMenuItem(value: 'ko', child: HypText('한국어')),
-              DropdownMenuItem(value: 'en', child: HypText('영어')),
-              DropdownMenuItem(value: 'ja', child: HypText('일본어')),
+              DropdownMenuItem(value: 'ko', child: Text('한국어')),
+              DropdownMenuItem(value: 'en', child: Text('English')),
+              DropdownMenuItem(value: 'ja', child: Text('日本語')),
             ],
             onChanged: (language) {
               if (language != null) {
@@ -930,6 +950,48 @@ class _HypDashboardState extends State<HypDashboard> {
         children: [
           HypText('홈 배너 일러스트',
               style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 9),
+          DropdownButtonFormField<String>(
+            key: const Key('hero-artwork-source-setting'),
+            initialValue: widget.readerSettings.heroArtworkSource,
+            decoration: InputDecoration(
+              labelText: HypI18n.t(context, '홈 배너 배경 선택'),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'default',
+                  child: HypText('기본 디자인')),
+              DropdownMenuItem(value: 'custom',
+                  child: HypText('직접 업로드한 일러스트')),
+              DropdownMenuItem(value: 'random',
+                  child: HypText('내 서재 표지 중 랜덤')),
+            ],
+            onChanged: (source) {
+              if (source != null) {
+                widget.onSaveReaderSettings(
+                  widget.readerSettings.copyWith(heroArtworkSource: source));
+              }
+            },
+          ),
+          if (widget.readerSettings.heroArtworkSource == 'random') ...[
+            const SizedBox(height: 10),
+            if (_coverImages[_randomBannerCoverKey] != null)
+              ClipRRect(
+                key: const Key('random-hero-preview'),
+                borderRadius: BorderRadius.circular(9),
+                child: Image.memory(_coverImages[_randomBannerCoverKey]!,
+                  height: 125, fit: BoxFit.cover, cacheWidth: 1000),
+              )
+            else
+              const HypText('사용 가능한 서재 이미지 표지가 없어. '
+                  '표지를 직접 설정하거나 첫 페이지 표지를 생성해줘.'),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('hero-random-refresh'),
+              onPressed: _coverImages.isEmpty ? null : _shuffleBannerCover,
+              icon: const Icon(Icons.shuffle),
+              label: const HypText('다른 서재 표지 무작위 선택'),
+            ),
+          ],
           const SizedBox(height: 9),
           const HypText('첫 화면의 "좋아하는 이야기를, 언제 어디서나" '
               '배경 일러스트를 직접 설정할 수 있어.',

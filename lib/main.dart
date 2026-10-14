@@ -187,6 +187,11 @@ class _LibraryHomeState extends State<LibraryHome> {
       }
       await heroArtworkStore.save(bytes);
       if (mounted) setState(() => heroArtwork = bytes);
+      // Newly uploaded artwork should show up even if random mode was active.
+      if (readerSettings.heroArtworkSource != 'custom') {
+        await _saveReaderSettings(
+            readerSettings.copyWith(heroArtworkSource: 'custom'));
+      }
       _status('홈 배너 첫 번째 화면에 일러스트를 설정했어.');
     } catch (error) {
       _status('배너 이미지 설정 실패: $error');

@@ -185,6 +185,25 @@ abstract final class HypI18n {
     '서재 데이터': ['Library Data', '本棚のデータ'],
     'JSON은 백업·기기 이전용, Excel은 확인용이야.': ['JSON is for backups/transfers; Excel is for viewing.', 'JSONはバックアップ・移行用、Excelは確認用です。'],
     '최신 0.x 업데이트 · GitHub Releases': ['Latest 0.x updates · GitHub Releases', '最新0.x版・GitHub Releases'],
+    '홈 배너 배경 선택': ['Home Banner Background', 'ホームバナーの背景を選択'],
+    '기본 디자인': ['Default Background', '標準の背景'],
+    '직접 업로드한 일러스트': ['Uploaded Artwork', 'アップロード画像'],
+    '내 서재 표지 중 랜덤': ['Random Library Cover', '本棚の表紙からランダム'],
+    '사용 가능한 서재 이미지 표지가 없어. 표지를 직접 설정하거나 첫 페이지 표지를 생성해줘.': ['No saved cover images available. Upload a cover or generate a first-page cover.', '使用可能な表紙画像がありません。表紙を登録するか、最初のページから作成してください。'],
+    '다른 서재 표지 무작위 선택': ['Choose Another Random Cover', '別の表紙をランダムに選ぶ'],
+    '후보 번호 편집 · 개수와 번호를 자유롭게 수정': ['Edit Candidates · Change IDs and Count', '候補編集・番号と件数を自由に変更'],
+    '수동 후보': ['Manual Candidate', '手動候補'],
+    '작품 번호 수정': ['Edit Work ID', '作品番号を編集'],
+    '후보 삭제': ['Remove Candidate', '候補を削除'],
+    '후보 입력칸 추가': ['Add Candidate Field', '候補入力欄を追加'],
+    '번호 존재 재검증': ['Verify IDs Again', '番号を再検証'],
+    '작품 확인 중…': ['Checking Work…', '作品を確認中…'],
+    '숫자 6~9자리 입력': ['Enter 6–9 Digits', '6～9桁の数字を入力'],
+    '존재 여부 미검증': ['Not Yet Verified', '未検証'],
+    '작품 존재 확인': ['Work Confirmed', '作品の存在を確認'],
+    '작품 미존재 (404)': ['Not Found (404)', '作品が見つかりません（404）'],
+    '서버 확인 실패 · 직접 확인': ['Could Not Verify · Check Manually', '確認できません・手動で確認'],
+    '실제 존재하는 번호라도 댓글의 의도와 다를 수 있어. 사용자가 선택한 번호만 서재에 저장돼.': ['Even existing IDs may be unrelated to the comment. Only selected IDs are saved.', '実在する番号でもコメントの意図とは異なる場合があります。選択した番号のみ保存します。'],
     '한국어': ['Korean', '韓国語'],
     '영어': ['English', '英語'],
     '일본어': ['Japanese', '日本語'],
@@ -221,6 +240,18 @@ abstract final class HypI18n {
     if (language == 'ko') return text;
     final entry = _labels[text];
     if (entry != null) return entry[language == 'ja' ? 1 : 0];
+    // The sidebar count contains numbers; static-key translation cannot
+    // handle it. Match the complete phrase, including multiple-digit counts.
+    final storedCount = RegExp(
+      r'^내 서재\s*(\d+)\s*개 중\s*(\d+)\s*개 저장됨$'
+    ).firstMatch(text);
+    if (storedCount != null) {
+      final total = storedCount.group(1)!;
+      final saved = storedCount.group(2)!;
+      return language == 'ja'
+          ? '本棚 ' + total + '作品中 ' + saved + '作品を保存'
+          : 'My Library: ' + saved + ' saved of ' + total + ' works';
+    }
     final version = RegExp(r'^현재 버전: (.+)$').firstMatch(text);
     if (version != null) {
       return (language == 'ja' ? '現在のバージョン: ' : 'Current Version: ') +
