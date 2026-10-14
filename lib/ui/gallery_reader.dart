@@ -46,6 +46,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   late PageController _controller;
   late int _currentUnit;
   bool _vertical = false;
+  bool get _verticalReading => _vertical || widget.settings.webtoonMode;
   bool _controlsVisible = true;
   int _reloadGeneration = 0;
   final Map<int, Future<Uint8List>> _imageCache = {};
@@ -271,14 +272,14 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
-    if (_vertical && key == LogicalKeyboardKey.arrowUp) {
+    if (_verticalReading && key == LogicalKeyboardKey.arrowUp) {
       _turn(-1);
-    } else if (_vertical && key == LogicalKeyboardKey.arrowDown) {
+    } else if (_verticalReading && key == LogicalKeyboardKey.arrowDown) {
       _turn(1);
     } else if (key == LogicalKeyboardKey.arrowLeft) {
-      _turn(!_vertical && widget.settings.reverse ? 1 : -1);
+      _turn(!_verticalReading && widget.settings.reverse ? 1 : -1);
     } else if (key == LogicalKeyboardKey.arrowRight) {
-      _turn(!_vertical && widget.settings.reverse ? -1 : 1);
+      _turn(!_verticalReading && widget.settings.reverse ? -1 : 1);
     } else if (key == LogicalKeyboardKey.pageDown ||
                key == LogicalKeyboardKey.space) {
       _turn(1);
@@ -450,7 +451,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       tooltip: '이전 페이지 (PageUp)',
       color: Colors.white,
       onPressed: _currentUnit > 0 ? () => _turn(-1) : null,
-      icon: Icon(_vertical || widget.settings.webtoonMode
+      icon: Icon(_verticalReading
           ? Icons.keyboard_arrow_up : widget.settings.reverse
           ? Icons.chevron_right : Icons.chevron_left),
     );
@@ -459,7 +460,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       tooltip: '다음 페이지 (PageDown / Space)',
       color: Colors.white,
       onPressed: _currentUnit < _units - 1 ? () => _turn(1) : null,
-      icon: Icon(_vertical || widget.settings.webtoonMode
+      icon: Icon(_verticalReading
           ? Icons.keyboard_arrow_down : widget.settings.reverse
           ? Icons.chevron_left : Icons.chevron_right),
     );
@@ -536,7 +537,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                         width: constraints.maxWidth,
                         height: constraints.maxHeight,
                         vertical: _vertical,
-                        reverse: !_vertical && widget.settings.reverse,
+                        reverse: !_verticalReading && widget.settings.reverse,
                       );
                       if (delta != 0) _turn(delta);
                     }
@@ -547,7 +548,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                   _reloadGeneration.toString() + '-' +
                   widget.settings.twoPageSpread.toString()),
                 controller: _controller,
-                reverse: !_vertical && widget.settings.reverse,
+                reverse: !_verticalReading && widget.settings.reverse,
                 scrollDirection: _vertical ? Axis.vertical : Axis.horizontal,
                 itemCount: _units,
                 onPageChanged: (unit) {
@@ -568,12 +569,12 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                         horizontal: 10, vertical: 8),
                     child: Row(children: [
                       // In RTL books the NEXT action starts on the left.
-                      !_vertical && widget.settings.reverse
+                      !_verticalReading && widget.settings.reverse
                           ? nextButton() : previousButton(),
                       HypText('$_currentPage / $total',
                           style: const TextStyle(color: Colors.white)),
                       Expanded(child: Directionality(
-                        textDirection: !_vertical && widget.settings.reverse
+                        textDirection: !_verticalReading && widget.settings.reverse
                             ? TextDirection.rtl : TextDirection.ltr,
                         child: Slider(
                           value: (_scrubTarget ?? (_currentUnit + 1).toDouble())
@@ -591,7 +592,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                           } : null,
                         ),
                       )),
-                      !_vertical && widget.settings.reverse
+                      !_verticalReading && widget.settings.reverse
                           ? previousButton() : nextButton(),
                     ]),
                   ),
