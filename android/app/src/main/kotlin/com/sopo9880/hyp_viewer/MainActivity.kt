@@ -185,13 +185,14 @@ class MainActivity : FlutterActivity() {
                                 }
                                 var output: Uri? = null
                                 try {
-                                    output = DocumentsContract.createDocument(
+                                    val created = DocumentsContract.createDocument(
                                         contentResolver, parent,
                                         "application/vnd.comicbook+zip", targetName)
-                                    if (output == null) throw IllegalStateException(
-                                        "Could not create destination")
+                                        ?: throw IllegalStateException(
+                                            "Could not create destination")
+                                    output = created
                                     FileInputStream(original).use { input ->
-                                        contentResolver.openOutputStream(output, "w").use { stream ->
+                                        contentResolver.openOutputStream(created, "w").use { stream ->
                                             if (stream == null) throw IllegalStateException(
                                                 "Could not open destination")
                                             input.copyTo(stream, bufferSize = 65536)
