@@ -157,26 +157,32 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.1.3:
-          - Use the current public Hitomi WebP image routing
-            (w1/w2.gold-usergeneratedcontent.net) and validate gg.js values.
-          - Remove the obsolete numeric-host original JPEG retry, which
-            masked the true failure with a DNS error on hosts such as
-            2.gold-usergeneratedcontent.net.
-          - Show the actual WebP host, request error and DNS guidance
-            if the network or site does not resolve the image server.
-          - Preserve the fixed bottom-page slider, visible retry button
-            and direct external web-reader fallback from v0.1.2.
-          - Retain keyless YouTube Shorts public comment lookup, local
-            library, backups, and existing offline reading.
+          Changes in v0.1.4:
+          - Prevent concurrent Windows JSON saves by serializing library
+            mutations, retrying temporary locks and keeping a rollback copy.
+          - Preload and cache adjacent pages for smoother reading, with
+            configurable 0-3 pages ahead and behind.
+          - Configure swipe/page-turn direction and a two-page spread view.
+            The reader now has both Previous and Next page buttons.
+          - Use reader keyboard shortcuts: Left/Right, PageUp/PageDown,
+            Space, Home/End, and Escape. Library shortcuts: Ctrl+1-5,
+            and Ctrl+F for search.
+          - Choose a library cover from six bundled visual presets, the
+            first page automatically, or any page chosen by the user.
+            Thumbnail previews are stored locally in reduced resolution.
+          - Preserve the v0.1.3 WebP-only w1/w2 image routing and DNS
+            diagnostics. Do not retry obsolete numeric-host JPEG URLs.
+          - Retain keyless public Shorts comments, JSON backup and Excel
+            export, and all previous 0.x local reading features.
 
           Known limitations: YouTube web-client comment collection and Hitomi
           image access are experimental and may fail due to source website
           changes or restrictions. These have automated mock tests, but live
           device testing is still required. The built-in Hitomi reader does
           not bulk-download works. Externally navigated pages do not
-          synchronize automatically. Downloaded CBZ files are not included in
-          JSON backups.
+          synchronize automatically. Downloaded CBZ files and locally
+          generated thumbnail PNG files are not included in JSON backups:
+          cover style and selected cover-page metadata are preserved.
 
           Verify assets using SHA256SUMS.txt. Only download from sources
           you have permission to access and retain.
