@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -9,9 +10,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/export.dart';
 import 'core/gallery.dart';
+import 'core/cover_store.dart';
+import 'core/reader_settings.dart';
 import 'core/hitomi_reader_link.dart';
 import 'core/hitomi_gallery.dart';
 import 'ui/gallery_reader.dart';
+import 'ui/cover_picker.dart';
 import 'ui/hyp_dashboard.dart';
 import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
@@ -48,6 +52,12 @@ class LibraryHome extends StatefulWidget {
 
 class _LibraryHomeState extends State<LibraryHome> {
   final storage = LibraryStorage();
+  final coverStore = const CoverStore();
+  final readerSettingsStorage = const ReaderSettingsStorage();
+  ReaderSettings readerSettings = const ReaderSettings();
+  int coverEpoch = 0;
+  Future<void> _libraryWrites = Future<void>.value();
+  final Set<String> _coverCaptures = <String>{};
   int navigationEpoch = 0;
   final galleryStore = GalleryStore();
   final sourceSettings = OnlineSourceSettings();
@@ -75,8 +85,42 @@ class _LibraryHomeState extends State<LibraryHome> {
     super.initState();
     _load();
     _loadOnlineSource();
+    _loadReaderSettings();
     _listenForSharedShorts();
     WidgetsBinding.instance.addPostFrameCallback((_) => _automaticUpdateCheck());
+  }
+
+  Future<void> _loadReaderSettings() async {
+    try {
+      final result = await readerSettingsStorage.load();
+      if (mounted) setState(() => readerSettings = result);
+    } catch (e) {
+      _status('뷰어 설정 읽기 실패: ' + e.toString());
+    }
+  }
+
+  Future<void> _saveReaderSettings(ReaderSettings updated) async {
+    try {
+      await readerSettingsStorage.save(updated);
+      if (mounted) setState(() => readerSettings = updated);
+    } catch (e) {
+      _status('뷰어 설정 저장 실패: ' + e.toString());
+    }
+  }
+
+  /// Apply a mutation to the latest library, not to an old snapshot captured
+  /// before an earlier asynchronous save finished.
+  Future<void> _commitLibrary(
+    LibraryBackup Function(LibraryBackup) change,
+  ) {
+    final task = _libraryWrites.then((_) async {
+      final updated = change(library);
+      await storage.save(updated);
+      if (mounted) setState(() => library = updated);
+    });
+    _libraryWrites = task.then<void>((_) {},
+        onError: (Object _, StackTrace __) {});
+    return task;
   }
 
   Future<void> _loadOnlineSource() async {
@@ -183,10 +227,8 @@ class _LibraryHomeState extends State<LibraryHome> {
         author: authorInput.text,
         originalComment: commentInput.text,
       );
-      final updated = LibraryBackup.merge(library,
-          LibraryBackup(works: [work], collections: const []));
-      await storage.save(updated);
-      setState(() => library = updated);
+      await _commitLibrary((latest) => LibraryBackup.merge(latest,
+          LibraryBackup(works: [work], collections: const [])));
       _status('서재에 저장했어.');
     } catch (e) {
       _status('저장 실패: ' + e.toString());
@@ -195,25 +237,37 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   Future<void> _updateWork(WorkEntry work) async {
     try {
-      final updated = LibraryBackup(
-        works: library.works.map((w) => w.key == work.key ? work : w).toList(),
-        collections: library.collections,
-      );
-      await storage.save(updated);
-      setState(() => library = updated);
+      await _commitLibrary((latest) => LibraryBackup(
+        works: latest.works.map((w) {
+          if (w.key != work.key) return w;
+          // Do not roll back recently updated reading progress when a
+          // bookmark/cover action arrives while an earlier save is in flight.
+          return work.copyWith(
+            currentPage: w.currentPage,
+            lastOpenedAt: w.lastOpenedAt,
+          );
+        }).toList(),
+        collections: latest.collections,
+      ));
     } catch (e) {
       _status('변경 실패: ' + e.toString());
     }
   }
 
   Future<void> _touchRead(WorkEntry work, {int? page}) async {
-    final matches = library.works.where((w) => w.key == work.key);
-    if (matches.isEmpty) return;
-    final current = matches.first;
-    await _updateWork(current.copyWith(
-      currentPage: page ?? current.currentPage,
-      lastOpenedAt: DateTime.now().toUtc().toIso8601String(),
-    ));
+    try {
+      await _commitLibrary((latest) => LibraryBackup(
+        works: latest.works.map((w) => w.key == work.key
+            ? w.copyWith(
+                currentPage: page ?? w.currentPage,
+                lastOpenedAt: DateTime.now().toUtc().toIso8601String(),
+              )
+            : w).toList(),
+        collections: latest.collections,
+      ));
+    } catch (e) {
+      _status('읽기 기록 저장 실패: ' + e.toString());
+    }
   }
 
   Future<void> _openOriginal(WorkEntry work) async {
@@ -284,9 +338,8 @@ class _LibraryHomeState extends State<LibraryHome> {
         ],
       ));
       if (mode == null) return;
-      final updated = mode == 'replace' ? incoming : LibraryBackup.merge(library, incoming);
-      await storage.save(updated);
-      if (mounted) setState(() => library = updated);
+      await _commitLibrary((latest) =>
+          mode == 'replace' ? incoming : LibraryBackup.merge(latest, incoming));
       _status('서재 가져오기 완료');
     } catch (e) {
       _status('복원 실패: ' + e.toString());
