@@ -228,6 +228,28 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     if (_step == 2 && begin + 1 < widget.archive.pageCount) {
       _bytesAt(begin + 1);
     }
+    if (!saving) {
+      // Prioritize the next few pages in memory and pre-decode their images.
+      // Waiting for disk/network alone is insufficient to avoid a loading
+      // indicator on the next page: codecs also need to warm up.
+      final visibleAndNext = <int>[
+        begin,
+        if (_step == 2 && begin + 1 < widget.archive.pageCount) begin + 1,
+        for (var i = begin + _step;
+             i < begin + _step + 3 && i < widget.archive.pageCount;
+             i++) i,
+      ];
+      for (final index in visibleAndNext) {
+        unawaited(_bytesAt(index).then<void>((bytes) async {
+          if (!mounted) return;
+          try {
+            await precacheImage(MemoryImage(bytes), context);
+          } catch (_) {
+            // A corrupt/deleted image still surfaces normally in the reader.
+          }
+        }, onError: (Object error, StackTrace stack) {}));
+      }
+    }
     if (saving) {
       // Data saver overrides -1 without changing the user's saved setting.
       _diskCache?.warmAround(begin + _step, 0);
@@ -237,7 +259,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       _diskCache?.warmAround(begin, configured);
     }
     final memoryRadius = saving ? 1 :
-        configured == -1 ? 3 : configured.clamp(0, 4).toInt();
+        configured == -1 ? 4 : configured.clamp(3, 6).toInt();
     final first = (begin - memoryRadius).clamp(0, widget.archive.pageCount)
         .toInt();
     final last = (begin + _step + memoryRadius)
