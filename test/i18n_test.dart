@@ -16,6 +16,12 @@ void main() {
     expect(HypI18n.translate('현재 버전: v0.1.8 (build 9)', 'ja'),
         '現在のバージョン: v0.1.8 (build 9)');
     expect(HypI18n.translate('USER BOOK TITLE', 'ja'), 'USER BOOK TITLE');
+    expect(HypI18n.translate('내 서재 00개 중 0개 저장됨', 'en'),
+        'My Library: 0 saved of 00 works');
+    expect(HypI18n.translate('내 서재 16개 중 9개 저장됨', 'ja'),
+        '本棚 16作品中 9作品を保存');
+    expect(HypI18n.translate('내 서재 0개 중 0개 저장됨', 'ko'),
+        '내 서재 0개 중 0개 저장됨');
   });
 
   testWidgets('language selection updates visible text without restart',

@@ -14,6 +14,7 @@ void main() {
       preloadPages: 3,
       openAfterSave: true,
       languageCode: 'ja',
+      heroArtworkSource: 'random',
     );
     final output = ReaderSettings.fromJson(prefs.toJson());
     expect(output.reverse, true);
@@ -24,6 +25,7 @@ void main() {
     expect(output.preloadPages, 3);
     expect(output.openAfterSave, true);
     expect(output.languageCode, 'ja');
+    expect(output.heroArtworkSource, 'random');
 
     final bad = ReaderSettings.fromJson({
       'nextDirection': 'nonsense',
@@ -40,6 +42,7 @@ void main() {
     expect(bad.preloadPages, 3);
     expect(bad.openAfterSave, false);
     expect(bad.languageCode, 'ko');
+    expect(bad.heroArtworkSource, 'custom');
   });
 
   test('persists reading preferences independently of the library', () async {

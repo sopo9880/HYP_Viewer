@@ -21,6 +21,7 @@ class ReaderSettings {
   final bool receiveAnnouncements;
   final bool openAfterSave;
   final String languageCode; // ko, en, ja
+  final String heroArtworkSource; // default, custom, random
 
   const ReaderSettings({
     this.nextDirection = 'left',
@@ -38,6 +39,7 @@ class ReaderSettings {
     this.receiveAnnouncements = false,
     this.openAfterSave = false,
     this.languageCode = 'ko',
+    this.heroArtworkSource = 'custom',
   });
 
   bool get reverse => nextDirection == 'right';
@@ -58,6 +60,7 @@ class ReaderSettings {
     bool? receiveAnnouncements,
     bool? openAfterSave,
     String? languageCode,
+    String? heroArtworkSource,
   }) => ReaderSettings(
     nextDirection: nextDirection ?? this.nextDirection,
     twoPageSpread: twoPageSpread ?? this.twoPageSpread,
@@ -74,6 +77,7 @@ class ReaderSettings {
     receiveAnnouncements: receiveAnnouncements ?? this.receiveAnnouncements,
     openAfterSave: openAfterSave ?? this.openAfterSave,
     languageCode: languageCode ?? this.languageCode,
+    heroArtworkSource: heroArtworkSource ?? this.heroArtworkSource,
   );
 
   Map<String, Object> toJson() => {
@@ -92,6 +96,7 @@ class ReaderSettings {
     'receiveAnnouncements': receiveAnnouncements,
     'openAfterSave': openAfterSave,
     'languageCode': languageCode,
+    'heroArtworkSource': heroArtworkSource,
   };
 
   factory ReaderSettings.fromJson(Map<String, dynamic> data) =>
@@ -111,6 +116,9 @@ class ReaderSettings {
         openAfterSave: data['openAfterSave'] == true,
         languageCode: {'ko', 'en', 'ja'}.contains(data['languageCode'])
             ? data['languageCode'] as String : 'ko',
+        heroArtworkSource: {'default', 'custom', 'random'}
+                .contains(data['heroArtworkSource'])
+            ? data['heroArtworkSource'] as String : 'custom',
         preloadPages: data['preloadPages'] is num
             ? (data['preloadPages'] as num).toInt().clamp(0, 3).toInt()
             : 2,

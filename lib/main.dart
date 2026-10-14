@@ -27,6 +27,7 @@ import 'ui/cover_cropper.dart';
 import 'ui/hyp_dashboard.dart';
 import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
+import 'core/candidate_verifier.dart';
 import 'core/online_gallery.dart';
 import 'core/shares.dart';
 import 'core/storage.dart';
@@ -102,6 +103,7 @@ class _LibraryHomeState extends State<LibraryHome> {
   final apiKeyInput = TextEditingController();
   LibraryBackup library = const LibraryBackup(works: [], collections: []);
   List<NumberCandidate> candidates = [];
+  final Map<String, CandidateVerification> _candidateCache = {};
   bool busy = false;
   String message = '';
 
@@ -185,6 +187,11 @@ class _LibraryHomeState extends State<LibraryHome> {
       }
       await heroArtworkStore.save(bytes);
       if (mounted) setState(() => heroArtwork = bytes);
+      // Newly uploaded artwork should show up even if random mode was active.
+      if (readerSettings.heroArtworkSource != 'custom') {
+        await _saveReaderSettings(
+            readerSettings.copyWith(heroArtworkSource: 'custom'));
+      }
       _status('홈 배너 첫 번째 화면에 일러스트를 설정했어.');
     } catch (error) {
       _status('배너 이미지 설정 실패: $error');
@@ -430,6 +437,17 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
+  Future<Map<String, CandidateVerification>> _verifyCandidateCodes(
+      List<String> codes) async {
+    final client = http.Client();
+    try {
+      return await GalleryCandidateVerifier(client, cache: _candidateCache)
+          .verifyBatch(codes);
+    } finally {
+      client.close();
+    }
+  }
+
   Future<void> _saveWork() =>
       _saveSelectedWorks([numberInput.text.trim()]);
 
@@ -461,6 +479,12 @@ class _LibraryHomeState extends State<LibraryHome> {
       var unknownTitles = 0;
       for (final code in codes) {
         var title = codes.length == 1 ? titleInput.text.trim() : '';
+        // Reuse titles from the existence check: don't refetch the same
+        // metadata for each selected work while saving a batch.
+        final verified = _candidateCache[code];
+        if (title.isEmpty && verified?.exists == true) {
+          title = verified!.title;
+        }
         if (title.isEmpty) {
           try {
             title = await HitomiGalleryProvider(client).fetchTitle(code);
@@ -1360,6 +1384,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     onSaveWork: _saveWork,
     onQuickAddNumber: _quickAddNumber,
     onSaveSelectedWorks: _saveSelectedWorks,
+    onVerifyCandidateCodes: _verifyCandidateCodes,
     onChooseHeroArtwork: _chooseHeroArtwork,
     onClearHeroArtwork: _clearHeroArtwork,
     onSaveOnlineSource: _saveOnlineSource,
