@@ -666,6 +666,18 @@ class _LibraryHomeState extends State<LibraryHome> {
     );
   }
 
+  Future<void> _savePublicationDates(Map<String, String> dates) async {
+    if (dates.isEmpty) return;
+    await _commitLibrary((latest) => LibraryBackup(
+      works: latest.works.map((work) {
+        final date = dates[work.workId];
+        return date == null || work.sourceDate.isNotEmpty
+            ? work : work.copyWith(sourceDate: date);
+      }).toList(),
+      collections: latest.collections,
+    ));
+  }
+
   Future<void> _groupWorks(List<String> workIds, String title) async {
     final selected = workIds.toSet();
     final name = title.trim();
@@ -2177,6 +2189,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     downloadCanPause: readerTransfer != null,
     onImportGallery: _importGallery,
     onUpdateWork: _updateWork,
+    onSavePublicationDates: _savePublicationDates,
     onChooseCover: _chooseCover,
     onSaveReaderSettings: _saveReaderSettings,
     onOpenOriginal: _openOriginal,
