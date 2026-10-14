@@ -24,6 +24,7 @@ class GalleryDiskCache implements GalleryPageSource {
   bool _disposed = false;
   bool _capacityReached = false;
   DateTime? _cooldownUntil;
+  DateTime? _backgroundPausedUntil;
 
   GalleryDiskCache(this.source, {
     this.parent,
@@ -96,6 +97,10 @@ class GalleryDiskCache implements GalleryPageSource {
         if (!urgent && _capacityReached) {
           throw StateError('Reader prefetch disk budget reached');
         }
+        if (!urgent && _backgroundPausedUntil != null &&
+            DateTime.now().isBefore(_backgroundPausedUntil!)) {
+          throw StateError('Reader prefetch paused after server errors');
+        }
         completer.complete(await _fetch(index));
       } catch (e, st) {
         if (!completer.isCompleted) completer.completeError(e, st);
@@ -141,7 +146,14 @@ class GalleryDiskCache implements GalleryPageSource {
         return bytes;
       } catch (error) {
         lastError = error;
-        if (!_isTransient(error) || attempt == 3) rethrow;
+        if (!_isTransient(error)) rethrow;
+        if (attempt == 3) {
+          // A gallery-wide outage must not cause a queued full download to
+          // hammer every remaining image. Visible pages may still retry.
+          _backgroundPausedUntil =
+              DateTime.now().add(const Duration(minutes: 2));
+          rethrow;
+        }
         final pause = Duration(milliseconds: 700 * (1 << attempt));
         final until = DateTime.now().add(pause);
         if (_cooldownUntil == null || _cooldownUntil!.isBefore(until)) {
@@ -159,7 +171,9 @@ class GalleryDiskCache implements GalleryPageSource {
       error.toString().contains('Connection reset by peer');
 
   void warmAround(int page, int radius) {
-    if (_disposed || _capacityReached) return;
+    if (_disposed || _capacityReached ||
+        (_backgroundPausedUntil != null &&
+            DateTime.now().isBefore(_backgroundPausedUntil!))) return;
     final first = (page - radius).clamp(0, pageCount).toInt();
     final last = (page + radius + 1).clamp(0, pageCount).toInt();
     for (var i = first; i < last; i++) {
@@ -170,7 +184,9 @@ class GalleryDiskCache implements GalleryPageSource {
   }
 
   void warmAll({int startingAt = 0}) {
-    if (_disposed || _capacityReached) return;
+    if (_disposed || _capacityReached ||
+        (_backgroundPausedUntil != null &&
+            DateTime.now().isBefore(_backgroundPausedUntil!))) return;
     final start = startingAt.clamp(0, pageCount).toInt();
     for (var i = start; i < pageCount; i++) {
       if (!_finishedOnDisk.contains(i) && !_requests.containsKey(i)) {
