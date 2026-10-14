@@ -157,18 +157,22 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.1.7:
-          - Add "Remove work from library" to every work card's menu.
-          - Clearly confirm that deleting a library entry removes its
-            favorite status and reading history while retaining other works.
-          - Optional checkbox to also delete the offline CBZ and locally
-            cached cover images. Local files are preserved by default.
-          - Deletion is blocked while the same work is downloading.
-          - Safely serialize deletions with other library writes and ignore
-            stale asynchronous thumbnail refreshes.
-          - Keep v0.1.6 multi-work Shorts saving, configurable first
-            homepage illustration, automatic titles, RTL navigation,
-            toolbar preferences and Android installation-security guidance.
+          Changes in v0.1.8:
+          - A numeric work ID entered in the main Shorts search field can
+            be saved directly without querying YouTube. Successful saves
+            switch to the Library screen.
+          - A new preference, disabled by default, opens a single newly
+            saved work in the reader. Batch saves still open the library.
+          - Show app messages at the top of the CURRENT viewport rather
+            than at the scroll position of the home page, with dismissal.
+          - Make Shorts candidate IDs readily visible on Android's small
+            screens using #number chips immediately below search.
+            If YouTube blocks public comments, manual paste remains supported.
+          - Add Korean, English and Japanese language preferences, persisted
+            locally, with instant translation of key screens and controls.
+          - Display the installed app version and build number in Settings.
+          - Preserve the v0.1.7 library delete menu and all earlier v0.x
+            release functionality, backups, covers and Android signing.
 
           Known limitations: Automated tests use mocked images and notices;
           actual remote sites, Android devices and Samsung firmware may

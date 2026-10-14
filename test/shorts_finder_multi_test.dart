@@ -4,6 +4,59 @@ import 'package:hyp_viewer/core/number_extractor.dart';
 import 'package:hyp_viewer/ui/shorts_finder_panel.dart';
 
 void main() {
+  testWidgets('numeric search quick-add bypasses YouTube and shows mobile IDs',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(430, 860));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final url = TextEditingController();
+    final apiKey = TextEditingController();
+    final comment = TextEditingController();
+    final code = TextEditingController();
+    final title = TextEditingController();
+    final author = TextEditingController();
+    addTearDown(() {
+      url.dispose(); apiKey.dispose(); comment.dispose();
+      code.dispose(); title.dispose(); author.dispose();
+    });
+    String? added;
+    var fetchCount = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: ShortsFinderPanel(
+          url: url, apiKey: apiKey, comment: comment,
+          workId: code, title: title, author: author,
+          candidates: const [
+            NumberCandidate(code: '2711759', evidence: '1편',
+                source: 'comment', score: 90),
+            NumberCandidate(code: '2951072', evidence: '2편',
+                source: 'comment', score: 90),
+          ],
+          busy: false,
+          onAnalyze: () {},
+          onFetch: () async { fetchCount++; },
+          onQuickAddNumber: (value) async { added = value; },
+          onOpenYoutube: () async {},
+          onSave: () async {},
+          onSaveSelectedWorks: (_) async {},
+        ),
+      )),
+    ));
+    await tester.pumpAndSettle();
+    final quick = find.byKey(const Key('shorts-quick-candidate-2951072'));
+    expect(quick, findsOneWidget);
+    await tester.ensureVisible(quick);
+    await tester.tap(quick);
+    await tester.pumpAndSettle();
+    expect(code.text, '2951072');
+    await tester.ensureVisible(find.byKey(const Key('shorts-url-input')));
+    await tester.enterText(find.byKey(const Key('shorts-url-input')), '2951072');
+    await tester.ensureVisible(find.byKey(const Key('shorts-search-button')));
+    await tester.tap(find.byKey(const Key('shorts-search-button')));
+    await tester.pump();
+    expect(added, '2951072');
+    expect(fetchCount, 0);
+  });
+
   testWidgets('two Shorts candidates can be selected and saved together',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1120, 1050));
