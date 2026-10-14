@@ -119,10 +119,11 @@ class _LibraryHomeState extends State<LibraryHome> {
   }
 
   Future<void> _saveReaderSettings(ReaderSettings updated) async {
+    final wasSubscribed = readerSettings.receiveAnnouncements;
     try {
       await readerSettingsStorage.save(updated);
       if (mounted) setState(() => readerSettings = updated);
-      if (updated.receiveAnnouncements && !readerSettings.receiveAnnouncements) {
+      if (updated.receiveAnnouncements && !wasSubscribed) {
         unawaited(_checkAnnouncements(silent: true));
       }
     } catch (e) {
@@ -205,7 +206,7 @@ class _LibraryHomeState extends State<LibraryHome> {
   }
 
   Future<void> _showSecurityHelp() async {
-    if (!Platform.isAndroid || !mounted) return;
+    if (!mounted) return;
     final open = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -222,11 +223,12 @@ class _LibraryHomeState extends State<LibraryHome> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
               child: const Text('알겠어')),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(ctx, true),
-            icon: const Icon(Icons.settings),
-            label: const Text('보안 설정 확인'),
-          ),
+          if (Platform.isAndroid)
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.settings),
+              label: const Text('보안 설정 확인'),
+            ),
         ],
       ),
     );
@@ -1075,6 +1077,8 @@ class _LibraryHomeState extends State<LibraryHome> {
     onExportExcel: () => _export(true),
     onImportJson: _import,
     onCheckRelease: () => _checkRelease(),
+    onCheckAnnouncements: () => _checkAnnouncements(),
+    onSecurityHelp: _showSecurityHelp,
     onOpenGallery: (work) => _openGallery(work),
     onReadOnline: _readOnline,
     onReadWebPage: _chooseWebPage,
