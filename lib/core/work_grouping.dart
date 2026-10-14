@@ -31,6 +31,23 @@ class WorkGrouping {
         .trim().toLowerCase();
   }
 
+  /// Episode numbers beat approximate upload dates. Dates beat gallery IDs.
+  /// Explicit groupOrder is persisted by the caller after the user confirms.
+  static int compareChapters(WorkEntry a, WorkEntry b) {
+    final ae = episodeNumber(a), be = episodeNumber(b);
+    if (ae != null && be != null && ae != be) return ae.compareTo(be);
+    if (ae != null && be == null) return -1;
+    if (be != null && ae == null) return 1;
+    if (a.sourceDate.isNotEmpty && b.sourceDate.isNotEmpty &&
+        a.sourceDate != b.sourceDate) {
+      return a.sourceDate.compareTo(b.sourceDate);
+    }
+    final ai = BigInt.tryParse(a.workId);
+    final bi = BigInt.tryParse(b.workId);
+    if (ai != null && bi != null) return ai.compareTo(bi);
+    return a.workId.compareTo(b.workId);
+  }
+
   static List<WorkGroupSuggestion> suggest(List<WorkEntry> works) {
     final ungrouped = works.where((w) => w.groupId.isEmpty).toList();
     final buckets = <String, List<WorkEntry>>{};
@@ -51,8 +68,7 @@ class WorkGrouping {
       if (group.length < 2 ||
           episodeNumbers.any((ep) => ep == null) ||
           episodeNumbers.toSet().length != group.length) continue;
-      group.sort((a, b) =>
-          episodeNumber(a)!.compareTo(episodeNumber(b)!));
+      group.sort(compareChapters);
       final longestName = group.map((w) => normalizedSeries(w.title))
           .where((name) => name.length > 3)
           .fold<String>('', (a, name) => name.length > a.length ? name : a);
@@ -68,16 +84,25 @@ class WorkGrouping {
   }
 }
 
-enum LibrarySort { newest, mostRead, title, number }
+enum LibrarySort { newest, published, hitomiPopular, mostRead, title, number }
 
 class WorkSorting {
   static List<WorkEntry> sort(Iterable<WorkEntry> values, LibrarySort mode,
-      {bool descending = false}) {
+      {bool descending = false, Map<String, int> popularityRanks = const {}}) {
     final result = values.toList();
     int compare(WorkEntry a, WorkEntry b) {
       switch (mode) {
         case LibrarySort.newest:
           return b.addedAt.compareTo(a.addedAt);
+        case LibrarySort.published:
+          return b.sourceDate.compareTo(a.sourceDate);
+        case LibrarySort.hitomiPopular:
+          final ar = popularityRanks[a.workId];
+          final br = popularityRanks[b.workId];
+          if (ar == null && br == null) return 0;
+          if (ar == null) return 1;
+          if (br == null) return -1;
+          return ar.compareTo(br);
         case LibrarySort.mostRead:
           final rank = b.openCount.compareTo(a.openCount);
           return rank == 0 ? b.lastOpenedAt.toString().compareTo(
@@ -93,6 +118,16 @@ class WorkSorting {
     }
     result.sort((a, b) {
       final n = compare(a, b);
+      // Entries without public rank/date must always sort last.
+      if (mode == LibrarySort.published &&
+          (a.sourceDate.isEmpty != b.sourceDate.isEmpty)) {
+        return a.sourceDate.isEmpty ? 1 : -1;
+      }
+      if (mode == LibrarySort.hitomiPopular &&
+          ((popularityRanks[a.workId] == null) !=
+              (popularityRanks[b.workId] == null))) {
+        return popularityRanks[a.workId] == null ? 1 : -1;
+      }
       if (n != 0) return descending ? -n : n;
       return a.workId.compareTo(b.workId);
     });

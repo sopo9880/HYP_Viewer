@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -21,11 +22,13 @@ class GalleryReader extends StatefulWidget {
   final ReaderSettings settings;
   // Test seam: production always uses the on-disk reader cache.
   final bool diskCacheEnabled;
+  final Directory? persistentCacheDirectory;
   final Future<void> Function(int page)? onOpenInBrowser;
   final Future<void> Function()? onDownloadOffline;
   final void Function(int page, Uint8List bytes)? onPageLoaded;
   final Future<void> Function(int page, Uint8List bytes)? onChooseCover;
   final ValueChanged<bool>? onVerticalScrollingChanged;
+  final ValueChanged<int>? onFinishedReading;
 
   const GalleryReader({
     super.key,
@@ -34,11 +37,13 @@ class GalleryReader extends StatefulWidget {
     required this.onPageChanged,
     this.settings = const ReaderSettings(),
     this.diskCacheEnabled = true,
+    this.persistentCacheDirectory,
     this.onOpenInBrowser,
     this.onDownloadOffline,
     this.onPageLoaded,
     this.onChooseCover,
     this.onVerticalScrollingChanged,
+    this.onFinishedReading,
   });
 
   @override
@@ -51,6 +56,38 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   bool _vertical = false;
   bool get _verticalReading => _vertical || widget.settings.webtoonMode;
   bool _controlsVisible = true;
+  bool _completionReported = false;
+  final TransformationController _webtoonTransform = TransformationController();
+  bool _webtoonZoomed = false;
+  bool _controlHeld = false;
+  final Map<int, TransformationController> _pageTransforms = {};
+  TransformationController _zoomController(int page) =>
+      _pageTransforms.putIfAbsent(page, TransformationController.new);
+  bool get _zoomed {
+    final begin = _currentUnit * _step;
+    for (var index = begin; index < begin + _step; index++) {
+      if ((_pageTransforms[index]?.value.getMaxScaleOnAxis() ?? 1) > 1.02) {
+        return true;
+      }
+    }
+    return false;
+  }
+  void _resetZoom() {
+    for (final controller in _pageTransforms.values) {
+      controller.value = Matrix4.identity();
+    }
+  }
+  void _reportLastFrame(int index) {
+    if (_completionReported || index != widget.archive.pageCount - 1 ||
+        _currentUnit != _units - 1) return;
+    _completionReported = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _currentUnit == _units - 1) {
+        widget.onFinishedReading?.call(widget.archive.pageCount);
+      }
+    });
+  }
+  void _toggleChrome() => setState(() => _controlsVisible = !_controlsVisible);
   int _reloadGeneration = 0;
   final Map<int, Future<Uint8List>> _imageCache = {};
   GalleryDiskCache? _diskCache;
@@ -73,7 +110,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     // Data saver uses one request at a time, regardless of preload setting.
     _diskCache = GalleryDiskCache(widget.archive,
         concurrency: widget.settings.dataSaverMode ? 1 : 2,
-        cacheToDisk: widget.diskCacheEnabled);
+        cacheToDisk: widget.diskCacheEnabled,
+        persistentDirectory: widget.persistentCacheDirectory);
     _webtoonPositions.itemPositions.addListener(_onWebtoonPosition);
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -100,11 +138,14 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     }
     if (oldWidget.archive != widget.archive ||
         oldWidget.settings.dataSaverMode != widget.settings.dataSaverMode ||
-        oldWidget.diskCacheEnabled != widget.diskCacheEnabled) {
+        oldWidget.diskCacheEnabled != widget.diskCacheEnabled ||
+        oldWidget.persistentCacheDirectory?.path !=
+            widget.persistentCacheDirectory?.path) {
       final oldDisk = _diskCache;
       _diskCache = GalleryDiskCache(widget.archive,
           concurrency: widget.settings.dataSaverMode ? 1 : 2,
-        cacheToDisk: widget.diskCacheEnabled);
+        cacheToDisk: widget.diskCacheEnabled,
+        persistentDirectory: widget.persistentCacheDirectory);
       _imageCache.clear();
       if (oldDisk != null) unawaited(oldDisk.dispose());
     }
@@ -141,6 +182,10 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     if (_diskCache != null) unawaited(_diskCache!.dispose());
     unawaited(AndroidReaderControls.deactivate());
     _controller.dispose();
+    for (final controller in _pageTransforms.values) {
+      controller.dispose();
+    }
+    _webtoonTransform.dispose();
     super.dispose();
   }
 
@@ -183,6 +228,29 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     if (_step == 2 && begin + 1 < widget.archive.pageCount) {
       _bytesAt(begin + 1);
     }
+    if (!saving && configured != 0) {
+      // Prioritize the next few pages in memory and pre-decode their images.
+      // Waiting for disk/network alone is insufficient to avoid a loading
+      // indicator on the next page: codecs also need to warm up.
+      final visibleAndNext = <int>[
+        begin,
+        if (_step == 2 && begin + 1 < widget.archive.pageCount) begin + 1,
+        for (var i = begin + _step;
+             i < begin + _step + 3 && i < widget.archive.pageCount;
+             i++) i,
+      ];
+      for (final index in visibleAndNext) {
+        unawaited(_bytesAt(index).then<void>((bytes) async {
+          if (!mounted) return;
+          try {
+            await precacheImage(MemoryImage(bytes), context,
+                onError: (exception, stack) {});
+          } catch (_) {
+            // A corrupt/deleted image still surfaces normally in the reader.
+          }
+        }, onError: (Object error, StackTrace stack) {}));
+      }
+    }
     if (saving) {
       // Data saver overrides -1 without changing the user's saved setting.
       _diskCache?.warmAround(begin + _step, 0);
@@ -192,7 +260,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       _diskCache?.warmAround(begin, configured);
     }
     final memoryRadius = saving ? 1 :
-        configured == -1 ? 3 : configured.clamp(0, 4).toInt();
+        configured == -1 ? 4 : configured == 0 ? 0 : configured.clamp(3, 6).toInt();
     final first = (begin - memoryRadius).clamp(0, widget.archive.pageCount)
         .toInt();
     final last = (begin + _step + memoryRadius)
@@ -215,6 +283,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   void _turn(int delta) {
     final target = (_currentUnit + delta).clamp(0, _units - 1).toInt();
     if (target == _currentUnit) return;
+    _resetZoom();
     if (widget.settings.webtoonMode) {
       _jumpTo(target);
       return;
@@ -229,6 +298,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     final target = unit.clamp(0, _units - 1).toInt();
     // A jump is navigation, not an image-loading outcome. Persist the
     // destination before asynchronous image layout or decoding begins.
+    _resetZoom();
     setState(() => _currentUnit = target);
     widget.onPageChanged(_currentPage);
     _prefetchAround(target);
@@ -274,10 +344,23 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event.logicalKey == LogicalKeyboardKey.controlLeft ||
+        event.logicalKey == LogicalKeyboardKey.controlRight) {
+      if (event is KeyDownEvent && !_controlHeld) {
+        setState(() => _controlHeld = true);
+      } else if (event is KeyUpEvent && _controlHeld) {
+        setState(() => _controlHeld = false);
+      }
+      return KeyEventResult.ignored;
+    }
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.space) {
+      _toggleChrome();
+      return KeyEventResult.handled;
+    }
     if (_verticalReading && key == LogicalKeyboardKey.arrowUp) {
       _turn(-1);
     } else if (_verticalReading && key == LogicalKeyboardKey.arrowDown) {
@@ -286,8 +369,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       _turn(!_verticalReading && widget.settings.reverse ? 1 : -1);
     } else if (key == LogicalKeyboardKey.arrowRight) {
       _turn(!_verticalReading && widget.settings.reverse ? -1 : 1);
-    } else if (key == LogicalKeyboardKey.pageDown ||
-               key == LogicalKeyboardKey.space) {
+    } else if (key == LogicalKeyboardKey.pageDown) {
       _turn(1);
     } else if (key == LogicalKeyboardKey.pageUp) {
       _turn(-1);
@@ -414,16 +496,27 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
           width: double.infinity,
           fit: BoxFit.fitWidth,
           gaplessPlayback: true,
+          frameBuilder: (context, child, frame, synchronous) {
+            if (frame != null || synchronous) _reportLastFrame(index);
+            return child;
+          },
           errorBuilder: (context, error, stack) => _failedImage(index, error),
         );
       }
       return Center(child: InteractiveViewer(
+        transformationController: _zoomController(index),
         minScale: 1,
         maxScale: 5,
+        scaleFactor: 200,
+        onInteractionEnd: (_) { if (mounted) setState(() {}); },
         child: Image.memory(
           snapshot.data!,
           fit: BoxFit.contain,
           gaplessPlayback: true,
+          frameBuilder: (context, child, frame, synchronous) {
+            if (frame != null || synchronous) _reportLastFrame(index);
+            return child;
+          },
           errorBuilder: (context, error, stack) =>
               _failedImage(index, error),
         ),
@@ -475,7 +568,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       onKeyEvent: _onKey,
       child: Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(
+        appBar: _controlsVisible ? AppBar(
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
           title: HypText(widget.work.title.isEmpty
@@ -519,9 +612,32 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 onPressed: _toggleVertical,
               ),
           ],
-        ),
+        ) : null,
         body: widget.settings.webtoonMode
-          ? ScrollablePositionedList.builder(
+          ? GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTapUp: (event) {
+                final width = MediaQuery.sizeOf(context).width;
+                if (!_webtoonZoomed &&
+                    event.localPosition.dx >= width * 0.3 &&
+                    event.localPosition.dx <= width * 0.7) {
+                  _toggleChrome();
+                }
+              },
+              child: InteractiveViewer(
+                transformationController: _webtoonTransform,
+                minScale: 1, maxScale: 5, scaleFactor: 200,
+                panEnabled: _webtoonZoomed,
+                // Keep normal desktop wheel scrolling; Ctrl+wheel zooms.
+                scaleEnabled: _controlHeld ||
+                    Theme.of(context).platform == TargetPlatform.android ||
+                    Theme.of(context).platform == TargetPlatform.iOS,
+                onInteractionEnd: (_) {
+                  final scaled = _webtoonTransform.value
+                      .getMaxScaleOnAxis() > 1.02;
+                  if (mounted) setState(() => _webtoonZoomed = scaled);
+                },
+                child: ScrollablePositionedList.builder(
               key: const Key('webtoon-continuous-reader'),
               itemCount: widget.archive.pageCount,
               initialScrollIndex: _currentUnit,
@@ -531,12 +647,14 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
               padding: EdgeInsets.zero,
               itemBuilder: (context, index) =>
                   _pageAt(index, webtoon: true),
-            )
+                ),
+              ))
           : LayoutBuilder(builder: (context, constraints) => GestureDetector(
               key: const Key('reader-tap-zones'),
               behavior: HitTestBehavior.translucent,
               onTapUp: widget.settings.tapNavigation
                   ? (event) {
+                      if (_zoomed) return;
                       final delta = readerTapDelta(
                         pointX: event.localPosition.dx,
                         pointY: event.localPosition.dy,
@@ -545,7 +663,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                         vertical: _vertical,
                         reverse: !_verticalReading && widget.settings.reverse,
                       );
-                      if (delta != 0) _turn(delta);
+                      if (delta == 0) _toggleChrome();
+                      else _turn(delta);
                     }
                   : null,
               child: PageView.builder(
@@ -558,6 +677,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 scrollDirection: _vertical ? Axis.vertical : Axis.horizontal,
                 itemCount: _units,
                 onPageChanged: (unit) {
+                  _resetZoom();
                   setState(() => _currentUnit = unit);
                   widget.onPageChanged(_currentPage);
                   _prefetchAround(unit);

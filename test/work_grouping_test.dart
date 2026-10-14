@@ -43,4 +43,33 @@ void main() {
     expect(WorkSorting.sort([a,b], LibrarySort.mostRead).first.workId, '100');
     expect(WorkSorting.sort([a,b], LibrarySort.number).first.workId, '99');
   });
+  test('publication and ranked popularity keep unknown works last', () {
+    final older = WorkEntry.create(workId: '42')
+        .copyWith(sourceDate: '2025-01-01');
+    final newer = WorkEntry.create(workId: '256')
+        .copyWith(sourceDate: '2026-01-01');
+    final unknown = WorkEntry.create(workId: '19');
+    expect(WorkSorting.sort([older, unknown, newer],
+        LibrarySort.published).map((w) => w.workId),
+        ['256', '42', '19']);
+    final list = WorkSorting.sort([older, unknown, newer],
+        LibrarySort.hitomiPopular,
+        popularityRanks: {'42': 1, '256': 2});
+    expect(list.map((w) => w.workId), ['42', '256', '19']);
+    expect(WorkSorting.sort([older, unknown, newer],
+        LibrarySort.hitomiPopular, descending: true,
+        popularityRanks: {'42': 1, '256': 2})
+        .last.workId, '19');
+  });
+
+  test('episode number wins over gallery date; fallback uses numeric ID', () {
+    final ep2 = WorkEntry.create(workId: '5', title: 'Story 2편')
+        .copyWith(sourceDate: '2020-01-01');
+    final ep1 = WorkEntry.create(workId: '20', title: 'Story 1편')
+        .copyWith(sourceDate: '2026-01-01');
+    expect(WorkGrouping.compareChapters(ep1, ep2), lessThan(0));
+    final x = WorkEntry.create(workId: '20');
+    final y = WorkEntry.create(workId: '5');
+    expect(WorkGrouping.compareChapters(y, x), lessThan(0));
+  });
 }

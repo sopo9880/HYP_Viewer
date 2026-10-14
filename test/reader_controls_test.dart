@@ -12,8 +12,8 @@ import 'package:hyp_viewer/ui/gallery_reader.dart';
 class _Pages implements GalleryPageSource {
   final List<int> requested = [];
   static final Uint8List pixel = base64Decode(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
-    'AAAADUlEQVQIHWP4z8DwHwAFgAI/ScLytQAAAABJRU5ErkJggg==',
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91Jpz'
+    'AAAAFklEQVR4nGP8//8/AwMDEwMDAwMDAwAkBgMB/DXemwAAAABJRU5ErkJggg==',
   );
 
   @override
@@ -30,6 +30,46 @@ class _Pages implements GalleryPageSource {
 }
 
 void main() {
+  testWidgets('Space hides full UI and Space restores it', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+      home: GalleryReader(
+        work: WorkEntry.create(workId: '2711759'),
+        archive: _Pages(), diskCacheEnabled: false,
+        settings: const ReaderSettings(preloadPages: 0),
+        onPageChanged: (_) {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsNothing);
+    expect(find.byKey(const Key('reader-next')), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsOneWidget);
+  });
+
+  testWidgets('final page successfully decoding marks the work completed',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final completed = <int>[];
+    await tester.pumpWidget(MaterialApp(
+      home: GalleryReader(
+        work: WorkEntry.create(workId: '2711759').copyWith(currentPage: 5),
+        archive: _Pages(), diskCacheEnabled: false,
+        settings: const ReaderSettings(preloadPages: 0),
+        onPageChanged: (_) {},
+        onFinishedReading: completed.add,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(completed, [5]);
+  });
+
   testWidgets('preloads both directions and has physical previous button',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1100, 850));

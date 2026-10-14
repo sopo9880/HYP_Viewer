@@ -1,8 +1,5 @@
-/// Physical tap zones for the paged reader.
-///
-/// Tapping the left edge acts like swiping LEFT; the right edge like swiping
-/// RIGHT. RTL books reverse the reading direction. Vertical readers use the
-/// top/bottom halves instead. Webtoon scrolling disables discrete tap turns.
+/// Side 30% taps turn pages, center 40% returns zero for immersive UI toggle.
+/// On horizontal pages the physical gesture follows the reading direction.
 int readerTapDelta({
   required double pointX,
   required double pointY,
@@ -11,9 +8,11 @@ int readerTapDelta({
   required bool vertical,
   required bool reverse,
 }) {
-  if (width <= 0 || height <= 0) return 0;
-  final topOrLeft = vertical ? pointY < height / 2 : pointX < width / 2;
-  if (vertical) return topOrLeft ? (reverse ? 1 : -1)
-                                : (reverse ? -1 : 1);
-  return topOrLeft ? (reverse ? -1 : 1) : (reverse ? 1 : -1);
+  if (width <= 0 || height <= 0 || pointX < 0 || pointX > width ||
+      pointY < 0 || pointY > height) return 0;
+  if (pointX >= width * 0.3 && pointX <= width * 0.7) return 0;
+  if (vertical) return pointX < width * 0.3 ? -1 : 1;
+  return pointX < width * 0.3
+      ? (reverse ? -1 : 1)
+      : (reverse ? 1 : -1);
 }

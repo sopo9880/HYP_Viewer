@@ -11,6 +11,7 @@ import 'gallery.dart';
 class GalleryDiskCache implements GalleryPageSource {
   final GalleryPageSource source;
   final Directory? parent;
+  final Directory? persistentDirectory;
   final int maxBytes;
   final int concurrency;
   // Allows deterministic in-memory widget tests without asynchronous dart:io.
@@ -23,6 +24,7 @@ class GalleryDiskCache implements GalleryPageSource {
   Future<Directory>? _directory;
   final List<Future<void>> _running = [];
   int _runningWorkers = 0;
+  int _activeBackground = 0;
   int _writtenBytes = 0;
   bool _disposed = false;
   bool _capacityReached = false;
@@ -31,6 +33,7 @@ class GalleryDiskCache implements GalleryPageSource {
 
   GalleryDiskCache(this.source, {
     this.parent,
+    this.persistentDirectory,
     this.maxBytes = 750 * 1024 * 1024,
     this.concurrency = 2,
     this.cacheToDisk = true,
@@ -43,7 +46,9 @@ class GalleryDiskCache implements GalleryPageSource {
   int get activeCount => _runningWorkers;
 
   Future<Directory> _getDir() => _directory ??=
-      (parent ?? Directory.systemTemp).createTemp('hyp_reader_cache_');
+      persistentDirectory != null
+          ? persistentDirectory!.create(recursive: true)
+          : (parent ?? Directory.systemTemp).createTemp('hyp_reader_cache_');
 
   @override
   Future<Uint8List> loadPage(int index) => _enqueue(index, urgent: true);
@@ -57,6 +62,7 @@ class GalleryDiskCache implements GalleryPageSource {
     if (existing != null) {
       if (urgent && _background.remove(index)) {
         _foreground.addFirst(index);
+        _drain(); // immediately reserve an urgent slot for a promoted request
       }
       return existing.future;
     }
@@ -74,13 +80,26 @@ class GalleryDiskCache implements GalleryPageSource {
     return completer.future;
   }
 
+  /// Foreground requests may use all concurrency slots. Background
+  /// prefetch uses at most one slot so a long full-work download cannot
+  /// occupy every connection while the reader waits for its next page.
   void _drain() {
     if (_disposed) return;
     while (_runningWorkers < concurrency &&
         (_foreground.isNotEmpty || _background.isNotEmpty)) {
+      final urgent = _foreground.isNotEmpty;
+      if (!urgent && _activeBackground >= 1) break;
+      final index = urgent ? _foreground.removeFirst()
+          : _background.removeFirst();
+      final completer = _requests[index];
+      if (completer == null || completer.isCompleted) continue;
       _runningWorkers++;
-      final task = _worker().whenComplete(() {
+      if (!urgent) _activeBackground++;
+      late final Future<void> task;
+      task = _runOne(index, completer, urgent).whenComplete(() {
         _runningWorkers--;
+        if (!urgent) _activeBackground--;
+        _running.remove(task);
         if (!_disposed) _drain();
       });
       _running.add(task);
@@ -89,28 +108,22 @@ class GalleryDiskCache implements GalleryPageSource {
     }
   }
 
-  Future<void> _worker() async {
-    while (!_disposed &&
-        (_foreground.isNotEmpty || _background.isNotEmpty)) {
-      final urgent = _foreground.isNotEmpty;
-      final index = urgent ? _foreground.removeFirst()
-          : _background.removeFirst();
-      final completer = _requests[index];
-      if (completer == null || completer.isCompleted) continue;
-      try {
-        if (!urgent && _capacityReached) {
-          throw StateError('Reader prefetch disk budget reached');
-        }
-        if (!urgent && _backgroundPausedUntil != null &&
-            DateTime.now().isBefore(_backgroundPausedUntil!)) {
-          throw StateError('Reader prefetch paused after server errors');
-        }
-        completer.complete(await _fetch(index));
-      } catch (e, st) {
-        if (!completer.isCompleted) completer.completeError(e, st);
-      } finally {
-        _requests.remove(index);
+  Future<void> _runOne(
+      int index, Completer<Uint8List> completer, bool urgent) async {
+    try {
+      if (!urgent && _capacityReached) {
+        throw StateError('Reader prefetch disk budget reached');
       }
+      if (!urgent && _backgroundPausedUntil != null &&
+          DateTime.now().isBefore(_backgroundPausedUntil!)) {
+        throw StateError('Reader prefetch paused after server errors');
+      }
+      final bytes = await _fetch(index);
+      if (!completer.isCompleted) completer.complete(bytes);
+    } catch (error, stack) {
+      if (!completer.isCompleted) completer.completeError(error, stack);
+    } finally {
+      _requests.remove(index);
     }
   }
 
@@ -144,7 +157,7 @@ class GalleryDiskCache implements GalleryPageSource {
         } else if (!_disposed && !_capacityReached && bytes.isNotEmpty &&
             _writtenBytes + bytes.length <= maxBytes) {
           try {
-            await file!.writeAsBytes(bytes, flush: true);
+            await file!.writeAsBytes(bytes);
             _writtenBytes += bytes.length;
             _finishedOnDisk.add(index);
           } on FileSystemException {
@@ -223,7 +236,7 @@ class GalleryDiskCache implements GalleryPageSource {
     await Future.wait(_running.toList().map((f) =>
         f.then<void>((_) {}, onError: (Object _, StackTrace __) {})));
     final dir = await _directory;
-    if (dir != null && await dir.exists()) {
+    if (persistentDirectory == null && dir != null && await dir.exists()) {
       try {
         await dir.delete(recursive: true);
       } catch (_) {}

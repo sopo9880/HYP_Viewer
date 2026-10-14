@@ -93,8 +93,10 @@ class HypWorkCard extends StatelessWidget {
     final progress = work.completed
         ? 1.0
         : (totalPages ?? work.totalPages) > 0
-            ? ((work.currentPage - 1) /
-                (totalPages ?? work.totalPages)).clamp(0.0, 1.0).toDouble()
+            ? (totalPages ?? work.totalPages) == 1 ? 0.0
+                : ((work.currentPage - 1) /
+                    ((totalPages ?? work.totalPages) - 1))
+                    .clamp(0.0, 1.0).toDouble()
             : null;
     return Material(
       color: HypColors.surface,
@@ -259,8 +261,11 @@ class HypWorkCard extends StatelessWidget {
 
   Widget _cover() {
     if (coverBytes != null && work.coverMode != 'preset') {
-      return Image.memory(coverBytes!, fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _fallbackCover());
+      return ColoredBox(
+        color: const Color(0xFF171925),
+        child: Image.memory(coverBytes!, fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) => _fallbackCover()),
+      );
     }
     return _fallbackCover();
   }

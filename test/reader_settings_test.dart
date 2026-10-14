@@ -20,6 +20,7 @@ void main() {
       preloadPages: -1,
       dataSaverMode: true,
       librarySort: 'mostRead',
+      popularityPeriod: 'year',
       librarySortDescending: true,
       recentCollapsed: true,
       expandedSettings: ['backup', 'viewer'],
@@ -39,6 +40,7 @@ void main() {
     expect(output.preloadPages, -1);
     expect(output.dataSaverMode, true);
     expect(output.librarySort, 'mostRead');
+    expect(output.popularityPeriod, 'year');
     expect(output.librarySortDescending, true);
     expect(output.recentCollapsed, true);
     expect(output.expandedSettings, contains('backup'));
@@ -59,7 +61,8 @@ void main() {
     expect(bad.openAfterSave, false);
     expect(bad.languageCode, 'ko');
     expect(bad.heroArtworkSource, 'custom');
-    expect(bad.tapNavigation, false);
+    expect(bad.tapNavigation, true);
+    expect(ReaderSettings.fromJson({'tapNavigation': false}).tapNavigation, false);
     expect(bad.webtoonMode, false);
     expect(bad.autoDownloadOnSave, false);
   });

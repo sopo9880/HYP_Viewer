@@ -20,6 +20,7 @@ import 'core/hero_artwork_store.dart';
 import 'core/reader_settings.dart';
 import 'core/i18n.dart';
 import 'core/reader_downloader.dart';
+import 'core/reader_cache_pruner.dart';
 import 'core/announcements.dart';
 import 'core/android_controls.dart';
 import 'core/hitomi_reader_link.dart';
@@ -666,6 +667,18 @@ class _LibraryHomeState extends State<LibraryHome> {
     );
   }
 
+  Future<void> _savePublicationDates(Map<String, String> dates) async {
+    if (dates.isEmpty) return;
+    await _commitLibrary((latest) => LibraryBackup(
+      works: latest.works.map((work) {
+        final date = dates[work.workId];
+        return date == null || work.sourceDate.isNotEmpty
+            ? work : work.copyWith(sourceDate: date);
+      }).toList(),
+      collections: latest.collections,
+    ));
+  }
+
   Future<void> _groupWorks(List<String> workIds, String title) async {
     final selected = workIds.toSet();
     final name = title.trim();
@@ -787,6 +800,7 @@ class _LibraryHomeState extends State<LibraryHome> {
           // bookmark/cover action arrives while an earlier save is in flight.
           return work.copyWith(
             currentPage: w.currentPage,
+            completed: w.completed,
             lastOpenedAt: w.lastOpenedAt,
             openCount: w.openCount,
             totalPages: w.totalPages,
@@ -803,12 +817,15 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
-  Future<void> _touchRead(WorkEntry work, {int? page, int? pageCount}) async {
+  Future<void> _touchRead(WorkEntry work, {
+    int? page, int? pageCount, bool? completed,
+  }) async {
     try {
       await _commitLibrary((latest) => LibraryBackup(
         works: latest.works.map((w) => w.key == work.key
             ? w.copyWith(
                 currentPage: page ?? w.currentPage,
+                completed: completed ?? w.completed,
                 lastOpenedAt: page == null
                     ? DateTime.now().toUtc().toIso8601String()
                     : w.lastOpenedAt,
@@ -1304,7 +1321,21 @@ class _LibraryHomeState extends State<LibraryHome> {
   Future<void> _readOnline(WorkEntry work) async {
     final client = http.Client();
     try {
-      final remote = await HitomiGalleryProvider(client).load(work.workId);
+      final remote = await HitomiGalleryProvider(client).load(work.workId,
+          dataSaver: readerSettings.dataSaverMode);
+      Directory? persistentCache;
+      try {
+        final base = await getApplicationCacheDirectory();
+        final root = Directory(base.path + Platform.pathSeparator +
+            'hyp_reader_pages');
+        unawaited(ReaderCachePruner.prune(root,
+            activeWorkId: work.workId));
+        persistentCache = Directory(root.path + Platform.pathSeparator +
+            work.workId + Platform.pathSeparator +
+            (readerSettings.dataSaverMode ? 'preview' : 'original'));
+      } catch (_) {
+        // Unavailable OS cache directory: continue with temporary caching.
+      }
       if (!mounted) return;
       await _touchRead(work, pageCount: remote.pageCount);
       final missingTitle =
@@ -1323,7 +1354,12 @@ class _LibraryHomeState extends State<LibraryHome> {
         MaterialPageRoute(builder: (ctx) => GalleryReader(
           work: readerWork,
           archive: remote,
+          persistentCacheDirectory: persistentCache,
           onPageChanged: (page) { _touchRead(work, page: page); },
+          onFinishedReading: (total) {
+            unawaited(_touchRead(work, page: total,
+                pageCount: total, completed: true));
+          },
           onOpenInBrowser: (page) => _openWebReader(work, page: page),
           onDownloadOffline: () => _downloadOnline(work),
           settings: readerSettings,
@@ -1945,6 +1981,10 @@ class _LibraryHomeState extends State<LibraryHome> {
           onPageChanged: (page) {
             _touchRead(work, page: page);
           },
+          onFinishedReading: (total) {
+            unawaited(_touchRead(work, page: total,
+                pageCount: total, completed: true));
+          },
           settings: readerSettings,
           onVerticalScrollingChanged: (vertical) {
             unawaited(_saveReaderSettings(
@@ -2177,6 +2217,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     downloadCanPause: readerTransfer != null,
     onImportGallery: _importGallery,
     onUpdateWork: _updateWork,
+    onSavePublicationDates: _savePublicationDates,
     onChooseCover: _chooseCover,
     onSaveReaderSettings: _saveReaderSettings,
     onOpenOriginal: _openOriginal,
