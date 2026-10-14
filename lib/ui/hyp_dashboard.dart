@@ -94,6 +94,8 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function(WorkEntry) onDownloadJsonSource;
   final Future<void> Function(WorkEntry) onDeleteOffline;
   final Future<void> Function(WorkEntry) onDeleteWork;
+  final Future<bool> Function(List<String> ids) onDeleteSelectedWorks;
+  final Future<void> Function(WorkEntry) onEditWorkDetails;
   final VoidCallback onToggleDownloadPause;
   final bool downloadPaused;
   final bool downloadCanPause;
@@ -159,6 +161,8 @@ class HypDashboard extends StatefulWidget {
     required this.onDownloadJsonSource,
     required this.onDeleteOffline,
     required this.onDeleteWork,
+    required this.onDeleteSelectedWorks,
+    required this.onEditWorkDetails,
     required this.onToggleDownloadPause,
     required this.downloadPaused,
     required this.downloadCanPause,
@@ -181,6 +185,11 @@ class _HypDashboardState extends State<HypDashboard> {
   final FocusNode _searchFocus = FocusNode();
   HypPage _page = HypPage.home;
   final Set<String> _offlineKeys = <String>{};
+  bool _selectingWorks = false;
+  final Set<String> _selectedWorkIds = <String>{};
+  bool get _canSelectWorks => _page == HypPage.library ||
+      _search.text.trim().isNotEmpty;
+
   final Map<String, int> _pageCounts = <String, int>{};
   final Map<String, Uint8List> _coverImages = <String, Uint8List>{};
   int _offlineRefreshEpoch = 0;
@@ -237,6 +246,8 @@ class _HypDashboardState extends State<HypDashboard> {
       _page = HypPage.library;
       _search.clear();
     }
+    _selectedWorkIds.removeWhere((id) =>
+        !widget.library.works.any((w) => w.workId == id));
     if (oldWidget.library.works.length != widget.library.works.length ||
         oldWidget.coverEpoch != widget.coverEpoch ||
         _coverSignature(oldWidget.library) != _coverSignature(widget.library)) {
@@ -260,8 +271,59 @@ class _HypDashboardState extends State<HypDashboard> {
 
   void _navigate(HypPage page) {
     _search.clear();
-    setState(() => _page = page);
+    setState(() {
+      _page = page;
+      if (page != HypPage.library) {
+        _selectingWorks = false;
+        _selectedWorkIds.clear();
+      }
+    });
   }
+
+  void _toggleSelectionMode() => setState(() {
+    _selectingWorks = !_selectingWorks;
+    if (!_selectingWorks) _selectedWorkIds.clear();
+  });
+
+  void _toggleSelectedWork(WorkEntry work) => setState(() {
+    if (!_selectedWorkIds.add(work.workId)) {
+      _selectedWorkIds.remove(work.workId);
+    }
+  });
+
+  void _startSelection(WorkEntry work) => setState(() {
+    _selectingWorks = true;
+    _selectedWorkIds.add(work.workId);
+  });
+
+  Future<void> _removeSelectedWorks() async {
+    final ids = _selectedWorkIds.toList();
+    if (ids.isEmpty) return;
+    final completed = await widget.onDeleteSelectedWorks(ids);
+    if (!mounted) return;
+    if (completed) {
+      setState(() {
+        _selectedWorkIds.clear();
+        _selectingWorks = false;
+      });
+      await _refreshOffline();
+    }
+  }
+
+  Future<void> _editSelectedWork() async {
+    if (_selectedWorkIds.length != 1) return;
+    final matching = widget.library.works.where(
+        (w) => w.workId == _selectedWorkIds.first).toList();
+    if (matching.isEmpty) return;
+    await widget.onEditWorkDetails(matching.single);
+    if (!mounted) return;
+    setState(() {
+      _selectingWorks = false;
+      _selectedWorkIds.clear();
+    });
+    await _refreshOffline();
+  }
+
 
   String _coverSignature(LibraryBackup backup) => backup.works
       .map((w) => w.key + ':' + w.coverMode + ':' +
