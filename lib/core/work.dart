@@ -14,6 +14,20 @@ class WorkEntry {
   final String updatedAt;
   // Optional: absent in older schemaVersion 1 JSON backups.
   final String? lastOpenedAt;
+  /// The original add date is independent from updatedAt/read progress.
+  final String addedAt;
+  final int openCount;
+  final int totalPages;
+  final List<String> tags;
+  final String sourceLanguage;
+  final String sourceType;
+  final String sourceSeries;
+  final String sourceGroup;
+  final String sourceDate;
+  /// User-controlled series group. Empty ID means ungrouped.
+  final String groupId;
+  final String groupTitle;
+  final int groupOrder;
   /// 'auto', 'preset', 'page' or 'custom' (cropped/uploaded image).
   final String coverMode;
   final int coverPreset;
@@ -32,6 +46,18 @@ class WorkEntry {
     required this.collections,
     required this.updatedAt,
     this.lastOpenedAt,
+    this.addedAt = '',
+    this.openCount = 0,
+    this.totalPages = 0,
+    this.tags = const [],
+    this.sourceLanguage = '',
+    this.sourceType = '',
+    this.sourceSeries = '',
+    this.sourceGroup = '',
+    this.sourceDate = '',
+    this.groupId = '',
+    this.groupTitle = '',
+    this.groupOrder = 0,
     this.coverMode = 'auto',
     this.coverPreset = 0,
     this.coverPage = 1,
@@ -57,6 +83,7 @@ class WorkEntry {
       currentPage: 1,
       collections: const [],
       updatedAt: DateTime.now().toUtc().toIso8601String(),
+      addedAt: DateTime.now().toUtc().toIso8601String(),
     );
   }
 
@@ -74,6 +101,18 @@ class WorkEntry {
     int? currentPage,
     List<String>? collections,
     String? lastOpenedAt,
+    String? addedAt,
+    int? openCount,
+    int? totalPages,
+    List<String>? tags,
+    String? sourceLanguage,
+    String? sourceType,
+    String? sourceSeries,
+    String? sourceGroup,
+    String? sourceDate,
+    String? groupId,
+    String? groupTitle,
+    int? groupOrder,
     String? coverMode,
     int? coverPreset,
     int? coverPage,
@@ -90,6 +129,18 @@ class WorkEntry {
       currentPage: currentPage ?? this.currentPage,
       collections: collections ?? this.collections,
       lastOpenedAt: lastOpenedAt ?? this.lastOpenedAt,
+      addedAt: addedAt ?? this.addedAt,
+      openCount: openCount ?? this.openCount,
+      totalPages: totalPages ?? this.totalPages,
+      tags: tags ?? this.tags,
+      sourceLanguage: sourceLanguage ?? this.sourceLanguage,
+      sourceType: sourceType ?? this.sourceType,
+      sourceSeries: sourceSeries ?? this.sourceSeries,
+      sourceGroup: sourceGroup ?? this.sourceGroup,
+      sourceDate: sourceDate ?? this.sourceDate,
+      groupId: groupId ?? this.groupId,
+      groupTitle: groupTitle ?? this.groupTitle,
+      groupOrder: groupOrder ?? this.groupOrder,
       coverMode: coverMode ?? this.coverMode,
       coverPreset: coverPreset ?? this.coverPreset,
       coverPage: coverPage ?? this.coverPage,
@@ -110,6 +161,18 @@ class WorkEntry {
     'collections': collections,
     'updatedAt': updatedAt,
     if (lastOpenedAt != null) 'lastOpenedAt': lastOpenedAt,
+    if (addedAt.isNotEmpty) 'addedAt': addedAt,
+    if (openCount > 0) 'openCount': openCount,
+    if (totalPages > 0) 'totalPages': totalPages,
+    if (tags.isNotEmpty) 'tags': tags,
+    if (sourceLanguage.isNotEmpty) 'sourceLanguage': sourceLanguage,
+    if (sourceType.isNotEmpty) 'sourceType': sourceType,
+    if (sourceSeries.isNotEmpty) 'sourceSeries': sourceSeries,
+    if (sourceGroup.isNotEmpty) 'sourceGroup': sourceGroup,
+    if (sourceDate.isNotEmpty) 'sourceDate': sourceDate,
+    if (groupId.isNotEmpty) 'groupId': groupId,
+    if (groupTitle.isNotEmpty) 'groupTitle': groupTitle,
+    if (groupOrder > 0) 'groupOrder': groupOrder,
     if (coverMode != 'auto') 'coverMode': coverMode,
     if (coverPreset != 0) 'coverPreset': coverPreset,
     if (coverPage != 1) 'coverPage': coverPage,
@@ -141,6 +204,25 @@ class WorkEntry {
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true).toIso8601String(),
       lastOpenedAt: DateTime.tryParse(text('lastOpenedAt'))
           ?.toUtc().toIso8601String(),
+      addedAt: DateTime.tryParse(text('addedAt'))
+          ?.toUtc().toIso8601String() ??
+          (DateTime.tryParse(text('updatedAt'))?.toUtc().toIso8601String() ?? ''),
+      openCount: data['openCount'] is num
+          ? (data['openCount'] as num).toInt().clamp(0, 100000000).toInt() : 0,
+      totalPages: data['totalPages'] is num
+          ? (data['totalPages'] as num).toInt().clamp(0, 1000000).toInt() : 0,
+      tags: data['tags'] is List
+          ? (data['tags'] as List).whereType<String>().take(150).toSet().toList()
+          : const [],
+      sourceLanguage: text('sourceLanguage'),
+      sourceType: text('sourceType'),
+      sourceSeries: text('sourceSeries'),
+      sourceGroup: text('sourceGroup'),
+      sourceDate: text('sourceDate'),
+      groupId: text('groupId').length <= 120 ? text('groupId') : '',
+      groupTitle: text('groupTitle').length <= 200 ? text('groupTitle') : '',
+      groupOrder: data['groupOrder'] is num
+          ? (data['groupOrder'] as num).toInt().clamp(0, 10000).toInt() : 0,
       coverMode: const {'auto', 'preset', 'page', 'custom'}.contains(text('coverMode'))
           ? text('coverMode') : 'auto',
       coverPreset: data['coverPreset'] is num
@@ -288,6 +370,39 @@ class LibraryBackup {
         lastOpenedAt: (existing.lastOpenedAt ?? '').compareTo(
             incoming.lastOpenedAt ?? '') >= 0
             ? existing.lastOpenedAt : incoming.lastOpenedAt,
+        addedAt: [existing.addedAt, incoming.addedAt]
+            .where((v) => v.isNotEmpty).fold<String>('', (best, next) =>
+                best.isEmpty || next.compareTo(best) < 0 ? next : best),
+        openCount: existing.openCount > incoming.openCount
+            ? existing.openCount : incoming.openCount,
+        totalPages: recent.totalPages > 0 ? recent.totalPages :
+            (existing.totalPages > incoming.totalPages
+                ? existing.totalPages : incoming.totalPages),
+        tags: recent.tags.isNotEmpty ? recent.tags :
+            (existing.tags.isNotEmpty ? existing.tags : incoming.tags),
+        sourceLanguage: recent.sourceLanguage.isNotEmpty
+            ? recent.sourceLanguage : (useIncoming
+                ? existing.sourceLanguage : incoming.sourceLanguage),
+        sourceType: recent.sourceType.isNotEmpty
+            ? recent.sourceType : (useIncoming
+                ? existing.sourceType : incoming.sourceType),
+        sourceSeries: recent.sourceSeries.isNotEmpty
+            ? recent.sourceSeries : (useIncoming
+                ? existing.sourceSeries : incoming.sourceSeries),
+        sourceGroup: recent.sourceGroup.isNotEmpty
+            ? recent.sourceGroup : (useIncoming
+                ? existing.sourceGroup : incoming.sourceGroup),
+        sourceDate: recent.sourceDate.isNotEmpty
+            ? recent.sourceDate : (useIncoming
+                ? existing.sourceDate : incoming.sourceDate),
+        // Imported group IDs must not silently replace an existing local
+        // grouping; user-created groups stay stable across JSON merging.
+        groupId: existing.groupId.isNotEmpty
+            ? existing.groupId : incoming.groupId,
+        groupTitle: existing.groupId.isNotEmpty
+            ? existing.groupTitle : incoming.groupTitle,
+        groupOrder: existing.groupId.isNotEmpty
+            ? existing.groupOrder : incoming.groupOrder,
       );
     }
     return LibraryBackup(

@@ -107,6 +107,19 @@ class GalleryStore {
   Future<bool> exists(String workId) async =>
       await (await _localFile(workId)).exists();
 
+  /// Read-only access to an already downloaded CBZ for user-authorized
+  /// export. Never exposes arbitrary app-private filesystem paths.
+  Future<File> existingCbzFile(String workId) async {
+    final file = await _localFile(workId);
+    if (!await file.exists()) {
+      throw const FileSystemException('저장된 CBZ 파일이 없어.');
+    }
+    if (await file.length() > GalleryArchive.maxCompressedBytes) {
+      throw const FormatException('저장된 CBZ 크기가 허용 범위를 넘어.');
+    }
+    return file;
+  }
+
   /// Delete the local CBZ without touching the library, progress or covers.
   Future<void> delete(String workId) async {
     final file = await _localFile(workId);

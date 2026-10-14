@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import '../core/hero_cover_picker.dart';
@@ -13,6 +14,7 @@ import '../core/i18n.dart';
 import '../core/number_extractor.dart';
 import 'candidate_editor.dart';
 import '../core/work.dart';
+import '../core/work_grouping.dart';
 import 'hero_banner.dart';
 import 'hyp_theme.dart';
 import 'shorts_finder_panel.dart';
@@ -96,6 +98,13 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function(WorkEntry) onDeleteWork;
   final Future<bool> Function(List<String> ids) onDeleteSelectedWorks;
   final Future<void> Function(WorkEntry) onEditWorkDetails;
+  final Future<void> Function(WorkEntry) onShowWorkInfo;
+  final Future<void> Function(List<String> ids, String title) onGroupWorks;
+  final Future<void> Function(String id) onUngroupWorks;
+  final Future<void> Function(String id, String title) onRenameGroup;
+  final Future<void> Function(String id, List<String> ids) onReorderGroup;
+  final Future<void> Function(List<String> ids) onExportSelectedDownloads;
+  final Future<void> Function(List<String> ids) onDeleteSelectedOffline;
   final VoidCallback onToggleDownloadPause;
   final bool downloadPaused;
   final bool downloadCanPause;
@@ -163,6 +172,13 @@ class HypDashboard extends StatefulWidget {
     required this.onDeleteWork,
     required this.onDeleteSelectedWorks,
     required this.onEditWorkDetails,
+    required this.onShowWorkInfo,
+    required this.onGroupWorks,
+    required this.onUngroupWorks,
+    required this.onRenameGroup,
+    required this.onReorderGroup,
+    required this.onExportSelectedDownloads,
+    required this.onDeleteSelectedOffline,
     required this.onToggleDownloadPause,
     required this.downloadPaused,
     required this.downloadCanPause,
@@ -184,11 +200,15 @@ class _HypDashboardState extends State<HypDashboard> {
   final TextEditingController _search = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
   HypPage _page = HypPage.home;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey _backupSectionKey = GlobalKey();
+  DateTime? _lastHomeBack;
+  bool _openBackupSectionRequested = false;
   final Set<String> _offlineKeys = <String>{};
   bool _selectingWorks = false;
   final Set<String> _selectedWorkIds = <String>{};
   bool get _canSelectWorks => _page == HypPage.library ||
-      _search.text.trim().isNotEmpty;
+      _page == HypPage.downloads || _search.text.trim().isNotEmpty;
 
   final Map<String, int> _pageCounts = <String, int>{};
   final Map<String, Uint8List> _coverImages = <String, Uint8List>{};
@@ -270,12 +290,64 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   void _navigate(HypPage page) {
+    _lastHomeBack = null;
     _search.clear();
     setState(() {
       _page = page;
       if (page != HypPage.library) {
         _selectingWorks = false;
         _selectedWorkIds.clear();
+      }
+    });
+  }
+
+  void _handleSystemBack() {
+    if (!Platform.isAndroid) return;
+    if (_scaffoldKey.currentState?.isDrawerOpen == true) {
+      _scaffoldKey.currentState?.closeDrawer();
+      return;
+    }
+    if (_selectingWorks) {
+      _toggleSelectionMode();
+      return;
+    }
+    if (_search.text.isNotEmpty) {
+      _search.clear();
+      return;
+    }
+    if (_page != HypPage.home) {
+      _navigate(HypPage.home);
+      return;
+    }
+    final now = DateTime.now();
+    if (_lastHomeBack != null &&
+        now.difference(_lastHomeBack!) < const Duration(seconds: 2)) {
+      SystemNavigator.pop();
+      return;
+    }
+    _lastHomeBack = now;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      duration: Duration(seconds: 2),
+      content: HypText('뒤로가기를 한 번 더 누르면 앱이 종료됩니다.'),
+    ));
+  }
+
+  Future<void> _openBackupSettings() async {
+    _navigate(HypPage.settings);
+    _openBackupSectionRequested = true;
+    final active = widget.readerSettings.expandedSettings.toSet()
+      ..add('backup');
+    await widget.onSaveReaderSettings(widget.readerSettings.copyWith(
+      expandedSettings: active.toList()));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_openBackupSectionRequested) return;
+      _openBackupSectionRequested = false;
+      final target = _backupSectionKey.currentContext;
+      if (target != null) {
+        Scrollable.ensureVisible(target,
+          duration: const Duration(milliseconds: 260),
+          alignment: 0.06);
       }
     });
   }
@@ -391,8 +463,14 @@ class _HypDashboardState extends State<HypDashboard> {
     });
   }
 
-  List<WorkEntry> get _works => [...widget.library.works]
-    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  List<WorkEntry> get _works => WorkSorting.sort(
+    widget.library.works,
+    LibrarySort.values.firstWhere(
+      (mode) => mode.name == widget.readerSettings.librarySort,
+      orElse: () => LibrarySort.newest,
+    ),
+    descending: widget.readerSettings.librarySortDescending,
+  );
 
   List<WorkEntry> get _favorites => _works.where((w) => w.favorite).toList();
 
@@ -438,12 +516,20 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   @override
-  Widget build(BuildContext context) => Focus(
+  Widget build(BuildContext context) => PopScope(
+    // Only the Android root page traps system Back. Modal dialogs and
+    // pushed GalleryReader routes are popped normally by Navigator.
+    canPop: !Platform.isAndroid,
+    onPopInvokedWithResult: (didPop, result) {
+      if (!didPop) _handleSystemBack();
+    },
+    child: Focus(
     autofocus: true,
     onKeyEvent: _onKeyboardShortcut,
     child: LayoutBuilder(builder: (context, size) {
     final desktop = size.maxWidth >= 940;
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: HypColors.background,
       drawer: desktop ? null : Drawer(
         backgroundColor: HypColors.background,
@@ -454,9 +540,9 @@ class _HypDashboardState extends State<HypDashboard> {
         title: const HypText('HYP Viewer'),
         actions: [
           IconButton(
-            tooltip: '관리자 공지 확인',
-            onPressed: widget.onCheckAnnouncements,
-            icon: const Icon(Icons.notifications_outlined),
+            tooltip: '업데이트 확인',
+            onPressed: widget.onCheckRelease,
+            icon: const Icon(Icons.system_update_alt_rounded),
           ),
           PopupMenuButton<String>(
             tooltip: '추가 메뉴',
@@ -530,23 +616,23 @@ class _HypDashboardState extends State<HypDashboard> {
         indicatorColor: HypColors.primary.withValues(alpha: 0.45),
         labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
         selectedIndex: [
-          HypPage.home, HypPage.library, HypPage.favorites,
+          HypPage.favorites, HypPage.library, HypPage.home,
           HypPage.downloads, HypPage.settings,
         ].indexOf(_page).clamp(0, 4).toInt(),
         onDestinationSelected: (index) => _navigate([
-          HypPage.home, HypPage.library, HypPage.favorites,
+          HypPage.favorites, HypPage.library, HypPage.home,
           HypPage.downloads, HypPage.settings,
         ][index]),
         destinations: [
-          NavigationDestination(icon: const Icon(Icons.home_outlined),
-            selectedIcon: const Icon(Icons.home_rounded),
-            label: HypI18n.t(context, '홈')),
-          NavigationDestination(icon: const Icon(Icons.library_books_outlined),
-            selectedIcon: const Icon(Icons.library_books),
-            label: HypI18n.t(context, '서재')),
           NavigationDestination(icon: const Icon(Icons.favorite_outline),
             selectedIcon: const Icon(Icons.favorite),
             label: HypI18n.t(context, '즐겨찾기')),
+          NavigationDestination(icon: const Icon(Icons.library_books_outlined),
+            selectedIcon: const Icon(Icons.library_books),
+            label: HypI18n.t(context, '서재')),
+          NavigationDestination(icon: const Icon(Icons.home_outlined),
+            selectedIcon: const Icon(Icons.home_rounded),
+            label: HypI18n.t(context, '홈')),
           NavigationDestination(icon: const Icon(Icons.download_outlined),
             selectedIcon: const Icon(Icons.download),
             label: HypI18n.t(context, '다운로드')),
@@ -557,6 +643,7 @@ class _HypDashboardState extends State<HypDashboard> {
       ),
     );
   }),
+  ),
   );
 
   Widget _sidebar({required bool closeDrawer}) => Container(
@@ -700,24 +787,18 @@ class _HypDashboardState extends State<HypDashboard> {
       );
 
   List<PopupMenuEntry<String>> get _toolsMenu => const [
-    PopupMenuItem(value: 'import', child: HypText('JSON 서재 가져오기')),
-    PopupMenuItem(value: 'export', child: HypText('JSON 내보내기')),
-    PopupMenuItem(value: 'excel', child: HypText('Excel 내보내기')),
-    PopupMenuItem(value: 'history', child: HypText('열람 기록')),
     PopupMenuItem(value: 'settings', child: HypText('설정')),
+    PopupMenuItem(value: 'history', child: HypText('열람 기록')),
+    PopupMenuItem(value: 'backup', child: HypText('백업 설정')),
   ];
 
   void _toolsAction(String value) {
-    if (value == 'import') {
-      widget.onImportJson();
-    } else if (value == 'export') {
-      widget.onExportJson();
-    } else if (value == 'excel') {
-      widget.onExportExcel();
+    if (value == 'settings') {
+      _navigate(HypPage.settings);
     } else if (value == 'history') {
       _navigate(HypPage.history);
-    } else if (value == 'settings') {
-      _navigate(HypPage.settings);
+    } else if (value == 'backup') {
+      _openBackupSettings();
     }
   }
 
@@ -784,33 +865,32 @@ class _HypDashboardState extends State<HypDashboard> {
         onVerifyCandidateCodes: widget.onVerifyCandidateCodes,
       ),
       const SizedBox(height: 24),
-      HypSectionTitle(
-        icon: Icons.library_books_rounded,
-        title: '최근 본 작품',
-        subtitle: '최근 열람한 작품을 이어서 감상하세요.',
-        actionLabel: '전체 보기',
-        onAction: () => _navigate(HypPage.history),
-      ),
-      const SizedBox(height: 12),
-      _gridOrEmpty(
-        _recent.take(5).toList(),
-        emptyTitle: '아직 열람 기록이 없어',
-        emptyMessage: '서재에 작품을 추가하고 읽기를 시작하면 여기에 표시돼.',
-      ),
-      const SizedBox(height: 24),
-      HypSectionTitle(
-        icon: Icons.star_rounded,
-        title: '추천 작품',
-        subtitle: '즐겨찾기한 작품 중 다시 살펴볼 작품이야.',
-        actionLabel: '더보기',
-        onAction: () => _navigate(HypPage.favorites),
-      ),
-      const SizedBox(height: 12),
-      _gridOrEmpty(
-        _favorites.take(5).toList(),
-        emptyTitle: '아직 추천할 서재 작품이 없어',
-        emptyMessage: '임의 추천 대신 실제 즐겨찾기한 작품만 표시해.',
-      ),
+      Row(children: [
+        Expanded(child: HypSectionTitle(
+          icon: Icons.library_books_rounded,
+          title: '최근 본 작품',
+          subtitle: '최근 4개 · 접어서 숨길 수 있어.',
+          actionLabel: '전체 보기',
+          onAction: () => _navigate(HypPage.history),
+        )),
+        IconButton(
+          key: const Key('recent-collapse-toggle'),
+          tooltip: widget.readerSettings.recentCollapsed
+              ? '최근 본 작품 펼치기' : '최근 본 작품 접기',
+          onPressed: () => widget.onSaveReaderSettings(
+            widget.readerSettings.copyWith(
+                recentCollapsed: !widget.readerSettings.recentCollapsed)),
+          icon: Icon(widget.readerSettings.recentCollapsed
+              ? Icons.expand_more : Icons.expand_less),
+        ),
+      ]),
+      if (!widget.readerSettings.recentCollapsed) const SizedBox(height: 12),
+      if (!widget.readerSettings.recentCollapsed)
+        _gridOrEmpty(
+          _recent.take(4).toList(),
+          emptyTitle: '아직 열람 기록이 없어',
+          emptyMessage: '서재에 작품을 추가하고 읽기를 시작하면 여기에 표시돼.',
+        ),
     ],
   );
 
@@ -827,6 +907,257 @@ class _HypDashboardState extends State<HypDashboard> {
       ),
     ],
   );
+
+  Widget _groupedLibraryGrid(List<WorkEntry> works) {
+    if (works.isEmpty) {
+      return _gridOrEmpty(works,
+        emptyTitle: '내 서재에 작품이 없어',
+        emptyMessage: '홈에서 작품을 저장해줘.');
+    }
+    final groups = <String, List<WorkEntry>>{};
+    for (final work in works) {
+      if (work.groupId.isNotEmpty) {
+        groups.putIfAbsent(work.groupId, () => []).add(work);
+      }
+    }
+    final singles = works.where((w) => w.groupId.isEmpty).toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final entry in groups.entries) ...[
+          HypPanel(child: ExpansionTile(
+            key: Key('work-group-' + entry.key),
+            title: HypText(entry.value.first.groupTitle.isEmpty
+                ? '작품 묶음' : entry.value.first.groupTitle),
+            subtitle: HypText(entry.value.length.toString() + '개 작품 · '
+                '작품별 읽기 기록 독립 유지'),
+            leading: const Icon(Icons.library_books_outlined),
+            trailing: PopupMenuButton<String>(
+              tooltip: '묶음 관리',
+              key: Key('work-group-menu-' + entry.key),
+              onSelected: (action) => _groupAction(action,
+                  entry.key, entry.value),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'rename', child: HypText('묶음 이름 수정')),
+                PopupMenuItem(value: 'reorder', child: HypText('회차 순서 변경')),
+                PopupMenuItem(value: 'ungroup', child: HypText('묶음만 해제')),
+              ],
+            ),
+            childrenPadding: const EdgeInsets.only(bottom: 12),
+            children: [
+              _gridOrEmpty(
+                [...entry.value]..sort((a, b) =>
+                    a.groupOrder.compareTo(b.groupOrder)),
+                emptyTitle: '묶음이 비어 있어',
+                emptyMessage: '다른 작품을 선택해서 추가해줘.',
+              ),
+            ],
+          )),
+          const SizedBox(height: 12),
+        ],
+        if (singles.isNotEmpty) _gridOrEmpty(singles,
+          emptyTitle: '서재 작품이 없어',
+          emptyMessage: '서재에 작품을 추가해줘.'),
+      ],
+    );
+  }
+
+  Future<void> _groupSelectedWorks() async {
+    final selected = _works.where((w) =>
+        _selectedWorkIds.contains(w.workId) && w.groupId.isEmpty).toList();
+    if (selected.length < 2) return;
+    selected.sort((a, b) {
+      final one = WorkGrouping.episodeNumber(a) ?? 10000;
+      final two = WorkGrouping.episodeNumber(b) ?? 10000;
+      return one.compareTo(two);
+    });
+    final input = TextEditingController(
+        text: WorkGrouping.normalizedSeries(selected.first.title));
+    String? title;
+    try {
+      title = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const HypText('선택한 작품 묶기'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(selected.length.toString() + '개 작품을 하나의 세트로 묶어.'),
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('group-name-input'),
+              controller: input,
+              decoration: const InputDecoration(labelText: '묶음 이름')),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx),
+                child: const HypText('취소')),
+            FilledButton(
+              key: const Key('group-confirm'),
+              onPressed: () => Navigator.pop(ctx, input.text.trim()),
+              child: const HypText('묶음 만들기')),
+          ],
+        ),
+      );
+    } finally {
+      input.dispose();
+    }
+    if (title == null || title.isEmpty || !mounted) return;
+    await widget.onGroupWorks(
+        selected.map((w) => w.workId).toList(), title);
+    if (!mounted) return;
+    setState(() {
+      _selectedWorkIds.clear();
+      _selectingWorks = false;
+    });
+  }
+
+  Future<void> _showAutoGroupWizard() async {
+    final suggestions = WorkGrouping.suggest(widget.library.works);
+    if (suggestions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: HypText('자동으로 묶을 만한 미분류 회차가 없어. '
+            '이미 묶인 작품은 변경하지 않아.')));
+      return;
+    }
+    final chosen = <int>{};
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (ctx, update) => AlertDialog(
+          title: const HypText('Auto 묶기 마법사'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520, maxHeight: 500),
+            child: SingleChildScrollView(child: Column(
+              mainAxisSize: MainAxisSize.min, children: [
+                const HypText('이미 묶인 작품은 유지해. 제안은 자동으로 '
+                    '적용되지 않으며 직접 체크한 세트만 생성돼.'),
+                for (var i = 0; i < suggestions.length; i++)
+                  CheckboxListTile(
+                    key: Key('auto-group-' + i.toString()),
+                    value: chosen.contains(i),
+                    title: Text(suggestions[i].title),
+                    subtitle: Text(suggestions[i].workIds.length.toString() +
+                        '개 작품 · ' + suggestions[i].reason),
+                    onChanged: (enabled) => update(() {
+                      if (enabled == true) {
+                        chosen.add(i);
+                      } else {
+                        chosen.remove(i);
+                      }
+                    }),
+                  ),
+              ]),
+            )),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog, false),
+                child: const HypText('취소')),
+            FilledButton(
+              key: const Key('auto-group-confirm'),
+              onPressed: chosen.isEmpty ? null
+                  : () => Navigator.pop(dialog, true),
+              child: const HypText('선택한 묶음 생성')),
+          ],
+        ),
+      ),
+    );
+    if (approved != true || !mounted) return;
+    for (final index in chosen.toList()..sort()) {
+      final item = suggestions[index];
+      await widget.onGroupWorks(item.workIds, item.title);
+    }
+  }
+
+  Future<void> _groupAction(String action, String id,
+      List<WorkEntry> members) async {
+    if (action == 'ungroup') {
+      final approve = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const HypText('묶음만 해제'),
+          content: const HypText('작품·CBZ·읽기 기록은 그대로 두고 '
+              '그룹 표시만 해제할까?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+                child: const HypText('취소')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true),
+                child: const HypText('묶음 해제')),
+          ],
+        ),
+      );
+      if (approve == true) await widget.onUngroupWorks(id);
+    } else if (action == 'rename') {
+      final input = TextEditingController(text: members.first.groupTitle);
+      try {
+        final result = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const HypText('묶음 이름 수정'),
+            content: TextField(
+              key: const Key('group-rename-input'),
+              controller: input),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx),
+                  child: const HypText('취소')),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, input.text.trim()),
+                child: const HypText('저장')),
+            ],
+          ),
+        );
+        if (result != null && result.isNotEmpty) {
+          await widget.onRenameGroup(id, result);
+        }
+      } finally {
+        input.dispose();
+      }
+    } else if (action == 'reorder') {
+      final ordered = [...members]..sort((a,b) =>
+          a.groupOrder.compareTo(b.groupOrder));
+      final result = await showDialog<List<String>>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (dialog, update) => AlertDialog(
+            title: const HypText('회차 순서 변경'),
+            content: SizedBox(width: 440, height: 300,
+              child: ListView.builder(
+                itemCount: ordered.length,
+                itemBuilder: (_, index) => ListTile(
+                  title: Text((index + 1).toString() + '. ' +
+                      ordered[index].title),
+                  subtitle: Text('#' + ordered[index].workId),
+                  trailing: Row(mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: '위로',
+                        onPressed: index == 0 ? null : () => update(() {
+                          final item = ordered.removeAt(index);
+                          ordered.insert(index - 1, item);
+                        }),
+                        icon: const Icon(Icons.arrow_upward)),
+                      IconButton(
+                        tooltip: '아래로',
+                        onPressed: index == ordered.length - 1
+                            ? null : () => update(() {
+                          final item = ordered.removeAt(index);
+                          ordered.insert(index + 1, item);
+                        }),
+                        icon: const Icon(Icons.arrow_downward)),
+                    ]),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog),
+                  child: const HypText('취소')),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialog,
+                    ordered.map((w) => w.workId).toList()),
+                child: const HypText('순서 저장')),
+            ],
+          ),
+        ),
+      );
+      if (result != null) await widget.onReorderGroup(id, result);
+    }
+  }
 
   Widget _selectionControls(List<WorkEntry> visible) =>
       !_selectingWorks ? const SizedBox.shrink() : Padding(
@@ -853,6 +1184,17 @@ class _HypDashboardState extends State<HypDashboard> {
                   : () => setState(() => _selectedWorkIds.clear()),
               child: const HypText('선택 해제'),
             ),
+            if (_page == HypPage.library)
+              OutlinedButton.icon(
+                key: const Key('library-group-selected'),
+                onPressed: _selectedWorkIds.length < 2 ||
+                    widget.library.works.any((work) =>
+                      _selectedWorkIds.contains(work.workId) &&
+                      work.groupId.isNotEmpty)
+                    ? null : _groupSelectedWorks,
+                icon: const Icon(Icons.bookmarks_outlined),
+                label: const HypText('선택 묶기'),
+              ),
             OutlinedButton.icon(
               key: const Key('library-edit-selected'),
               onPressed: _selectedWorkIds.length == 1
@@ -860,13 +1202,37 @@ class _HypDashboardState extends State<HypDashboard> {
               icon: const Icon(Icons.edit_outlined),
               label: const HypText('정보 수정'),
             ),
-            FilledButton.icon(
-              key: const Key('library-delete-selected'),
-              onPressed: _selectedWorkIds.isNotEmpty
-                  ? _removeSelectedWorks : null,
-              icon: const Icon(Icons.delete_outline_rounded),
-              label: const HypText('선택 삭제'),
-            ),
+            if (_page == HypPage.downloads) ...[
+              FilledButton.icon(
+                key: const Key('download-export-selected'),
+                onPressed: _selectedWorkIds.isNotEmpty
+                    ? () => widget.onExportSelectedDownloads(
+                        _selectedWorkIds.toList()) : null,
+                icon: const Icon(Icons.folder_outlined),
+                label: const HypText('선택 CBZ 폴더로 내보내기'),
+              ),
+              OutlinedButton.icon(
+                key: const Key('download-delete-selected'),
+                onPressed: _selectedWorkIds.isNotEmpty ? () async {
+                  await widget.onDeleteSelectedOffline(
+                      _selectedWorkIds.toList());
+                  if (mounted) {
+                    setState(() => _selectedWorkIds.clear());
+                    await _refreshOffline();
+                  }
+                } : null,
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const HypText('선택 CBZ 삭제'),
+              ),
+            ]
+            else
+              FilledButton.icon(
+                key: const Key('library-delete-selected'),
+                onPressed: _selectedWorkIds.isNotEmpty
+                    ? _removeSelectedWorks : null,
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const HypText('선택 삭제'),
+              ),
           ],
         ),
       );
@@ -879,6 +1245,37 @@ class _HypDashboardState extends State<HypDashboard> {
         title: '내 서재',
         subtitle: '추가한 작품과 읽기 진행도를 관리하세요.',
       ),
+      const SizedBox(height: 12),
+      Row(children: [
+        Expanded(child: DropdownButtonFormField<String>(
+          key: const Key('library-sort'),
+          initialValue: widget.readerSettings.librarySort,
+          decoration: InputDecoration(
+            isDense: true, labelText: HypI18n.t(context, '서재 정렬')),
+          items: const [
+            DropdownMenuItem(value: 'newest',
+                child: HypText('최신 추가순')),
+            DropdownMenuItem(value: 'mostRead',
+                child: HypText('인기 (내 열람 횟수)')),
+            DropdownMenuItem(value: 'title', child: HypText('이름순')),
+            DropdownMenuItem(value: 'number', child: HypText('번호순')),
+          ],
+          onChanged: (value) {
+            if (value != null) widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(librarySort: value));
+          },
+        )),
+        IconButton(
+          key: const Key('library-sort-direction'),
+          tooltip: '정렬 방향 바꾸기',
+          onPressed: () => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(
+                librarySortDescending:
+                    !widget.readerSettings.librarySortDescending)),
+          icon: Icon(widget.readerSettings.librarySortDescending
+              ? Icons.arrow_upward : Icons.arrow_downward),
+        ),
+      ]),
       const SizedBox(height: 10),
       Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton.icon(
@@ -887,6 +1284,13 @@ class _HypDashboardState extends State<HypDashboard> {
           icon: Icon(_selectingWorks
               ? Icons.close : Icons.checklist_outlined),
           label: HypText(_selectingWorks ? '선택 종료' : '선택'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('library-group-auto'),
+          onPressed: widget.library.works.length < 2
+              ? null : _showAutoGroupWizard,
+          icon: const Icon(Icons.auto_fix_high_outlined),
+          label: const HypText('Auto 묶기'),
         ),
         OutlinedButton.icon(
           key: const Key('library-download-all'),
@@ -898,10 +1302,7 @@ class _HypDashboardState extends State<HypDashboard> {
       ]),
       _selectionControls(_works),
       const SizedBox(height: 8),
-      _gridOrEmpty(_works,
-        emptyTitle: '내 서재에 작품이 없어',
-        emptyMessage: '홈에서 번호를 찾아 저장해줘.',
-      ),
+      _groupedLibraryGrid(_works),
     ],
   );
 
@@ -989,11 +1390,72 @@ class _HypDashboardState extends State<HypDashboard> {
     } else if (action == 'edit_details') {
       await widget.onEditWorkDetails(work);
       await _refreshOffline();
+    } else if (action == 'info') {
+      await widget.onShowWorkInfo(work);
+      await _refreshOffline();
     } else if (action == 'favorite') {
       await widget.onUpdateWork(work.copyWith(favorite: !work.favorite));
     } else if (action == 'original') {
       await widget.onOpenOriginal(work);
     }
+  }
+
+  Future<WorkEntry?> _chooseLibraryWork(String purpose) async {
+    if (widget.library.works.isEmpty) return null;
+    final input = TextEditingController();
+    try {
+      return await showDialog<WorkEntry>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (dialog, update) {
+            final term = input.text.trim().toLowerCase();
+            final works = _works.where((w) => [
+              w.workId, w.title, w.author,
+            ].join(' ').toLowerCase().contains(term)).toList();
+            return AlertDialog(
+              title: Text(purpose),
+              content: SizedBox(
+                width: 460, height: 380,
+                child: Column(children: [
+                  TextField(controller: input,
+                    decoration: const InputDecoration(
+                      labelText: '작품 번호 또는 제목로 검색'),
+                    onChanged: (_) => update(() {})),
+                  const SizedBox(height: 8),
+                  Expanded(child: ListView.builder(
+                    itemCount: works.length,
+                    itemBuilder: (_, i) => ListTile(
+                      title: HypText(works[i].title),
+                      subtitle: Text('#' + works[i].workId),
+                      onTap: () => Navigator.pop(dialog, works[i]),
+                    ),
+                  )),
+                ]),
+              ),
+              actions: [TextButton(
+                onPressed: () => Navigator.pop(dialog),
+                child: const HypText('취소'))],
+            );
+          },
+        ),
+      );
+    } finally {
+      input.dispose();
+    }
+  }
+
+  Future<void> _connectArchiveFromDownloads() async {
+    final chosen = await _chooseLibraryWork('CBZ/ZIP을 연결할 작품');
+    if (chosen == null || !mounted) return;
+    await widget.onImportGallery(chosen);
+    await _refreshOffline();
+  }
+
+  Future<void> _downloadSourceFromDownloads() async {
+    final chosen = await _chooseLibraryWork('추가 JSON 소스로 받을 작품');
+    if (chosen == null || !mounted) return;
+    await widget.onDownloadJsonSource(chosen);
+    await _refreshOffline();
   }
 
   Widget _downloadsContent() => Column(
@@ -1004,6 +1466,30 @@ class _HypDashboardState extends State<HypDashboard> {
         title: '다운로드',
         subtitle: '내 기기에 저장된 작품 ' + _downloaded.length.toString() + '개',
       ),
+      const SizedBox(height: 8),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        OutlinedButton.icon(
+          key: const Key('download-select-mode'),
+          onPressed: _toggleSelectionMode,
+          icon: Icon(_selectingWorks ? Icons.close : Icons.checklist_outlined),
+          label: HypText(_selectingWorks ? '선택 종료' : '선택'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('download-import-cbz'),
+          onPressed: widget.library.works.isEmpty
+              ? null : _connectArchiveFromDownloads,
+          icon: const Icon(Icons.folder_open_outlined),
+          label: const HypText('CBZ/ZIP 연결'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('download-json-source'),
+          onPressed: widget.library.works.isEmpty
+              ? null : _downloadSourceFromDownloads,
+          icon: const Icon(Icons.data_object_outlined),
+          label: const HypText('고급 JSON 소스 다운로드'),
+        ),
+      ]),
+      _selectionControls(_downloaded),
       const SizedBox(height: 15),
       if (widget.queuedDownloadCount > 0) ...[
         HypPanel(child: Row(children: [
@@ -1133,6 +1619,34 @@ class _HypDashboardState extends State<HypDashboard> {
       widget.readerSettings.copyWith(preloadPages: pages));
   }
 
+  Widget _settingsPanel(String id, String title, Widget content) {
+    final expanded = widget.readerSettings.expandedSettings.contains(id);
+    return Container(
+      key: id == 'backup' ? _backupSectionKey : null,
+      child: HypPanel(child: Material(
+        color: Colors.transparent,
+        child: ExpansionTile(
+        key: Key('settings-section-' + id + (expanded ? '-open' : '-closed')),
+        initiallyExpanded: expanded,
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 9),
+        title: HypText(title,
+            style: Theme.of(context).textTheme.titleMedium),
+        onExpansionChanged: (opening) {
+          final enabled = widget.readerSettings.expandedSettings.toSet();
+          if (opening) {
+            enabled.add(id);
+          } else {
+            enabled.remove(id);
+          }
+          widget.onSaveReaderSettings(widget.readerSettings.copyWith(
+              expandedSettings: enabled.toList()));
+        },
+        children: [content],
+      ))),
+    );
+  }
+
   Widget _settingsContent() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -1142,7 +1656,7 @@ class _HypDashboardState extends State<HypDashboard> {
         subtitle: '뷰어 조작, 기본 표지, 추가 다운로드 소스와 앱 데이터를 관리해.',
       ),
       const SizedBox(height: 14),
-      HypPanel(child: Column(
+      _settingsPanel('general', '언어·일반', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('언어', style: Theme.of(context).textTheme.titleMedium),
@@ -1173,7 +1687,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 10),
-      HypPanel(child: Column(
+      _settingsPanel('hero', '홈 배너', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('홈 배너 일러스트',
@@ -1254,12 +1768,12 @@ class _HypDashboardState extends State<HypDashboard> {
           ]),
           const SizedBox(height: 7),
           const HypText('PNG · JPG · WebP (최대 12MB). 이미지 자체는 '
-              '이 기기에 저장되며 서재 JSON 백업에는 포함되지 않아.',
+              '이 기기에 저장되며 JSON 통합 백업에서 선택적으로 포함할 수 있어.',
               style: TextStyle(fontSize: 12, color: HypColors.muted)),
         ],
       )),
       const SizedBox(height: 10),
-      HypPanel(child: Column(
+      _settingsPanel('viewer', '뷰어·로딩 설정', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('이미지 뷰어 설정', style: Theme.of(context).textTheme.titleMedium),
@@ -1443,6 +1957,18 @@ class _HypDashboardState extends State<HypDashboard> {
               child: const HypText('적용'),
             ),
           ]),
+          const SizedBox(height: 12),
+          SwitchListTile.adaptive(
+            key: const Key('data-saver-setting'),
+            contentPadding: EdgeInsets.zero,
+            title: const HypText('데이터 절약 모드'),
+            subtitle: const HypText('켜면 -1 전체 로딩을 잠시 멈추고 '
+                '보이는 페이지와 다음 1장 위주로 요청해. '
+                '동시 네트워크 요청도 1개로 제한해.'),
+            value: widget.readerSettings.dataSaverMode,
+            onChanged: (v) => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(dataSaverMode: v)),
+          ),
           const SizedBox(height: 8),
           const HypText(
             '키보드(뷰어): ← / →, PageUp / PageDown, Space, Home / End, '
@@ -1452,7 +1978,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 10),
-      HypPanel(child: Column(
+      _settingsPanel('cover', '표지 관리', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('표지 자동 설정 및 편집', style: Theme.of(context).textTheme.titleMedium),
@@ -1483,7 +2009,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      HypPanel(child: Column(
+      _settingsPanel('android', 'Android 동작', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('Android 뷰어 동작', style: Theme.of(context).textTheme.titleMedium),
@@ -1514,7 +2040,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      HypPanel(child: Column(
+      _settingsPanel('notices', '공지', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('관리자 공지', style: Theme.of(context).textTheme.titleMedium),
@@ -1546,7 +2072,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      HypPanel(child: Column(
+      _settingsPanel('web', '기본 웹 리더', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('기본 웹 리더 (주소 고정)',
@@ -1569,7 +2095,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      HypPanel(child: Column(
+      _settingsPanel('source', '추가 이미지 소스', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('추가 JSON 이미지 소스 (선택)', style: Theme.of(context).textTheme.titleMedium),
@@ -1598,7 +2124,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      HypPanel(child: Column(
+      _settingsPanel('backup', '서재 데이터·백업', Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('서재 데이터', style: Theme.of(context).textTheme.titleMedium),
@@ -1633,7 +2159,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      HypPanel(child: Column(
+      _settingsPanel('updates', '업데이트', Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HypText('업데이트', style: Theme.of(context).textTheme.titleMedium),

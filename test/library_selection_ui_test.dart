@@ -49,7 +49,7 @@ void main() {
     expect(selected, {'2951072'});
   });
 
-  testWidgets('normal card menu exposes direct edit action',
+  testWidgets('normal card menu exposes the info sheet action',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(540, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -68,8 +68,8 @@ void main() {
     ));
     await tester.tap(find.byTooltip('작품 메뉴'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('작품 정보 수정'));
+    await tester.tap(find.text('작품 정보'));
     await tester.pumpAndSettle();
-    expect(action, 'edit_details');
+    expect(action, 'info');
   });
 }

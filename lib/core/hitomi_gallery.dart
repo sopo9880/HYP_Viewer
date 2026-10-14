@@ -72,6 +72,76 @@ class HitomiGallery implements GalleryPageSource {
   }
 }
 
+/// Metadata supplied by the gallery's existing .js response. View counts
+/// are deliberately not invented: the galleryinfo JSON has no verified
+/// official per-gallery viewCount field in the current integration.
+class GalleryInfo {
+  final String workId;
+  final String title;
+  final String author;
+  final String group;
+  final String series;
+  final String language;
+  final String type;
+  final String date;
+  final List<String> tags;
+  final List<String> characters;
+  final int pageCount;
+  final int? views;
+
+  const GalleryInfo({
+    required this.workId,
+    required this.title,
+    this.author = '',
+    this.group = '',
+    this.series = '',
+    this.language = '',
+    this.type = '',
+    this.date = '',
+    this.tags = const [],
+    this.characters = const [],
+    this.pageCount = 0,
+    this.views,
+  });
+
+  static List<String> _names(Object? data) {
+    if (data is! List) return const [];
+    return data.take(150).map((item) {
+      if (item is String) return item.trim();
+      if (item is Map) {
+        final name = item['tag'] ?? item['artist'] ?? item['group'] ??
+            item['parody'] ?? item['character'] ?? item['name'] ?? '';
+        final text = name.toString().trim();
+        final prefix = item['female'] == true ? 'female:' :
+            item['male'] == true ? 'male:' : '';
+        return prefix + text;
+      }
+      return '';
+    }).where((name) => name.isNotEmpty).toSet().toList();
+  }
+
+  factory GalleryInfo.parse(String code, Map<dynamic, dynamic> raw) {
+    if (raw['id'].toString() != code) {
+      throw const FormatException('작품 번호가 메타데이터와 일치하지 않아.');
+    }
+    String scalar(String key) =>
+        raw[key] is String ? (raw[key] as String).trim() : '';
+    return GalleryInfo(
+      workId: code,
+      title: scalar('title'),
+      author: _names(raw['artists']).join(', '),
+      group: _names(raw['groups']).join(', '),
+      series: _names(raw['parodys']).join(', '),
+      language: scalar('language'),
+      type: scalar('type'),
+      date: scalar('date'),
+      tags: _names(raw['tags']),
+      characters: _names(raw['characters']),
+      pageCount: raw['files'] is List ? (raw['files'] as List).length : 0,
+    );
+  }
+}
+
 class HitomiGalleryProvider {
   final http.Client client;
   const HitomiGalleryProvider(this.client);
@@ -95,6 +165,23 @@ class HitomiGalleryProvider {
       throw const FormatException('작품 번호가 일치하지 않아.');
     }
     return decoded['title'] is String ? (decoded['title'] as String).trim() : '';
+  }
+
+  Future<GalleryInfo> fetchInfo(String workId) async {
+    if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
+      throw const FormatException('작품 번호가 유효하지 않아.');
+    }
+    final raw = await _readScript(Uri.https(_host, '/galleries/$workId.js'));
+    final start = raw.indexOf('{');
+    final end = raw.lastIndexOf('}');
+    if (start < 0 || end <= start) {
+      throw const FormatException('갤러리 메타데이터가 손상됐어.');
+    }
+    final decoded = jsonDecode(raw.substring(start, end + 1));
+    if (decoded is! Map) {
+      throw const FormatException('갤러리 메타데이터가 유효하지 않아.');
+    }
+    return GalleryInfo.parse(workId, decoded);
   }
 
   Future<HitomiGallery> load(String workId) async {
