@@ -18,6 +18,7 @@ class ShortsFinderPanel extends StatefulWidget {
   final Future<void> Function() onFetch;
   final Future<void> Function() onOpenYoutube;
   final Future<void> Function() onSave;
+  final Future<void> Function(List<String> codes) onSaveSelectedWorks;
 
   const ShortsFinderPanel({
     super.key,
@@ -33,6 +34,7 @@ class ShortsFinderPanel extends StatefulWidget {
     required this.onFetch,
     required this.onOpenYoutube,
     required this.onSave,
+    required this.onSaveSelectedWorks,
   });
 
   @override
@@ -42,12 +44,21 @@ class ShortsFinderPanel extends StatefulWidget {
 class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
   bool _showDetails = false;
   bool _revealApiKey = false;
+  final Set<String> _selectedCodes = <String>{};
 
   @override
   void didUpdateWidget(covariant ShortsFinderPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.candidates.isNotEmpty && oldWidget.candidates.isEmpty) {
-      _showDetails = true;
+    final before = oldWidget.candidates.map((e) => e.code).join(',');
+    final after = widget.candidates.map((e) => e.code).join(',');
+    if (before != after) {
+      _selectedCodes.clear();
+      // Two explicit entries can be registered with one click; with many
+      // ambiguous candidates require the user to select them individually.
+      if (widget.candidates.length <= 2) {
+        _selectedCodes.addAll(widget.candidates.map((e) => e.code));
+      }
+      if (widget.candidates.isNotEmpty) _showDetails = true;
     }
   }
 
@@ -262,7 +273,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
           ),
           if (widget.candidates.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text('추출된 후보 · 원하는 번호를 선택해줘',
+            Text('추출된 후보 · 여러 작품은 체크 후 함께 저장해줘',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 7),
             Wrap(
@@ -271,15 +282,40 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               children: widget.candidates.take(20).map((candidate) {
                 return Tooltip(
                   message: candidate.evidence,
-                  child: ActionChip(
+                  child: FilterChip(
+                    key: Key('shorts-candidate-' + candidate.code),
                     label: Text(candidate.code),
+                    selected: _selectedCodes.contains(candidate.code),
                     avatar: const Icon(Icons.numbers, size: 15),
-                    onPressed: () =>
-                        setState(() => widget.workId.text = candidate.code),
+                    onSelected: (selected) => setState(() {
+                      if (selected) {
+                        _selectedCodes.add(candidate.code);
+                        widget.workId.text = candidate.code;
+                      } else {
+                        _selectedCodes.remove(candidate.code);
+                      }
+                    }),
                   ),
                 );
               }).toList(),
             ),
+            if (widget.candidates.length > 1) ...[
+              const SizedBox(height: 9),
+              FilledButton.icon(
+                key: const Key('save-selected-works'),
+                onPressed: widget.busy || _selectedCodes.isEmpty
+                    ? null : () => widget.onSaveSelectedWorks(
+                        widget.candidates
+                            .where((e) => _selectedCodes.contains(e.code))
+                            .map((e) => e.code).toList()),
+                icon: const Icon(Icons.library_add_outlined),
+                label: Text('선택한 작품 ${_selectedCodes.length}개 한 번에 저장'),
+              ),
+              const SizedBox(height: 4),
+              const Text('추출된 모든 숫자가 실제 작품 번호는 아니야. '
+                  '선택된 번호를 확인하고 저장해줘.',
+                  style: TextStyle(fontSize: 12, color: HypColors.muted)),
+            ],
           ],
           const SizedBox(height: 12),
           LayoutBuilder(builder: (context, constraints) {
@@ -291,7 +327,8 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             );
             final title = TextField(
               controller: widget.title,
-              decoration: const InputDecoration(labelText: '작품명 (선택)'),
+              decoration: const InputDecoration(labelText: '작품명 (선택)',
+                  helperText: '비워두면 작품 번호로 실제 제목을 조회해'),
             );
             final author = TextField(
               controller: widget.author,
