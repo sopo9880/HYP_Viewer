@@ -170,7 +170,7 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
         subtitle: Text(
           (isExisting ? '기존 묶음에 추가' : '새 묶음') + ' · ' +
           proposal.workIds.length.toString() + '개 후보 · ' +
-          '신뢰도 ' + proposal.confidence.toString() + '%\n' +
+          '규칙 점수 ' + proposal.confidence.toString() + '/100\n' +
           proposal.reason,
           maxLines: 3,
         ),
