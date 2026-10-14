@@ -8,6 +8,12 @@ import 'package:path_provider/path_provider.dart';
 class ReaderSettings {
   final String nextDirection; // left or right
   final bool twoPageSpread;
+  final bool verticalScrolling;
+  final bool showDownloadAction;
+  final bool showCoverAction;
+  final bool showPageControlsAction;
+  final bool showWebReaderAction;
+  final bool showOrientationAction;
   final int preloadPages;
   final bool autoCoverEnabled;
   final bool volumeKeyNavigation;
@@ -17,6 +23,12 @@ class ReaderSettings {
   const ReaderSettings({
     this.nextDirection = 'left',
     this.twoPageSpread = false,
+    this.verticalScrolling = false,
+    this.showDownloadAction = true,
+    this.showCoverAction = true,
+    this.showPageControlsAction = true,
+    this.showWebReaderAction = true,
+    this.showOrientationAction = true,
     this.preloadPages = 2,
     this.autoCoverEnabled = false,
     this.volumeKeyNavigation = false,
@@ -29,6 +41,12 @@ class ReaderSettings {
   ReaderSettings copyWith({
     String? nextDirection,
     bool? twoPageSpread,
+    bool? verticalScrolling,
+    bool? showDownloadAction,
+    bool? showCoverAction,
+    bool? showPageControlsAction,
+    bool? showWebReaderAction,
+    bool? showOrientationAction,
     int? preloadPages,
     bool? autoCoverEnabled,
     bool? volumeKeyNavigation,
@@ -37,6 +55,12 @@ class ReaderSettings {
   }) => ReaderSettings(
     nextDirection: nextDirection ?? this.nextDirection,
     twoPageSpread: twoPageSpread ?? this.twoPageSpread,
+    verticalScrolling: verticalScrolling ?? this.verticalScrolling,
+    showDownloadAction: showDownloadAction ?? this.showDownloadAction,
+    showCoverAction: showCoverAction ?? this.showCoverAction,
+    showPageControlsAction: showPageControlsAction ?? this.showPageControlsAction,
+    showWebReaderAction: showWebReaderAction ?? this.showWebReaderAction,
+    showOrientationAction: showOrientationAction ?? this.showOrientationAction,
     preloadPages: preloadPages ?? this.preloadPages,
     autoCoverEnabled: autoCoverEnabled ?? this.autoCoverEnabled,
     volumeKeyNavigation: volumeKeyNavigation ?? this.volumeKeyNavigation,
@@ -47,6 +71,12 @@ class ReaderSettings {
   Map<String, Object> toJson() => {
     'nextDirection': nextDirection,
     'twoPageSpread': twoPageSpread,
+    'verticalScrolling': verticalScrolling,
+    'showDownloadAction': showDownloadAction,
+    'showCoverAction': showCoverAction,
+    'showPageControlsAction': showPageControlsAction,
+    'showWebReaderAction': showWebReaderAction,
+    'showOrientationAction': showOrientationAction,
     'preloadPages': preloadPages,
     'autoCoverEnabled': autoCoverEnabled,
     'volumeKeyNavigation': volumeKeyNavigation,
@@ -58,6 +88,12 @@ class ReaderSettings {
       ReaderSettings(
         nextDirection: data['nextDirection'] == 'right' ? 'right' : 'left',
         twoPageSpread: data['twoPageSpread'] == true,
+        verticalScrolling: data['verticalScrolling'] == true,
+        showDownloadAction: data['showDownloadAction'] != false,
+        showCoverAction: data['showCoverAction'] != false,
+        showPageControlsAction: data['showPageControlsAction'] != false,
+        showWebReaderAction: data['showWebReaderAction'] != false,
+        showOrientationAction: data['showOrientationAction'] != false,
         autoCoverEnabled: data['autoCoverEnabled'] == true,
         volumeKeyNavigation: data['volumeKeyNavigation'] == true,
         forceLandscapeForSpreads: data['forceLandscapeForSpreads'] == true,

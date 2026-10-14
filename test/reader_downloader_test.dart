@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -48,12 +49,18 @@ void main() {
 
     final session = GalleryTransfer();
     final source = _TestPages();
+    final firstPagePaused = Completer<void>();
     final run = downloader.download('321', source, transfer: session,
       onProgress: (done, total, bytes) {
-        if (done == 1) session.pause();
+        if (done == 1) {
+          session.pause();
+          if (!firstPagePaused.isCompleted) firstPagePaused.complete();
+        }
       },
     );
-    await Future<void>.delayed(const Duration(milliseconds: 120));
+    // Wait for an actual event, not a fixed wall-clock delay. Filesystem
+    // latency on shared CI runners varies and can exceed 120 ms.
+    await firstPagePaused.future.timeout(const Duration(seconds: 30));
     expect(session.isPaused, true);
     expect(source.requested, 1);
     session.cancel();

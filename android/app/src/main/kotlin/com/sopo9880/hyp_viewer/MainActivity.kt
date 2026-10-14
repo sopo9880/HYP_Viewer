@@ -15,6 +15,8 @@ class MainActivity : FlutterActivity() {
     private var pendingSharedText: String? = null
     private var readerChannel: MethodChannel? = null
     private var securityChannel: MethodChannel? = null
+    private val securityUpdateRequest = 8421
+    private var pendingSecurityUpdate: MethodChannel.Result? = null
     private var volumeNavigationEnabled = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,6 +54,29 @@ class MainActivity : FlutterActivity() {
             "hyp_viewer/security")
         securityChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
+                "openSecuritySettingsForUpdate" -> {
+                    if (pendingSecurityUpdate != null) {
+                        result.error("settings_open", "Security settings already open", null)
+                    } else {
+                        pendingSecurityUpdate = result
+                        try {
+                            startActivityForResult(
+                                Intent(Settings.ACTION_SECURITY_SETTINGS),
+                                securityUpdateRequest
+                            )
+                        } catch (_: Exception) {
+                            try {
+                                startActivityForResult(
+                                    Intent(Settings.ACTION_SETTINGS),
+                                    securityUpdateRequest
+                                )
+                            } catch (_: Exception) {
+                                pendingSecurityUpdate = null
+                                result.success(false)
+                            }
+                        }
+                    }
+                }
                 "openSecuritySettings" -> {
                     try {
                         startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
@@ -75,6 +100,14 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == securityUpdateRequest) {
+            pendingSecurityUpdate?.success(true)
+            pendingSecurityUpdate = null
         }
     }
 

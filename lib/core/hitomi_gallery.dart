@@ -79,6 +79,24 @@ class HitomiGalleryProvider {
   static const _host = 'ltn.gold-usergeneratedcontent.net';
   static const _maxScriptBytes = 1024 * 1024;
 
+  /// Fetch a title only; saving a work must not download images or gg.js.
+  Future<String> fetchTitle(String workId) async {
+    if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
+      throw const FormatException('작품 번호는 숫자 1~12자리여야 해.');
+    }
+    final raw = await _readScript(Uri.https(_host, '/galleries/$workId.js'));
+    final start = raw.indexOf('{');
+    final end = raw.lastIndexOf('}');
+    if (start < 0 || end <= start) {
+      throw const FormatException('작품 제목 메타데이터가 올바르지 않아.');
+    }
+    final decoded = jsonDecode(raw.substring(start, end + 1));
+    if (decoded is! Map || decoded['id'].toString() != workId) {
+      throw const FormatException('작품 번호가 일치하지 않아.');
+    }
+    return decoded['title'] is String ? (decoded['title'] as String).trim() : '';
+  }
+
   Future<HitomiGallery> load(String workId) async {
     if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
       throw const FormatException('작품 번호는 숫자 1~12자리여야 해.');

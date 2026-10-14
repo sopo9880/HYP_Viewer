@@ -19,6 +19,7 @@ class GalleryReader extends StatefulWidget {
   final Future<void> Function()? onDownloadOffline;
   final void Function(int page, Uint8List bytes)? onPageLoaded;
   final Future<void> Function(int page, Uint8List bytes)? onChooseCover;
+  final ValueChanged<bool>? onVerticalScrollingChanged;
 
   const GalleryReader({
     super.key,
@@ -30,6 +31,7 @@ class GalleryReader extends StatefulWidget {
     this.onDownloadOffline,
     this.onPageLoaded,
     this.onChooseCover,
+    this.onVerticalScrollingChanged,
   });
 
   @override
@@ -51,6 +53,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   @override
   void initState() {
     super.initState();
+    _vertical = widget.settings.verticalScrolling;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _syncAndroidControls();
@@ -84,6 +87,12 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
         previous.dispose();
         if (mounted) _prefetchAround(_currentUnit);
       });
+    } else if (oldWidget.settings.verticalScrolling !=
+        widget.settings.verticalScrolling) {
+      final previous = _controller;
+      _vertical = widget.settings.verticalScrolling;
+      _controller = PageController(initialPage: _currentUnit);
+      WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
     } else if (oldWidget.settings.preloadPages !=
         widget.settings.preloadPages) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -218,6 +227,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       _controller = PageController(initialPage: _currentUnit);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
+    widget.onVerticalScrollingChanged?.call(_vertical);
   }
 
   Widget _failedImage(int index, Object error) {
@@ -250,7 +260,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 icon: const Icon(Icons.refresh),
                 label: const Text('다시 시도'),
               ),
-              if (widget.onOpenInBrowser != null)
+              if (widget.settings.showWebReaderAction &&
+                widget.onOpenInBrowser != null)
                 FilledButton.icon(
                   key: const Key('reader-web-fallback'),
                   onPressed: () { widget.onOpenInBrowser?.call(index + 1); },
@@ -314,6 +325,22 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final total = widget.archive.pageCount;
+    Widget previousButton() => IconButton(
+      key: const Key('reader-previous'),
+      tooltip: '이전 페이지 (PageUp)',
+      color: Colors.white,
+      onPressed: _currentUnit > 0 ? () => _turn(-1) : null,
+      icon: Icon(widget.settings.reverse
+          ? Icons.chevron_right : Icons.chevron_left),
+    );
+    Widget nextButton() => IconButton(
+      key: const Key('reader-next'),
+      tooltip: '다음 페이지 (PageDown / Space)',
+      color: Colors.white,
+      onPressed: _currentUnit < _units - 1 ? () => _turn(1) : null,
+      icon: Icon(widget.settings.reverse
+          ? Icons.chevron_left : Icons.chevron_right),
+    );
     return Focus(
       autofocus: true,
       onKeyEvent: _onKey,
@@ -326,20 +353,22 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
               ? widget.work.workId : widget.work.title,
               overflow: TextOverflow.ellipsis),
           actions: [
-            if (widget.onDownloadOffline != null)
+            if (widget.settings.showDownloadAction &&
+                widget.onDownloadOffline != null)
               IconButton(
                 key: const Key('reader-download-offline'),
                 tooltip: '온라인 이미지를 CBZ로 저장',
                 onPressed: () { widget.onDownloadOffline?.call(); },
                 icon: const Icon(Icons.download_for_offline_outlined),
               ),
-            if (widget.onChooseCover != null)
+            if (widget.settings.showCoverAction &&
+                widget.onChooseCover != null)
               IconButton(
                 tooltip: '현재 페이지를 서재 표지로 지정',
                 onPressed: _useAsCover,
                 icon: const Icon(Icons.photo_library_outlined),
               ),
-            IconButton(
+            if (widget.settings.showPageControlsAction) IconButton(
               tooltip: _controlsVisible ? '페이지 도구 숨기기' : '페이지 도구 표시',
               onPressed: () => setState(
                 () => _controlsVisible = !_controlsVisible),
@@ -352,7 +381,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 onPressed: () { widget.onOpenInBrowser?.call(_currentPage); },
                 icon: const Icon(Icons.open_in_browser),
               ),
-            if (!widget.settings.twoPageSpread)
+            if (widget.settings.showOrientationAction &&
+                !widget.settings.twoPageSpread)
               IconButton(
                 tooltip: _vertical ? '가로 넘기기' : '세로 넘기기',
                 icon: Icon(_vertical ? Icons.swap_horiz : Icons.swap_vert),
@@ -385,34 +415,23 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 8),
                     child: Row(children: [
-                      IconButton(
-                        key: const Key('reader-previous'),
-                        tooltip: '이전 페이지 (PageUp)',
-                        color: Colors.white,
-                        onPressed: _currentUnit > 0
-                            ? () => _turn(-1) : null,
-                        icon: Icon(widget.settings.reverse
-                            ? Icons.chevron_right : Icons.chevron_left),
-                      ),
+                      // In RTL books the NEXT action starts on the left.
+                      widget.settings.reverse ? nextButton() : previousButton(),
                       Text('$_currentPage / $total',
                           style: const TextStyle(color: Colors.white)),
-                      Expanded(child: Slider(
-                        value: (_currentUnit + 1).toDouble(),
-                        min: 1,
-                        max: _units.toDouble(),
-                        divisions: _units > 1 ? _units - 1 : null,
-                        onChanged: _units > 1
-                            ? (value) => _jumpTo(value.round() - 1) : null,
+                      Expanded(child: Directionality(
+                        textDirection: widget.settings.reverse
+                            ? TextDirection.rtl : TextDirection.ltr,
+                        child: Slider(
+                          value: (_currentUnit + 1).toDouble(),
+                          min: 1,
+                          max: _units.toDouble(),
+                          divisions: _units > 1 ? _units - 1 : null,
+                          onChanged: _units > 1
+                              ? (value) => _jumpTo(value.round() - 1) : null,
+                        ),
                       )),
-                      IconButton(
-                        key: const Key('reader-next'),
-                        tooltip: '다음 페이지 (PageDown / Space)',
-                        color: Colors.white,
-                        onPressed: _currentUnit < _units - 1
-                            ? () => _turn(1) : null,
-                        icon: Icon(widget.settings.reverse
-                            ? Icons.chevron_left : Icons.chevron_right),
-                      ),
+                      widget.settings.reverse ? previousButton() : nextButton(),
                     ]),
                   ),
                 ),

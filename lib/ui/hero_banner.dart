@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'hyp_theme.dart';
 
@@ -6,11 +8,13 @@ import 'hyp_theme.dart';
 class HypHeroBanner extends StatefulWidget {
   final VoidCallback onOpenLibrary;
   final VoidCallback onOpenDownloads;
+  final Uint8List? artwork;
 
   const HypHeroBanner({
     super.key,
     required this.onOpenLibrary,
     required this.onOpenDownloads,
+    this.artwork,
   });
 
   @override
@@ -59,7 +63,25 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
             ),
           ),
           child: Stack(children: [
-            Positioned(
+            if (_index == 0 && widget.artwork != null) ...[
+              Positioned.fill(
+                child: Image.memory(widget.artwork!, fit: BoxFit.cover,
+                    cacheWidth: 1600, gaplessPlayback: true),
+              ),
+              // Keep the slogan and carousel controls legible on bright art.
+              Positioned.fill(child: DecoratedBox(
+                decoration: BoxDecoration(gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    const Color(0xFF13142A).withValues(alpha: 0.92),
+                    const Color(0xFF13142A).withValues(alpha: 0.60),
+                    const Color(0xFF13142A).withValues(alpha: 0.22),
+                  ],
+                )),
+              )),
+            ],
+            if (_index != 0 || widget.artwork == null) Positioned(
               right: compact ? -185 : -95,
               bottom: -190,
               child: Container(
@@ -74,7 +96,7 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
                 ),
               ),
             ),
-            Positioned(
+            if (_index != 0 || widget.artwork == null) Positioned(
               right: compact ? -35 : 72,
               top: compact ? 38 : -20,
               child: Icon(

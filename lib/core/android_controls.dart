@@ -45,6 +45,20 @@ class AndroidReaderControls {
     }
   }
 
+  /// Completes only after the user returns from Android Settings.
+  /// Security protections are never modified programmatically.
+  static Future<bool> openSecuritySettingsForUpdate() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _security.invokeMethod<bool>(
+          'openSecuritySettingsForUpdate') ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   static Future<bool> openSecuritySettings() async {
     if (!Platform.isAndroid) return false;
     try {
