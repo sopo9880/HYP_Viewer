@@ -15,8 +15,12 @@ class NumberCandidate {
 /// AI-free numeric extraction: candidates are not verified work identifiers.
 class NumberExtractor {
   static final RegExp _groups = RegExp(r'\d+');
+  static final RegExp _links = RegExp(
+    r'https?://(?:www\.)?hitomi\.la/(?:reader|galleries)/(\d{6,9})(?:\.html)?',
+    caseSensitive: false,
+  );
   static final RegExp _hints = RegExp(
-    r'(번호|품번|코드|날짜|시간|방문|갱생|시대|배경|년|월|일|만|횟수|컬렉션|작품)',
+    r'(번호|품번|코드|날짜|시간|방문|갱생|시대|배경|년|월|일|만|횟수|컬렉션|작품|편|파트)',
     caseSensitive: false,
   );
 
@@ -46,24 +50,41 @@ class NumberExtractor {
     }
 
     for (final line in lines) {
-      final s = line.trim();
-      if (s.isEmpty || s.contains('https://') || s.contains('http://')) continue;
+      var s = line.trim();
+      if (s.isEmpty) continue;
+      // URLs contain unrelated numbers; recognize gallery links explicitly
+      // and remove all other links before looking for numeric phrases.
+      for (final link in _links.allMatches(s)) {
+        add(link.group(1)!, s, 85);
+      }
+      s = s.replaceAll(RegExp(r'https?://\S+'), ' ').trim();
+      if (s.isEmpty) continue;
       final groups = _groups.allMatches(s).map((e) => e.group(0)!).toList();
       if (groups.isEmpty) continue;
-      add(groups.join(), s, 25);
-
-      // When a comment mixes an unrelated year or user ID, keep each ID too.
+      // A comment such as "1편 1234567, 2편 7654321" has TWO works.
+      // Joining every number would manufacture an unrelated extra ID.
+      if (!groups.any((g) => RegExp(r'^\d{6,9}
+    }
+    return candidates.values.toList()
+      ..sort((a, b) {
+        final byScore = b.score.compareTo(a.score);
+        return byScore != 0 ? byScore : a.code.compareTo(b.code);
+      });
+  }
+}
+).hasMatch(g))) {
+        add(groups.join(), s, 25);
+      }
       for (final group in groups) {
         add(group, s, 45);
       }
 
-      // A ten-thousands unit with a short remainder needs zero padding.
-      final tens = RegExp(r'(\d+)\s*만\s*(\d{1,4})').firstMatch(s);
-      if (tens != null) {
+      // Support multiple "271만 59" style IDs in the same comment.
+      for (final tens in RegExp(r'(\d+)\s*만\s*(\d{1,4})').allMatches(s)) {
         final major = int.tryParse(tens.group(1)!);
         final minor = int.tryParse(tens.group(2)!);
         if (major != null && minor != null) {
-          add((major * 10000 + minor).toString(), s, 20);
+          add((major * 10000 + minor).toString(), s, 45);
         }
       }
     }
