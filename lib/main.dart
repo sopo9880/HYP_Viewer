@@ -312,6 +312,7 @@ class _LibraryHomeState extends State<LibraryHome> {
           work: readerWork,
           archive: remote,
           onPageChanged: (page) { _touchRead(work, page: page); },
+          onOpenInBrowser: (page) => _openWebReader(work, page: page),
         )),
       );
     } catch (e) {
