@@ -80,6 +80,30 @@ void main() {
     expect(find.byTooltip('세로 넘기기'), findsOneWidget);
   });
 
+  testWidgets('viewer upper-right toolbar visibility follows settings',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData.dark(),
+      home: GalleryReader(
+        work: WorkEntry.create(workId: '2711759'),
+        archive: _Pages(),
+        settings: const ReaderSettings(
+          showPageControlsAction: false,
+          showOrientationAction: false,
+          showCoverAction: false,
+          showWebReaderAction: false,
+        ),
+        onPageChanged: (_) {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('페이지 도구 숨기기'), findsNothing);
+    expect(find.byTooltip('세로 넘기기'), findsNothing);
+    expect(find.byKey(const Key('reader-next')), findsOneWidget);
+  });
+
   testWidgets('two-page spread turns by pairs and keyboard works in RTL',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 850));

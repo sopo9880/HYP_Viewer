@@ -952,6 +952,61 @@ class _HypDashboardState extends State<HypDashboard> {
             ),
           ),
           const SizedBox(height: 9),
+          ExpansionTile(
+            key: const Key('reader-toolbar-settings'),
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: const Text('뷰어 오른쪽 위 아이콘 구성'),
+            subtitle: const Text('각 버튼을 표시하거나 숨길 수 있어. 기본값은 모두 표시야.'),
+            children: [
+              SwitchListTile.adaptive(
+                key: const Key('reader-show-download-action-setting'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('다운로드 버튼 표시'),
+                subtitle: const Text('온라인 이미지 저장 버튼'),
+                value: widget.readerSettings.showDownloadAction,
+                onChanged: (v) => widget.onSaveReaderSettings(
+                    widget.readerSettings.copyWith(showDownloadAction: v)),
+              ),
+              SwitchListTile.adaptive(
+                key: const Key('reader-show-cover-action-setting'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('표지 지정 버튼 표시'),
+                subtitle: const Text('현재 페이지를 표지로 등록하는 버튼'),
+                value: widget.readerSettings.showCoverAction,
+                onChanged: (v) => widget.onSaveReaderSettings(
+                    widget.readerSettings.copyWith(showCoverAction: v)),
+              ),
+              SwitchListTile.adaptive(
+                key: const Key('reader-show-page-controls-action-setting'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('페이지 도구 버튼 표시'),
+                subtitle: const Text('하단 페이지 바 표시/숨기기 버튼'),
+                value: widget.readerSettings.showPageControlsAction,
+                onChanged: (v) => widget.onSaveReaderSettings(
+                    widget.readerSettings.copyWith(showPageControlsAction: v)),
+              ),
+              SwitchListTile.adaptive(
+                key: const Key('reader-show-web-reader-action-setting'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('웹 리더 버튼 표시'),
+                subtitle: const Text('현재 페이지를 브라우저에서 열기'),
+                value: widget.readerSettings.showWebReaderAction,
+                onChanged: (v) => widget.onSaveReaderSettings(
+                    widget.readerSettings.copyWith(showWebReaderAction: v)),
+              ),
+              SwitchListTile.adaptive(
+                key: const Key('reader-show-orientation-action-setting'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('가로/세로 전환 버튼 표시'),
+                subtitle: const Text('뷰어 오른쪽 위 전환 버튼'),
+                value: widget.readerSettings.showOrientationAction,
+                onChanged: (v) => widget.onSaveReaderSettings(
+                    widget.readerSettings.copyWith(showOrientationAction: v)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
           DropdownButtonFormField<int>(
             key: const Key('reader-preload-setting'),
             initialValue: widget.readerSettings.preloadPages,

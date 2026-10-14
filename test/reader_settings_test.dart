@@ -9,12 +9,16 @@ void main() {
       nextDirection: 'right',
       twoPageSpread: true,
       verticalScrolling: true,
+      showDownloadAction: false,
+      showOrientationAction: false,
       preloadPages: 3,
     );
     final output = ReaderSettings.fromJson(prefs.toJson());
     expect(output.reverse, true);
     expect(output.twoPageSpread, true);
     expect(output.verticalScrolling, true);
+    expect(output.showDownloadAction, false);
+    expect(output.showOrientationAction, false);
     expect(output.preloadPages, 3);
 
     final bad = ReaderSettings.fromJson({
@@ -25,6 +29,8 @@ void main() {
     expect(bad.nextDirection, 'left');
     expect(bad.twoPageSpread, false);
     expect(bad.verticalScrolling, false);
+    expect(bad.showDownloadAction, true);
+    expect(bad.showOrientationAction, true);
     expect(bad.preloadPages, 3);
   });
 
