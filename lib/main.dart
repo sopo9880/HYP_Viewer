@@ -615,6 +615,7 @@ class _LibraryHomeState extends State<LibraryHome> {
           archive: remote,
           onPageChanged: (page) { _touchRead(work, page: page); },
           onOpenInBrowser: (page) => _openWebReader(work, page: page),
+          onDownloadOffline: () => _downloadOnline(work),
           settings: readerSettings,
           onPageLoaded: (page, bytes) {
             unawaited(_captureAutomaticCover(work, page, bytes));
