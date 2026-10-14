@@ -13,10 +13,13 @@ import 'core/export.dart';
 import 'core/gallery.dart';
 import 'core/cover_store.dart';
 import 'core/reader_settings.dart';
+import 'core/reader_downloader.dart';
+import 'core/android_controls.dart';
 import 'core/hitomi_reader_link.dart';
 import 'core/hitomi_gallery.dart';
 import 'ui/gallery_reader.dart';
 import 'ui/cover_picker.dart';
+import 'ui/cover_cropper.dart';
 import 'ui/hyp_dashboard.dart';
 import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
@@ -64,6 +67,8 @@ class _LibraryHomeState extends State<LibraryHome> {
   final sourceSettings = OnlineSourceSettings();
   final onlineSourceInput = TextEditingController();
   CancelDownload? galleryDownloadToken;
+  GalleryTransfer? readerTransfer;
+  bool isReaderTransferPaused = false;
   String? downloadingGalleryKey;
   int downloadedGalleryPages = 0;
   int totalGalleryPages = 0;
@@ -231,7 +236,9 @@ class _LibraryHomeState extends State<LibraryHome> {
       await _commitLibrary((latest) => LibraryBackup.merge(latest,
           LibraryBackup(works: [work], collections: const [])));
       // Start preparing the first-page thumbnail, without blocking Save.
-      unawaited(_prepareAutomaticCover(work));
+      if (readerSettings.autoCoverEnabled) {
+        unawaited(_prepareAutomaticCover(work));
+      }
       _status('서재에 저장했어.');
     } catch (e) {
       _status('저장 실패: ' + e.toString());
@@ -350,7 +357,7 @@ class _LibraryHomeState extends State<LibraryHome> {
   }
 
   Future<void> _prepareAutomaticCover(WorkEntry work) async {
-    if (work.coverMode != 'auto') return;
+    if (!readerSettings.autoCoverEnabled || work.coverMode != 'auto') return;
     final client = http.Client();
     try {
       if (await coverStore.exists(work.workId)) return;
@@ -369,7 +376,8 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   Future<void> _captureAutomaticCover(
       WorkEntry work, int page, Uint8List bytes) async {
-    if (page != 1 || work.coverMode != 'auto' ||
+    if (!readerSettings.autoCoverEnabled ||
+        page != 1 || work.coverMode != 'auto' ||
         !_coverCaptures.add(work.workId)) return;
     try {
       if (!await coverStore.exists(work.workId)) {
