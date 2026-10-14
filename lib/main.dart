@@ -1559,6 +1559,93 @@ class _LibraryHomeState extends State<LibraryHome> {
     }
   }
 
+  /// Remove selected shelf entries in ONE library save; local files are
+  /// preserved unless the user explicitly opts into their deletion.
+  Future<bool> _deleteSelectedWorks(List<String> rawIds) async {
+    final selectedIds = rawIds.toSet();
+    final selected = library.works.where(
+        (w) => selectedIds.contains(w.workId)).toList();
+    if (!mounted || selected.isEmpty) return false;
+    if (selected.any((w) => downloadingGalleryKey == w.key)) {
+      _status('다운로드 중인 작품은 완료하거나 취소한 뒤 삭제해줘.');
+      return false;
+    }
+    var deleteFiles = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (ctx, update) => AlertDialog(
+          title: const HypText('선택한 작품 삭제'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('선택된 작품: ' + selected.length.toString() + '개',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                for (final work in selected.take(4))
+                  Text('#' + work.workId + ' · ' + work.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                if (selected.length > 4)
+                  Text('외 ' + (selected.length - 4).toString() + '개'),
+                const SizedBox(height: 10),
+                const HypText('선택한 작품의 즐겨찾기와 읽기 기록도 제거돼. '
+                    '다른 작품과 컬렉션은 유지해.'),
+                CheckboxListTile(
+                  key: const Key('bulk-delete-files-checkbox'),
+                  value: deleteFiles,
+                  contentPadding: EdgeInsets.zero,
+                  title: const HypText('로컬 파일도 함께 삭제'),
+                  subtitle: const HypText('기본 OFF. 켜면 이 작품들의 '
+                      '다운로드 파일과 표지 미리보기도 삭제해.'),
+                  onChanged: (v) => update(() => deleteFiles = v == true),
+                ),
+              ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog, false),
+                child: const HypText('취소')),
+            FilledButton.icon(
+              key: const Key('confirm-delete-selected'),
+              onPressed: () => Navigator.pop(dialog, true),
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const HypText('선택 삭제')),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return false;
+    if (selected.any((w) => downloadingGalleryKey == w.key)) {
+      _status('다운로드가 진행 중인 작품은 삭제할 수 없어.');
+      return false;
+    }
+    final ids = selected.map((w) => w.workId).toSet();
+    try {
+      await _commitLibrary((latest) => latest.withoutWorks(ids));
+    } catch (e) {
+      _status('선택 삭제 실패: ' + e.toString());
+      return false;
+    }
+    if (mounted) setState(() => coverEpoch++);
+    var fileErrors = 0;
+    if (deleteFiles) {
+      for (final id in ids) {
+        try {
+          await galleryStore.delete(id);
+          await coverStore.deleteAllForWork(id);
+        } catch (_) {
+          fileErrors++;
+        }
+      }
+    }
+    _status('선택한 작품 ' + ids.length.toString() +
+        '개를 서재에서 제거했어. ' +
+        (fileErrors > 0
+            ? '일부 로컬 파일 정리에 실패했어.'
+            : deleteFiles ? '로컬 파일도 정리했어.' : '로컬 파일은 유지했어.'));
+    return true;
+  }
+
   Future<void> _deleteOffline(WorkEntry work) async {
     if (!await galleryStore.exists(work.workId) || !mounted) return;
     final approved = await showDialog<bool>(
