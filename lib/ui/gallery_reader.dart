@@ -50,6 +50,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   int _reloadGeneration = 0;
   final Map<int, Future<Uint8List>> _imageCache = {};
   GalleryDiskCache? _diskCache;
+  int? _pendingWebtoonJump;
+  Timer? _jumpReleaseTimer;
   final ItemScrollController _webtoonController = ItemScrollController();
   final ItemPositionsListener _webtoonPositions = ItemPositionsListener.create();
 
@@ -62,10 +64,10 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   void initState() {
     super.initState();
     _vertical = widget.settings.verticalScrolling;
-    if (widget.settings.preloadPages == -1 ||
-        widget.settings.preloadPages > 4) {
-      _diskCache = GalleryDiskCache(widget.archive);
-    }
+    // ALL visible and background requests share this same bounded queue.
+    // Data saver uses one request at a time, regardless of preload setting.
+    _diskCache = GalleryDiskCache(widget.archive,
+        concurrency: widget.settings.dataSaverMode ? 1 : 2);
     _webtoonPositions.itemPositions.addListener(_onWebtoonPosition);
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -90,13 +92,13 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
         if (mounted) _syncAndroidControls();
       });
     }
-    if (oldWidget.settings.preloadPages != widget.settings.preloadPages) {
+    if (oldWidget.archive != widget.archive ||
+        oldWidget.settings.dataSaverMode != widget.settings.dataSaverMode) {
       final oldDisk = _diskCache;
-      _diskCache = widget.settings.preloadPages == -1 ||
-              widget.settings.preloadPages > 4
-          ? GalleryDiskCache(widget.archive) : null;
-      if (oldDisk != null) unawaited(oldDisk.dispose());
+      _diskCache = GalleryDiskCache(widget.archive,
+          concurrency: widget.settings.dataSaverMode ? 1 : 2);
       _imageCache.clear();
+      if (oldDisk != null) unawaited(oldDisk.dispose());
     }
     if (oldWidget.settings.webtoonMode != widget.settings.webtoonMode ||
         oldWidget.settings.twoPageSpread != widget.settings.twoPageSpread) {
@@ -127,6 +129,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _webtoonPositions.itemPositions.removeListener(_onWebtoonPosition);
+    _jumpReleaseTimer?.cancel();
     if (_diskCache != null) unawaited(_diskCache!.dispose());
     unawaited(AndroidReaderControls.deactivate());
     _controller.dispose();
@@ -163,24 +166,31 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
 
   void _prefetchAround(int unit) {
     if (!mounted || widget.archive.pageCount == 0) return;
-    final begin = unit * _step;
-    final end = (begin + _step).clamp(0, widget.archive.pageCount).toInt();
-    final configuredRadius = widget.settings.preloadPages;
-    // Keep decoded bytes from at most a handful of nearby pages in RAM.
-    // Custom wide ranges and -1 full preload use temporary DISK instead.
-    final memoryRadius = configuredRadius == -1 ? 3 :
-        configuredRadius.clamp(0, 4).toInt();
-    final first = (begin - memoryRadius).clamp(0, widget.archive.pageCount).toInt();
-    final last = (end + memoryRadius).clamp(0, widget.archive.pageCount).toInt();
-    if (configuredRadius == -1) {
+    final begin = (unit * _step).clamp(0, widget.archive.pageCount - 1)
+        .toInt();
+    final configured = widget.settings.preloadPages;
+    final saving = widget.settings.dataSaverMode;
+    // A user-requested jump MUST have higher priority than full-cache work.
+    _bytesAt(begin);
+    if (_step == 2 && begin + 1 < widget.archive.pageCount) {
+      _bytesAt(begin + 1);
+    }
+    if (saving) {
+      // Data saver overrides -1 without changing the user's saved setting.
+      _diskCache?.warmAround(begin + _step, 0);
+    } else if (configured == -1) {
       _diskCache?.warmAll(startingAt: begin);
-    } else if (configuredRadius > 4) {
-      _diskCache?.warmAround(begin, configuredRadius);
+    } else if (configured > 0) {
+      _diskCache?.warmAround(begin, configured);
     }
-    for (var index = first; index < last; index++) {
-      _bytesAt(index);
-    }
-    // Do not cache the full gallery in memory.
+    final memoryRadius = saving ? 1 :
+        configured == -1 ? 3 : configured.clamp(0, 4).toInt();
+    final first = (begin - memoryRadius).clamp(0, widget.archive.pageCount)
+        .toInt();
+    final last = (begin + _step + memoryRadius)
+        .clamp(0, widget.archive.pageCount).toInt();
+    // Avoid eagerly requesting all of the surrounding pages from the
+    // widget tree. Only a few prioritized visible pages enter _imageCache.
     _imageCache.removeWhere((index, _) => index < first || index >= last);
   }
 
@@ -213,14 +223,23 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
 
   void _jumpTo(int unit) {
     final target = unit.clamp(0, _units - 1).toInt();
+    // A jump is navigation, not an image-loading outcome. Persist the
+    // destination before asynchronous image layout or decoding begins.
+    setState(() => _currentUnit = target);
+    widget.onPageChanged(_currentPage);
+    _prefetchAround(target);
     if (widget.settings.webtoonMode) {
+      _pendingWebtoonJump = target;
+      _jumpReleaseTimer?.cancel();
+      _jumpReleaseTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) _pendingWebtoonJump = null;
+      });
       if (_webtoonController.isAttached) {
         _webtoonController.jumpTo(index: target);
       }
       return;
     }
-    if (!_controller.hasClients) return;
-    _controller.jumpToPage(target);
+    if (_controller.hasClients) _controller.jumpToPage(target);
   }
 
   void _onWebtoonPosition() {
@@ -229,6 +248,15 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
         .where((position) => position.itemTrailingEdge > 0 &&
             position.itemLeadingEdge < 1).toList();
     if (visible.isEmpty) return;
+    // Large jumps may briefly report stale/placeholder item positions.
+    // Never replace the requested target with a fabricated first page.
+    if (_pendingWebtoonJump != null) {
+      if (visible.any((p) => p.index == _pendingWebtoonJump)) {
+        _pendingWebtoonJump = null;
+        _jumpReleaseTimer?.cancel();
+      }
+      return;
+    }
     visible.sort((a, b) => a.itemLeadingEdge.compareTo(b.itemLeadingEdge));
     final index = visible.first.index;
     if (index == _currentUnit) return;
@@ -246,10 +274,14 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      _turn(widget.settings.reverse ? 1 : -1);
+    if (_vertical && key == LogicalKeyboardKey.arrowUp) {
+      _turn(-1);
+    } else if (_vertical && key == LogicalKeyboardKey.arrowDown) {
+      _turn(1);
+    } else if (key == LogicalKeyboardKey.arrowLeft) {
+      _turn(!_vertical && widget.settings.reverse ? 1 : -1);
     } else if (key == LogicalKeyboardKey.arrowRight) {
-      _turn(widget.settings.reverse ? -1 : 1);
+      _turn(!_vertical && widget.settings.reverse ? -1 : 1);
     } else if (key == LogicalKeyboardKey.pageDown ||
                key == LogicalKeyboardKey.space) {
       _turn(1);
@@ -300,7 +332,10 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
 
   Widget _failedImage(int index, Object error) {
     final raw = error.toString();
-    final reason = raw.length <= 430 ? raw : raw.substring(0, 430) + '…';
+    final reason = RegExp(r'\b(429|502|503|504)\b').hasMatch(raw)
+        ? '이미지 서버가 일시적으로 응답하지 않았어. '
+          '앱이 요청 속도를 제한하고 재시도했지만 아직 실패했어.'
+        : raw.length <= 280 ? raw : raw.substring(0, 280) + '…';
     return Center(child: Padding(
       padding: const EdgeInsets.all(14),
       child: ConstrainedBox(
@@ -347,9 +382,14 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       FutureBuilder<Uint8List>(
     future: _bytesAt(index),
     builder: (context, snapshot) {
-      if (snapshot.hasError) return _failedImage(index, snapshot.error!);
+      if (snapshot.hasError) {
+        return webtoon
+            ? AspectRatio(aspectRatio: 0.72,
+                child: _failedImage(index, snapshot.error!))
+            : _failedImage(index, snapshot.error!);
+      }
       if (!snapshot.hasData) {
-        return const Center(child: Column(
+        final loading = const Center(child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             CircularProgressIndicator(),
@@ -358,6 +398,10 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 style: TextStyle(color: Colors.white70)),
           ],
         ));
+        // Give unloaded webtoon pages a stable nonzero measured height.
+        // Zero-height placeholders previously materialized whole galleries.
+        return webtoon ? AspectRatio(aspectRatio: 0.72,
+            child: loading) : loading;
       }
       if (webtoon) {
         return Image.memory(
@@ -409,7 +453,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       tooltip: '이전 페이지 (PageUp)',
       color: Colors.white,
       onPressed: _currentUnit > 0 ? () => _turn(-1) : null,
-      icon: Icon(widget.settings.reverse
+      icon: Icon(_vertical || widget.settings.webtoonMode
+          ? Icons.keyboard_arrow_up : widget.settings.reverse
           ? Icons.chevron_right : Icons.chevron_left),
     );
     Widget nextButton() => IconButton(
@@ -417,7 +462,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       tooltip: '다음 페이지 (PageDown / Space)',
       color: Colors.white,
       onPressed: _currentUnit < _units - 1 ? () => _turn(1) : null,
-      icon: Icon(widget.settings.reverse
+      icon: Icon(_vertical || widget.settings.webtoonMode
+          ? Icons.keyboard_arrow_down : widget.settings.reverse
           ? Icons.chevron_left : Icons.chevron_right),
     );
     return Focus(
@@ -493,7 +539,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                         width: constraints.maxWidth,
                         height: constraints.maxHeight,
                         vertical: _vertical,
-                        reverse: widget.settings.reverse,
+                        reverse: !_vertical && widget.settings.reverse,
                       );
                       if (delta != 0) _turn(delta);
                     }
@@ -504,7 +550,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                   _reloadGeneration.toString() + '-' +
                   widget.settings.twoPageSpread.toString()),
                 controller: _controller,
-                reverse: widget.settings.reverse,
+                reverse: !_vertical && widget.settings.reverse,
                 scrollDirection: _vertical ? Axis.vertical : Axis.horizontal,
                 itemCount: _units,
                 onPageChanged: (unit) {
@@ -525,11 +571,12 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                         horizontal: 10, vertical: 8),
                     child: Row(children: [
                       // In RTL books the NEXT action starts on the left.
-                      widget.settings.reverse ? nextButton() : previousButton(),
+                      !_vertical && widget.settings.reverse
+                          ? nextButton() : previousButton(),
                       HypText('$_currentPage / $total',
                           style: const TextStyle(color: Colors.white)),
                       Expanded(child: Directionality(
-                        textDirection: widget.settings.reverse
+                        textDirection: !_vertical && widget.settings.reverse
                             ? TextDirection.rtl : TextDirection.ltr,
                         child: Slider(
                           value: (_currentUnit + 1).toDouble(),
@@ -540,7 +587,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                               ? (value) => _jumpTo(value.round() - 1) : null,
                         ),
                       )),
-                      widget.settings.reverse ? previousButton() : nextButton(),
+                      !_vertical && widget.settings.reverse
+                          ? previousButton() : nextButton(),
                     ]),
                   ),
                 ),
