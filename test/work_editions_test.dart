@@ -3,6 +3,12 @@ import 'package:hyp_viewer/core/work.dart';
 import 'package:hyp_viewer/core/work_editions.dart';
 
 void main() {
+  WorkEntry work(String code, String title, String language, {
+    String author = 'Creator', int pages = 20, String series = 'Book',
+  }) => WorkEntry.create(workId: code, title: title, author: author)
+      .copyWith(sourceLanguage: language, totalPages: pages,
+        sourceSeries: series);
+
   test('same title/creator cannot auto-link conflicting known series', () {
     final left = work('111111', 'Shared Title', 'japanese',
         author: 'Maker', series: 'Original A');
@@ -17,11 +23,6 @@ void main() {
         left, right.copyWith(sourceSeries: '')).autoLink, true);
   });
 
-  WorkEntry work(String code, String title, String language, {
-    String author = 'Creator', int pages = 20, String series = 'Book',
-  }) => WorkEntry.create(workId: code, title: title, author: author)
-      .copyWith(sourceLanguage: language, totalPages: pages,
-        sourceSeries: series);
   test('same original chapter with a translated subtitle links', () {
     final japanese = work('111111', 'A Title | 日本語訳', 'japanese');
     final korean = work('222222', 'A Title | 한국어', 'korean');
