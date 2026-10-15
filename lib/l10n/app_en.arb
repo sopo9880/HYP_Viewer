@@ -346,5 +346,33 @@
         "type": "String"
       }
     }
-  }
+  },
+  "settingsHeroUploadNote": "PNG, JPG or WebP (up to 12 MB). The image stays on this device and can optionally be included in an integrated JSON backup.",
+  "settingsTapZonesNote": "Left 30%: previous page. Right 30%: next page. Middle 40%: show/hide controls. Your previous setting is preserved.",
+  "settingsDataSaverNote": "Reduces initial full loading and requests only visible pages and one ahead, with one concurrent network request.",
+  "tooltipUpdate": "Check for Updates",
+  "tooltipMore": "More Options",
+  "tooltipDismiss": "Dismiss Notification",
+  "tooltipBackLibrary": "Back to Library",
+  "tooltipManageGroup": "Manage Group",
+  "tooltipGroupName": "Group Name",
+  "tooltipMoveUp": "Move Up",
+  "tooltipMoveDown": "Move Down",
+  "tooltipSortDirection": "Reverse Sort Order",
+  "tooltipPopularPeriod": "Hitomi Popularity Period",
+  "tooltipRefreshPopular": "Refresh Popularity Ranking",
+  "tooltipSearchLanguage": "Search Language Filter",
+  "tooltipAddLibrary": "Add to Library",
+  "tooltipSearchLibrary": "Search Work ID or Title",
+  "settingsKeyboardHint": "Viewer keyboard: ← / →, PageUp / PageDown, Space, Home / End, Esc (close). Choose covers from each work's library menu.",
+  "searchLanguageChip": "Language: {language} ▾",
+  "@searchLanguageChip": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralTitle": "Settings",
+  "settingsGeneralSubtitle": "Manage reader controls, covers, download sources, and app data."
 }
