@@ -216,8 +216,8 @@ void main() {
       })), 200, headers: {'content-type':'application/json; charset=utf-8'});
     });
     final result = await YoutubePublicClient(client).fetch(videoId);
-    expect(page, 3);
-    expect(result.comments.length, 3);
+    expect(page, 10);
+    expect(result.comments.length, 10);
     expect(result.mayBeIncomplete, true);
     client.close();
   });
@@ -238,9 +238,22 @@ void main() {
     client.close();
   });
 
-  test('clearly fails when public web configuration is unavailable', () async {
+  test('preserves visible metadata when public comment transport changes',
+      () async {
     final client = MockClient((request) async =>
         watchResponse(html(initial: section('one'), withConfig: false)));
+    final result = await YoutubePublicClient(client).fetch(videoId);
+    expect(result.description, contains('2711759'));
+    expect(result.comments, isEmpty);
+    expect(result.mayBeIncomplete, true);
+    client.close();
+  });
+
+  test('fails when neither metadata nor public comment transport exists',
+      () async {
+    final client = MockClient((request) async =>
+        http.Response.bytes(utf8.encode(
+            '<html><script>var ytInitialData={};</script></html>'), 200));
     expect(() => YoutubePublicClient(client).fetch(videoId),
         throwsFormatException);
     client.close();

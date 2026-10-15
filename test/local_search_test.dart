@@ -52,6 +52,25 @@ void main() {
         language: 'korean').map((w) => w.workId), ['2345678']);
   });
 
+  test('canonical language aliases match across local and online editions', () {
+    final languages = {
+      'korean': ['ko', 'kor', '한국어'],
+      'japanese': ['ja', 'jpn', '日本語'],
+      'english': ['en', 'eng', 'english'],
+      'chinese': ['zh', 'zh-hans', 'zh-hant', 'chs', 'cht'],
+    };
+    for (final entry in languages.entries) {
+      for (final alias in entry.value) {
+        final item = source.copyWith(sourceLanguage: alias);
+        expect(LocalWorkSearch.matches(item, '', language: entry.key), true,
+            reason: 'Expected ' + entry.key + ' to match ' + alias);
+        expect(LocalWorkSearch.matches(item, 'language:' + entry.key), true);
+      }
+    }
+    final unknown = source.copyWith(sourceLanguage: '');
+    expect(LocalWorkSearch.matches(unknown, '', language: 'korean'), false);
+  });
+
   test('language aliases work even when query is blank', () {
     expect(LocalWorkSearch.matches(source,'',language:'japanese'), true);
     expect(LocalWorkSearch.matches(source,'',language:'korean'), false);

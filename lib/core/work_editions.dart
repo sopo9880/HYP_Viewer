@@ -14,10 +14,13 @@ class EditionMatch {
 abstract final class WorkEditions {
   static String originalTitle(String title) {
     var s = title.split('|').first.trim();
-    s = s.replaceAll(
-      RegExp(r'\b(english|korean|japanese|chinese|translated|translation)\b',
-          caseSensitive: false), ' ');
-    s = s.replaceAll(RegExp(r'(한국어|영어|일본어|中文|日本語|翻訳|번역판)'), ' ');
+    // Only strip a translation marker when it is delimited or at the end.
+    // "The English Teacher" and "Korean Love" are legitimate titles.
+    final markers = RegExp(
+      r'\s*[\[(](?:english|korean|japanese|chinese|translation|'
+      r'translated|한국어|영어|일본어|中文|日本語|翻訳|번역판)[\])]\s*$',
+      caseSensitive: false);
+    s = s.replaceFirst(markers, '').trim();
     return WorkGrouping.normalizedSeries(s);
   }
 
@@ -25,10 +28,11 @@ abstract final class WorkEditions {
   /// A record labeled 'ko' is not a different edition from 'korean'.
   static String canonicalLanguage(String value) {
     switch (value.trim().toLowerCase()) {
-      case 'ko': case 'korean': case '한국어': return 'korean';
-      case 'ja': case 'japanese': case '日本語': return 'japanese';
-      case 'en': case 'english': return 'english';
-      case 'zh': case 'zh-cn': case 'zh-tw':
+      case 'ko': case 'kor': case 'korean': case '한국어': return 'korean';
+      case 'ja': case 'jpn': case 'japanese': case '日本語': return 'japanese';
+      case 'en': case 'eng': case 'english': return 'english';
+      case 'zh': case 'zh-cn': case 'zh-tw': case 'zh-hans': case 'zh-hant':
+      case 'chs': case 'cht':
       case 'chinese': case 'chinese (simplified)':
       case 'chinese (traditional)': case '中文': return 'chinese';
       default: return value.trim().toLowerCase();
@@ -47,6 +51,18 @@ abstract final class WorkEditions {
 
   static EditionMatch compare(WorkEntry a, WorkEntry b) {
     if (a.workId == b.workId) return const EditionMatch(100, '동일 ID');
+    // Explicitly different user-series identities are never equivalent
+    // editions, even if the creator and short title happen to match.
+    if (a.groupId.isNotEmpty && b.groupId.isNotEmpty &&
+        a.groupId != b.groupId) {
+      return const EditionMatch(0, '서로 다른 사용자 시리즈');
+    }
+    if (a.sourceSeries.trim().isNotEmpty &&
+        b.sourceSeries.trim().isNotEmpty &&
+        a.sourceSeries.trim().toLowerCase() !=
+            b.sourceSeries.trim().toLowerCase()) {
+      return const EditionMatch(0, '서로 다른 원본 시리즈');
+    }
     final ca = WorkGrouping.episodeNumber(a);
     final cb = WorkGrouping.episodeNumber(b);
     if (ca != null && cb != null && ca != cb) {
@@ -211,7 +227,8 @@ abstract final class WorkEditions {
     }
     if (language == 'auto') return editions.first;
     for (final work in editions) {
-      if (work.sourceLanguage.toLowerCase() == language) return work;
+      if (canonicalLanguage(work.sourceLanguage) ==
+          canonicalLanguage(language)) return work;
     }
     return editions.first;
   }

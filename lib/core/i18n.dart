@@ -327,7 +327,7 @@ abstract final class HypI18n {
           : 'Queued downloads: ${queued.group(1)} works';
     }
     final queueStatus = RegExp(
-      r'^다운로드 대기:\s*(\d+)개 작품[.]').firstMatch(text);
+      r'^다운로드 대기:\s*(\d+)개 작품[.]$').firstMatch(text);
     if (queueStatus != null) {
       return language == 'ja'
           ? 'ダウンロード待機: ${queueStatus.group(1)}作品。'
@@ -363,7 +363,7 @@ abstract final class HypI18n {
           ? '選択した${selected.group(1)}作品を保存'
           : 'Save ${selected.group(1)} Selected Works';
     }
-    final saved = RegExp(r'^작품 (\d+)개를 서재에 저장했어[.]').firstMatch(text);
+    final saved = RegExp(r'^작품 (\d+)개를 서재에 저장했어[.]$').firstMatch(text);
     if (saved != null) {
       return language == 'ja'
           ? '${saved.group(1)}作品を本棚に保存しました。'

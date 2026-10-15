@@ -131,13 +131,13 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
         )),
         IconButton(
           key: Key('auto-group-up-$group-$id'),
-          tooltip: '한 칸 위로',
+          tooltip: HypI18n.t(context, '한 칸 위로'),
           onPressed: index == 0 ? null : () => _move(group, index, -1),
           icon: const Icon(Icons.keyboard_arrow_up, size: 22),
         ),
         IconButton(
           key: Key('auto-group-down-$group-$id'),
-          tooltip: '한 칸 아래로',
+          tooltip: HypI18n.t(context, '한 칸 아래로'),
           onPressed: index == _order[group]!.length - 1
               ? null : () => _move(group, index, 1),
           icon: const Icon(Icons.keyboard_arrow_down, size: 22),

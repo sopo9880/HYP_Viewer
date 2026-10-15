@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hyp_viewer/core/work.dart';
+import 'package:hyp_viewer/core/online_search.dart';
 import 'package:hyp_viewer/core/work_edition_service.dart';
 
 void main() {
@@ -8,6 +9,46 @@ void main() {
     WorkEntry.create(workId: id, title: title, author: 'Maker').copyWith(
         sourceLanguage: lang, groupId: seriesId, groupTitle: 'Series',
         groupOrder: 2, currentPage: page);
+
+
+
+  test('multi-select links several editions in one preserved library', () {
+    final original = make('111111', 'japanese', page: 13);
+    final korean = make('222222', 'korean', page: 5);
+    final source = LibraryBackup(works: [original, korean],
+        collections: const ['Favorites']);
+    final result = WorkEditionService.linkMany(
+      source, '111111', ['222222'],
+      [const OnlineSearchWork(workId: '333333',
+          title: 'Shared Title', language: 'english',
+          artists: ['Maker'])],
+    );
+    expect(result.works.length, 3);
+    expect(result.works.map((work) => work.editionGroupId).toSet().length, 1);
+    expect(result.works.first.editionGroupId, isNotEmpty);
+    expect(result.works[0].currentPage, 13);
+    expect(result.works[1].currentPage, 5);
+    expect(result.collections, ['Favorites']);
+    // The input backup remains untouched until a single caller commit.
+    expect(source.works[0].editionGroupId, isEmpty);
+    expect(source.works.length, 2);
+  });
+
+  test('invalid batch chapter prevents all partial links', () {
+    final original = make('111111', 'japanese',
+        title: 'Shared Story 1화', page: 11);
+    final korean = make('222222', 'korean',
+        title: 'Shared Story 1화');
+    final source = LibraryBackup(works: [original, korean],
+        collections: const []);
+    expect(() => WorkEditionService.linkMany(
+      source, '111111', ['222222'],
+      [const OnlineSearchWork(workId: '333333',
+          title: 'Shared Story 2화', language: 'english')]),
+      throwsStateError);
+    expect(source.works.every((work) => work.editionGroupId.isEmpty), true);
+  });
+
   test('auto-link two different languages, preserve series and progress', () {
     final base = make('111111','japanese',seriesId:'series_1',page:10);
     final translated = make('222222','korean',page:4);

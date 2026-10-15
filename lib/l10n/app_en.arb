@@ -566,7 +566,7 @@
   "onlineSafeLink": "When saved, verified editions can join the existing stack.",
   "youtubeCommentsPartial": "Only some public comments were collected. Paste any missing comment text manually.",
   "readerTooltipPrevious": "Previous Page (PageUp)",
-  "readerTooltipNext": "Next Page (PageDown / Space)",
+  "readerTooltipNext": "Next page (PageDown / arrow key)",
   "readerTooltipSaveOffline": "Save Online Images as CBZ",
   "readerTooltipSetCover": "Set Current Page as Library Cover",
   "readerTooltipHideTools": "Hide Page Controls",
@@ -574,6 +574,12 @@
   "readerTooltipOpenWeb": "Open Current Page in Web Reader",
   "readerTooltipHorizontal": "Switch to Horizontal Paging",
   "readerTooltipVertical": "Switch to Vertical Paging",
+  "readerTooltipSinglePage": "Single-page view",
+  "readerTooltipTwoPage": "Two-page spread",
+  "settingsReaderHideOnOpen": "Hide reader UI on open",
+  "settingsReaderHideOnOpenHint": "Start with toolbar and page controls hidden. Tap the center or press Space to reveal.",
+  "settingsSpreadAction": "Show two-page toggle",
+  "settingsSpreadActionHint": "Switch between one and two pages from the reader toolbar.",
   "readingActivityDay": "{date}: {count} Sessions",
   "@readingActivityDay": {
     "placeholders": {
@@ -606,5 +612,13 @@
         "type": "String"
       }
     }
-  }
+  },
+  "editionFinderLoading": "Searching for other editions…",
+  "editionFinderProgress": "Searching {completed}/{total}",
+  "@editionFinderProgress": {"placeholders":{"completed":{"type":"int"},"total":{"type":"int"}}},
+  "editionFinderRetry": "Search again",
+  "editionFinderLinkSelected": "Link {count} selected editions",
+  "@editionFinderLinkSelected": {"placeholders":{"count":{"type":"int"}}},
+  "editionFinderSaveError": "Failed to link editions: {error}",
+  "@editionFinderSaveError": {"placeholders":{"error":{"type":"String"}}}
 }

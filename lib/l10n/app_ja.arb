@@ -566,7 +566,7 @@
   "onlineSafeLink": "保存時に確認済みの言語版グループへの追加を試みます。",
   "youtubeCommentsPartial": "公開コメントの一部のみ取得しました。欠けたコメントは手動で貼り付けてください。",
   "readerTooltipPrevious": "前のページ（PageUp）",
-  "readerTooltipNext": "次のページ（PageDown / Space）",
+  "readerTooltipNext": "次のページ (PageDown / 方向キー)",
   "readerTooltipSaveOffline": "オンライン画像をCBZとして保存",
   "readerTooltipSetCover": "現在のページを本棚の表紙に設定",
   "readerTooltipHideTools": "ページ操作を隠す",
@@ -574,6 +574,12 @@
   "readerTooltipOpenWeb": "現在のページをWebリーダーで開く",
   "readerTooltipHorizontal": "横方向に切り替え",
   "readerTooltipVertical": "縦方向に切り替え",
+  "readerTooltipSinglePage": "1ページ表示",
+  "readerTooltipTwoPage": "見開き2ページ表示",
+  "settingsReaderHideOnOpen": "ビューア起動時にUIを隠す",
+  "settingsReaderHideOnOpenHint": "上下の操作バーを非表示で開始。中央タップまたはSpaceキーで表示。",
+  "settingsSpreadAction": "見開き切替ボタンを表示",
+  "settingsSpreadActionHint": "ビューア右上で1ページ／見開きを切り替えます。",
   "readingActivityDay": "{date}: {count}回",
   "@readingActivityDay": {
     "placeholders": {
@@ -606,5 +612,13 @@
         "type": "String"
       }
     }
-  }
+  },
+  "editionFinderLoading": "他の言語版を検索中…",
+  "editionFinderProgress": "検索中 {completed}/{total}",
+  "@editionFinderProgress": {"placeholders":{"completed":{"type":"int"},"total":{"type":"int"}}},
+  "editionFinderRetry": "再検索",
+  "editionFinderLinkSelected": "選択した{count}件の言語版をまとめる",
+  "@editionFinderLinkSelected": {"placeholders":{"count":{"type":"int"}}},
+  "editionFinderSaveError": "言語版の紐付け失敗: {error}",
+  "@editionFinderSaveError": {"placeholders":{"error":{"type":"String"}}}
 }

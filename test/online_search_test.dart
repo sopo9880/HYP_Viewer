@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -5,6 +6,63 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hyp_viewer/core/online_search.dart';
 
 void main() {
+  test('ignore explicit language conflicts without losing unknown records',
+      () async {
+    final client = MockClient((request) async =>
+        http.Response(jsonEncode({
+          'results': [
+            {'id': 1001, 'title': 'Korean edition', 'language': 'ko'},
+            {'id': 1002, 'title': 'Japanese edition', 'language': 'jpn'},
+            {'id': 1003, 'title': 'Unknown language'},
+          ],
+          'count': 3,
+        }), 200));
+    final result = await OnlineWorkSearch(client).search(
+        'Story', language: 'korean');
+    expect(result.works.map((w) => w.workId), ['1001', '1003']);
+    client.close();
+  });
+
+
+  test('unified search publishes results before slow categories finish',
+      () async {
+    final slow = Completer<http.Response>();
+    final firstSeen = Completer<void>();
+    final snapshots = <OnlineSearchResult>[];
+    final client = MockClient((request) async {
+      final query = (jsonDecode(request.body)['query'] as List).first as String;
+      if (query == 'artist:Story') return slow.future;
+      if (query == 'Story') {
+        return http.Response(jsonEncode({
+          'results': [{'id': 111111, 'title': 'Story'}],
+          'count': 1,
+        }), 200);
+      }
+      return http.Response(jsonEncode({'results': [], 'count': 0}), 200);
+    });
+    final pending = OnlineWorkSearch(client).searchUnified('Story',
+      onPartial: (snapshot) {
+        snapshots.add(snapshot);
+        if (snapshot.works.any((work) => work.workId == '111111') &&
+            !firstSeen.isCompleted) firstSeen.complete();
+      });
+    await firstSeen.future.timeout(const Duration(seconds: 5));
+    // The slow creator lookup is still pending, but the title appears.
+    expect(slow.isCompleted, false);
+    expect(snapshots.last.works.single.workId, '111111');
+    final early = snapshots.first;
+    slow.complete(http.Response(jsonEncode({
+      'results': [{'id': 222222, 'title': 'Creator match'}],
+      'count': 1,
+    }), 200));
+    final completed = await pending;
+    expect(completed.works.map((work) => work.workId).toSet(),
+        {'111111', '222222'});
+    expect(early.works.map((work) => work.workId),
+        isNot(contains('222222')));
+    client.close();
+  });
+
   test('public metadata search parses results and caps duplicates', () async {
     final client = MockClient((request) async {
       expect(request.method, 'POST');

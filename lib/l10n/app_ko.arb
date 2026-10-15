@@ -566,7 +566,7 @@
   "onlineSafeLink": "저장 시 기존 언어판 묶음에 연결을 시도해.",
   "youtubeCommentsPartial": "공개 댓글 일부만 수집했어. 누락된 댓글의 번호는 직접 붙여넣어줘.",
   "readerTooltipPrevious": "이전 페이지 (PageUp)",
-  "readerTooltipNext": "다음 페이지 (PageDown / Space)",
+  "readerTooltipNext": "다음 페이지 (PageDown / 방향키)",
   "readerTooltipSaveOffline": "온라인 이미지를 CBZ로 저장",
   "readerTooltipSetCover": "현재 페이지를 서재 표지로 지정",
   "readerTooltipHideTools": "페이지 도구 숨기기",
@@ -574,6 +574,12 @@
   "readerTooltipOpenWeb": "현재 페이지를 웹 리더로 열기",
   "readerTooltipHorizontal": "가로 넘기기",
   "readerTooltipVertical": "세로 넘기기",
+  "readerTooltipSinglePage": "한 쪽 보기",
+  "readerTooltipTwoPage": "2쪽 모아보기",
+  "settingsReaderHideOnOpen": "뷰어 진입 시 UI 숨기기",
+  "settingsReaderHideOnOpenHint": "열 때 상하단 도구를 숨겨. 중앙 탭이나 Space로 다시 표시할 수 있어.",
+  "settingsSpreadAction": "2쪽 모아보기 버튼 표시",
+  "settingsSpreadActionHint": "뷰어 오른쪽 위에서 한 쪽/두 쪽 보기를 전환",
   "readingActivityDay": "{date}: {count}회",
   "@readingActivityDay": {
     "placeholders": {
@@ -606,5 +612,13 @@
         "type": "String"
       }
     }
-  }
+  },
+  "editionFinderLoading": "다른 언어판 검색 중…",
+  "editionFinderProgress": "검색 중 {completed}/{total}",
+  "@editionFinderProgress": {"placeholders":{"completed":{"type":"int"},"total":{"type":"int"}}},
+  "editionFinderRetry": "다시 검색",
+  "editionFinderLinkSelected": "선택한 {count}개 언어판 묶기",
+  "@editionFinderLinkSelected": {"placeholders":{"count":{"type":"int"}}},
+  "editionFinderSaveError": "언어판 묶기 실패: {error}",
+  "@editionFinderSaveError": {"placeholders":{"error":{"type":"String"}}}
 }

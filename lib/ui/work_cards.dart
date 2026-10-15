@@ -187,7 +187,7 @@ class HypWorkCard extends StatelessWidget {
                   if (!selectionMode) SizedBox(
                     width: 27, height: 25,
                     child: PopupMenuButton<String>(
-                      tooltip: '작품 메뉴',
+                      tooltip: HypI18n.t(context, '작품 메뉴'),
                       padding: EdgeInsets.zero,
                       icon: const Icon(Icons.more_vert_rounded,
                           color: HypColors.muted, size: 19),

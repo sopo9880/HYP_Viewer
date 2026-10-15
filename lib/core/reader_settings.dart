@@ -8,6 +8,8 @@ import 'package:path_provider/path_provider.dart';
 class ReaderSettings {
   final String nextDirection; // left or right
   final bool twoPageSpread;
+  /// Hide chrome at entry; tap center or press Space to reveal.
+  final bool hideReaderUiOnOpen;
   final bool verticalScrolling;
   final bool showDownloadAction;
   final bool showCoverAction;
@@ -41,6 +43,7 @@ class ReaderSettings {
   const ReaderSettings({
     this.nextDirection = 'left',
     this.twoPageSpread = false,
+    this.hideReaderUiOnOpen = true,
     this.verticalScrolling = false,
     this.showDownloadAction = true,
     this.showCoverAction = true,
@@ -77,6 +80,7 @@ class ReaderSettings {
   ReaderSettings copyWith({
     String? nextDirection,
     bool? twoPageSpread,
+    bool? hideReaderUiOnOpen,
     bool? verticalScrolling,
     bool? showDownloadAction,
     bool? showCoverAction,
@@ -109,6 +113,7 @@ class ReaderSettings {
   }) => ReaderSettings(
     nextDirection: nextDirection ?? this.nextDirection,
     twoPageSpread: twoPageSpread ?? this.twoPageSpread,
+    hideReaderUiOnOpen: hideReaderUiOnOpen ?? this.hideReaderUiOnOpen,
     verticalScrolling: verticalScrolling ?? this.verticalScrolling,
     showDownloadAction: showDownloadAction ?? this.showDownloadAction,
     showCoverAction: showCoverAction ?? this.showCoverAction,
@@ -143,6 +148,7 @@ class ReaderSettings {
   Map<String, Object> toJson() => {
     'nextDirection': nextDirection,
     'twoPageSpread': twoPageSpread,
+    'hideReaderUiOnOpen': hideReaderUiOnOpen,
     'verticalScrolling': verticalScrolling,
     'showDownloadAction': showDownloadAction,
     'showCoverAction': showCoverAction,
@@ -178,6 +184,7 @@ class ReaderSettings {
       ReaderSettings(
         nextDirection: data['nextDirection'] == 'right' ? 'right' : 'left',
         twoPageSpread: data['twoPageSpread'] == true,
+        hideReaderUiOnOpen: data['hideReaderUiOnOpen'] != false,
         verticalScrolling: data['verticalScrolling'] == true,
         showDownloadAction: data['showDownloadAction'] != false,
         showCoverAction: data['showCoverAction'] != false,

@@ -8,6 +8,21 @@ void main() {
   }) => WorkEntry.create(workId: code, title: title, author: author)
       .copyWith(sourceLanguage: language, totalPages: pages,
         sourceSeries: series);
+
+  test('same title/creator cannot auto-link conflicting known series', () {
+    final left = work('111111', 'Shared Title', 'japanese',
+        author: 'Maker', series: 'Original A');
+    final right = work('222222', 'Shared Title', 'english',
+        author: 'Maker', series: 'Original B');
+    expect(WorkEditions.compare(left, right).score, 0);
+    final grouped = right.copyWith(sourceSeries: 'Original A',
+        groupId: 'group_b');
+    expect(WorkEditions.compare(
+        left.copyWith(groupId: 'group_a'), grouped).autoLink, false);
+    expect(WorkEditions.compare(
+        left, right.copyWith(sourceSeries: '')).autoLink, true);
+  });
+
   test('same original chapter with a translated subtitle links', () {
     final japanese = work('111111', 'A Title | 日本語訳', 'japanese');
     final korean = work('222222', 'A Title | 한국어', 'korean');

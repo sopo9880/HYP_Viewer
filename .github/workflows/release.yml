@@ -157,6 +157,26 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
+          Changes in v0.4.4:
+          - Audit UI translations across Korean, English and Japanese screens,
+            reader controls, settings, dialogs, tooltips and status messages.
+            Expand language-switch regression and static checks.
+          - Open other-language discovery immediately, show progress while
+            public results arrive, support Back to cancel, and allow selected
+            editions to join in one validated batch without losing progress.
+          - Resume the most recently read language edition when its cover is
+            tapped; tap the stack title to choose a different edition.
+          - Start the reader with controls hidden by default (configurable),
+            with an on-screen single/two-page toggle preserving the page.
+          - Stream online search results as sources finish; improve original
+            and translated title queries, relevance, language filtering and
+            deduplicated metadata across fields.
+          - Expand bounded public YouTube comment pagination and preserve
+            accessible metadata when comments are restricted. Instagram
+            remains public-preview-only; private access is never bypassed.
+          - Keep v0.x library backups, CBZ, covers, download resumes,
+            grouping decisions, and independent edition reading positions.
+
           Changes in v0.4.3.1:
           - Run approved downloads with Android background notification
             or Windows tray, and recover persisted unfinished pages on restart.

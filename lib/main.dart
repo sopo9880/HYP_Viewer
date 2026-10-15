@@ -686,6 +686,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final blocks = <String>[];
     final errors = <String>[];
     final youtubePartialText = AppLocalizations.of(context)!.youtubeCommentsPartial;
+    final sourceIncompleteText = AppLocalizations.of(context)!.sourceIncomplete;
     final mapped = <String, String>{};
     final evidence = <String, Set<String>>{};
     void remember(String id, String url) {
@@ -732,7 +733,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             final result = key.isEmpty
                 ? await YoutubePublicClient(client).fetch(link.videoId)
                 : await YoutubeClient(client).fetch(link.videoId, key);
-            content = [result.description, ...result.comments]
+            content = [result.title, result.description, ...result.comments]
                 .where((value) => value.trim().isNotEmpty).join('\n\n');
             if (result.mayBeIncomplete) {
               errors.add(link.videoId + ': ' + youtubePartialText);
@@ -740,9 +741,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           } else if (link.canPreview) {
             final preview = await PublicSourcePreview(client).fetchDetailed(link);
             content = preview.text;
-            if (link.kind == SourceKind.youtubePost && !preview.fullBody) {
-              errors.add('YouTube 게시물 전체 본문에 접근하지 못해 미리보기만 읽었어. '
-                  '원문을 직접 붙여넣으면 누락된 번호를 확인할 수 있어.');
+            if (!preview.fullBody) {
+              // Unavailable Instagram captions/comments and truncated
+              // community text must never be reported as complete.
+              errors.add(sourceIncompleteText);
             }
           } else {
             errors.add('원문 자동 분석 미지원: ' + link.uri.host);
@@ -840,6 +842,16 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     } catch (error) {
       _status('언어판 묶기에 실패했어: ' + error.toString());
     }
+  }
+
+  /// One library commit for all approved editions; a failed guard rolls back
+  /// the entire selection, including any newly discovered remote records.
+  Future<void> _linkEditionBatch(WorkEntry anchor,
+      List<String> localIds, List<OnlineSearchWork> remoteWorks) async {
+    await _commitLibrary((latest) => WorkEditionService.linkMany(
+        latest, anchor.workId, localIds, remoteWorks));
+    _status('언어판 ' + (localIds.length + remoteWorks.length).toString() +
+        '개를 같은 작품으로 묶었어.');
   }
 
   Future<void> _unlinkEdition(WorkEntry work) async {
@@ -1840,6 +1852,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             unawaited(_saveReaderSettings(
                 readerSettings.copyWith(verticalScrolling: vertical)));
           },
+          onTwoPageSpreadChanged: (twoPage) {
+            unawaited(_saveReaderSettings(
+                readerSettings.copyWith(twoPageSpread: twoPage)));
+          },
           onPageLoaded: (page, bytes) {
             unawaited(_captureAutomaticCover(work, page, bytes));
           },
@@ -2526,6 +2542,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             unawaited(_saveReaderSettings(
                 readerSettings.copyWith(verticalScrolling: vertical)));
           },
+          onTwoPageSpreadChanged: (twoPage) {
+            unawaited(_saveReaderSettings(
+                readerSettings.copyWith(twoPageSpread: twoPage)));
+          },
           onPageLoaded: (page, bytes) {
             unawaited(_captureAutomaticCover(work, page, bytes));
           },
@@ -2767,6 +2787,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     onQuickAddNumber: _quickAddNumber,
     onSaveOnlineSearchWork: _saveOnlineSearchWork,
     onLinkEdition: _linkEdition,
+    onLinkEditions: _linkEditionBatch,
     onUnlinkEdition: _unlinkEdition,
     onReadOnlineSearchWork: _readOnlineSearchWork,
     onSaveSelectedWorks: _saveSelectedWorks,
