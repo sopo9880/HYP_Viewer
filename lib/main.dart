@@ -968,6 +968,16 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       author: draft.author, originalComment: draft.originalComment,
       titleAliases: draft.titleAliases,
       sourceUrls: draft.sourceUrls,
+      // Keep the backward-compatible primary source in sync with the
+      // explicitly edited source list. Otherwise a removed legacy videoUrl
+      // would silently reappear when JSON backup is restored.
+      videoUrl: draft.sourceUrls.contains(current.videoUrl)
+          ? current.videoUrl
+          : draft.sourceUrls.isEmpty ? '' : draft.sourceUrls.first,
+      videoId: draft.sourceUrls.contains(current.videoUrl)
+          ? current.videoId
+          : draft.sourceUrls.isEmpty ? '' :
+              (ShortsLink.videoId(draft.sourceUrls.first) ?? ''),
       coverMode: resetCover
           ? (readerSettings.autoCoverEnabled ? 'auto' : 'preset')
           : current.coverMode,
