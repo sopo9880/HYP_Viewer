@@ -182,7 +182,7 @@ class _WorkEditorDialogState extends State<WorkEditorDialog> {
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text('기존 번호: #' + widget.work.workId,
+              HypText('기존 번호: #' + widget.work.workId,
                   style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 10),
               TextField(
@@ -231,7 +231,7 @@ class _WorkEditorDialogState extends State<WorkEditorDialog> {
               ),
               if (error != null) ...[
                 const SizedBox(height: 8),
-                Text(error!, style: const TextStyle(
+                HypText(error!, style: const TextStyle(
                     color: Colors.orangeAccent)),
               ],
             ],

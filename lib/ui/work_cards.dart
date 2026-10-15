@@ -96,7 +96,7 @@ class HypWorkCard extends StatelessWidget {
             ? (totalPages ?? work.totalPages) == 1 ? 0.0
                 : ((work.currentPage - 1) /
                     ((totalPages ?? work.totalPages) - 1))
-                    .clamp(0.0, 1.0).toDouble()
+                    .clamp(0.0, 0.99).toDouble()
             : null;
     return Material(
       color: HypColors.surface,
@@ -211,6 +211,12 @@ class HypWorkCard extends StatelessWidget {
                             value: 'cover', child: HypText('표지 선택')),
                         const PopupMenuItem(
                             value: 'info', child: HypText('작품 정보')), 
+                        PopupMenuItem(value: 'completed',
+                          child: HypText(work.completed ? '완독 해제' : '완독 처리')),
+                        const PopupMenuItem(value: 'find_editions',
+                          child: HypText('다른 언어판 찾기')),
+                        const PopupMenuItem(value: 'unlink_edition',
+                          child: HypText('언어판 묶음에서 분리')),
                         PopupMenuItem(
                           value: 'favorite',
                           child: HypText(work.favorite
@@ -218,7 +224,7 @@ class HypWorkCard extends StatelessWidget {
                         ),
                         if (work.videoUrl.isNotEmpty)
                           const PopupMenuItem(
-                              value: 'original', child: HypText('소개 쇼츠')),
+                              value: 'original', child: HypText('원본 링크')),
                         const PopupMenuDivider(),
                         const PopupMenuItem(
                           value: 'delete_work',

@@ -1,0 +1,40 @@
+{
+  "@@locale": "en",
+  "cancel": "Cancel",
+  "search": "Search",
+  "findOtherEditions": "Find Other Language Editions",
+  "editionSearchLabel": "Original title or search terms",
+  "editionSearchHint": "Search by original title, creator or series to find translated titles.",
+  "editionConfirmSelection": "Review matching editions before adding",
+  "editionConfirmWarning": "The same series can contain different chapters. Confirm that both editions are the same chapter.",
+  "editionSearchPartial": "Some online queries failed; local and available results still work.",
+  "editionLikelyMatch": "Likely same edition",
+  "editionManualReview": "Manual review required",
+  "editionNoCandidates": "No candidates found. Try the original title or creator.",
+  "editionLinkConfirmTitle": "Confirm Edition Grouping",
+  "editionLinkAction": "Group as Same Work",
+  "editionChoose": "Choose Language Edition",
+  "editionCount": "{count} language editions",
+  "@editionCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "preferredEditionLanguage": "Preferred Work Language",
+  "startupUpdatePrompt": "Show Update Prompt at Startup",
+  "snoozeSevenDays": "Don't Show for 7 Days",
+  "updateLater": "Later",
+  "updateAvailable": "A newer version is available. Download it?",
+  "releasePage": "View Release",
+  "clearFinder": "Clear",
+  "chapterSort": "Chapter Order (Custom)",
+  "completedMark": "Mark as Finished",
+  "completedUnmark": "Mark as Unfinished",
+  "editionUnlink": "Remove from Edition Stack",
+  "libraryWorks": "My Library",
+  "searchOnline": "Online Works",
+  "editionSourceLocal": "Library",
+  "editionSourceRemote": "Online"
+}

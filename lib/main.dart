@@ -19,6 +19,7 @@ import 'core/cover_store.dart';
 import 'core/hero_artwork_store.dart';
 import 'core/reader_settings.dart';
 import 'core/i18n.dart';
+import 'l10n/app_localizations.dart';
 import 'core/reader_downloader.dart';
 import 'core/reader_cache_pruner.dart';
 import 'core/announcements.dart';
@@ -43,6 +44,9 @@ import 'core/work.dart';
 import 'core/reading_history.dart';
 import 'core/youtube.dart';
 import 'core/youtube_public.dart';
+import 'core/source_links.dart';
+import 'core/work_edition_service.dart';
+import 'core/update_prompt.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,6 +63,7 @@ class HypViewerApp extends StatelessWidget {
       locale: Locale(language),
       supportedLocales: const [Locale('ko'), Locale('en'), Locale('ja')],
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
@@ -123,6 +128,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   LibraryBackup library = const LibraryBackup(works: [], collections: []);
   List<NumberCandidate> candidates = [];
   final Map<String, CandidateVerification> _candidateCache = {};
+  final Map<String, String> _candidateSourceUrls = {};
+  int finderClearEpoch = 0;
+  late final Future<void> _settingsLoad;
+  bool _updateDismissedThisLaunch = false;
+  bool _updateDialogOpen = false;
   bool busy = false;
   String message = '';
 
@@ -133,7 +143,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     _loadReadingHistory();
     _load();
     _loadOnlineSource();
-    _loadReaderSettings();
+    _settingsLoad = _loadReaderSettings();
     _loadVersionInfo();
     _loadHeroArtwork();
     _listenForSharedShorts();
@@ -472,6 +482,19 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
   }
 
+  void _clearFinder() {
+    if (busy) return;
+    setState(() {
+      for (final ctrl in [urlInput, commentInput, numberInput,
+          titleInput, authorInput]) { ctrl.clear(); }
+      candidates = [];
+      _candidateSourceUrls.clear();
+      _candidateCache.clear();
+      finderClearEpoch++;
+      message = '';
+    });
+  }
+
   Future<void> _listenForSharedShorts() async {
     await SharedShorts.start((url) {
       if (!mounted) return;
@@ -483,7 +506,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         numberInput.clear();
         titleInput.clear();
         authorInput.clear();
-        message = '쇼츠 링크를 받았어. 공개 댓글을 자동으로 조회할게.';
+        message = '공유 링크를 받았어. 공개 내용을 분석할게.';
       });
       _fetch();
     });
@@ -522,31 +545,63 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _fetch() async {
-    final videoId = ShortsLink.videoId(urlInput.text);
-    if (videoId == null) {
-      _status('정확한 YouTube Shorts 링크를 입력해줘.');
+    final raw = urlInput.text.trim();
+    if (RegExp(r'^\d{1,12}$').hasMatch(raw)) {
+      await _quickAddNumber(raw);
+      return;
+    }
+    final links = SourceLink.extract(raw, limit: 10);
+    if (links.isEmpty) {
+      _status('유효한 HTTPS 링크 또는 작품 번호를 입력해줘.');
       return;
     }
     setState(() => busy = true);
     final client = http.Client();
+    final blocks = <String>[];
+    final errors = <String>[];
+    final mapped = <String, String>{};
     try {
       final key = apiKeyInput.text.trim();
-      final data = key.isEmpty
-          ? await YoutubePublicClient(client).fetch(videoId)
-          : await YoutubeClient(client).fetch(videoId, key);
-      // Shorts titles often describe multiple DIFFERENT works; their real
-      // titles are fetched individually when the user saves the codes.
-      titleInput.clear();
-      commentInput.text = [data.description, ...data.comments]
-          .where((s) => s.trim().isNotEmpty).join('\n\n');
-      _analyze();
-      if (data.comments.isEmpty) {
-        _status('영상 설명란은 읽었지만 공개 댓글을 가져오지 못했어. '
-            '댓글이 필요하면 유튜브에서 직접 복사해줘.');
+      for (final link in links) {
+        String content = '';
+        try {
+          if (link.kind == SourceKind.hitomiWork) {
+            content = link.url;
+          } else if (link.kind == SourceKind.youtubeVideo) {
+            final result = key.isEmpty
+                ? await YoutubePublicClient(client).fetch(link.videoId)
+                : await YoutubeClient(client).fetch(link.videoId, key);
+            content = [result.description, ...result.comments]
+                .where((value) => value.trim().isNotEmpty).join('\n\n');
+          } else if (link.canPreview) {
+            content = await PublicSourcePreview(client).fetch(link);
+          } else {
+            errors.add('원문 자동 분석 미지원: ' + link.uri.host);
+          }
+        } catch (error) {
+          errors.add(link.uri.host + ': ' + error.toString());
+        }
+        if (content.isEmpty) continue;
+        blocks.add(content);
+        for (final candidate in NumberExtractor.extract(
+            content, source: link.url)) {
+          mapped.putIfAbsent(candidate.code, () => link.url);
+        }
       }
-    } catch (e) {
-      _status('댓글 자동 조회 실패: ' + e.toString() +
-          ' / 유튜브에서 댓글을 복사해 직접 붙여넣을 수 있어.');
+      final shared = raw.replaceAll(RegExp(r'https://\S+'), '').trim();
+      if (shared.isNotEmpty) blocks.add(shared);
+      commentInput.text = blocks.join('\n\n');
+      _candidateSourceUrls
+        ..clear()
+        ..addAll(mapped);
+      _analyze();
+      if (errors.isNotEmpty) {
+        _status('분석된 후보 ' + candidates.length.toString() + '개. ' +
+            '일부 링크는 원문을 읽지 못했어: ' +
+            errors.take(2).join(' / ') + ' 직접 내용을 붙여넣을 수 있어.');
+      } else if (candidates.isEmpty) {
+        _status('번호가 없어. 공개 설명·본문에 없을 수 있으니 댓글을 직접 붙여넣어줘.');
+      }
     } finally {
       client.close();
       if (mounted) setState(() => busy = false);
@@ -585,12 +640,28 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         sourceLanguage: result.language,
         sourceDate: result.date,
       );
-      return LibraryBackup(
+      return WorkEditionService.autoLink(LibraryBackup(
         works: [...latest.works, work],
         collections: latest.collections,
-      );
+      ), [result.workId]);
     });
     _status('작품 #' + result.workId + ' 서재에 추가했어.');
+  }
+
+  Future<void> _linkEdition(WorkEntry anchor, String targetId) async {
+    try {
+      await _commitLibrary((latest) =>
+          WorkEditionService.link(latest, anchor.workId, targetId));
+      _status('같은 작품의 다른 언어판으로 묶었어.');
+    } catch (error) {
+      _status('언어판 묶기에 실패했어: ' + error.toString());
+    }
+  }
+
+  Future<void> _unlinkEdition(WorkEntry work) async {
+    await _commitLibrary((latest) =>
+        WorkEditionService.unlink(latest, work.workId));
+    _status('선택한 언어판만 묶음에서 분리했어.');
   }
 
   Future<void> _readOnlineSearchWork(OnlineSearchWork result) async {
@@ -627,7 +698,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final client = http.Client();
     WorkEntry? openAfterSave;
     try {
-      final videoId = ShortsLink.videoId(urlInput.text) ?? '';
+      final links = SourceLink.extract(urlInput.text);
       final works = <WorkEntry>[];
       var unknownTitles = 0;
       for (final code in codes) {
@@ -638,31 +709,45 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         if (title.isEmpty && verified?.exists == true) {
           title = verified!.title;
         }
-        if (title.isEmpty) {
-          try {
-            title = await HitomiGalleryProvider(client).fetchTitle(code);
-          } catch (_) {
-            // A missing or offline metadata server must not lose a saved ID.
+        GalleryInfo? info;
+        try {
+          info = await HitomiGalleryProvider(client).fetchInfo(code);
+          if (title.isEmpty) title = info.title;
+        } catch (_) {
+          // Offline metadata never blocks adding or preserving an ID.
+          if (title.isEmpty) {
+            try { title = await HitomiGalleryProvider(client).fetchTitle(code); }
+            catch (_) { /* Keep a placeholder title. */ }
           }
         }
         if (title.isEmpty) {
           title = '작품 $code';
           unknownTitles += 1;
         }
+        final mappedLink = SourceLink.parse(_candidateSourceUrls[code] ?? '') ??
+            (links.length == 1 ? links.single : null);
         works.add(WorkEntry.create(
           workId: code,
-          videoId: videoId,
-          videoUrl: videoId.isEmpty
-              ? '' : 'https://www.youtube.com/shorts/$videoId',
+          videoId: mappedLink?.videoId ?? '',
+          videoUrl: mappedLink?.url ?? '',
           title: title,
-          author: codes.length == 1 ? authorInput.text : '',
+          author: codes.length == 1 && authorInput.text.trim().isNotEmpty
+              ? authorInput.text.trim() : (info?.author ?? ''),
           originalComment: commentInput.text,
         ).copyWith(
           coverMode: readerSettings.autoCoverEnabled ? 'auto' : 'preset',
+          sourceLanguage: info?.language ?? '',
+          sourceGroup: info?.group ?? '',
+          sourceSeries: info?.series ?? '',
+          sourceType: info?.type ?? '',
+          sourceDate: info?.date ?? '',
+          totalPages: info?.pageCount ?? 0,
+          tags: info?.tags ?? const [],
         ));
       }
-      await _commitLibrary((latest) => LibraryBackup.merge(latest,
-          LibraryBackup(works: works, collections: const [])));
+      await _commitLibrary((latest) => WorkEditionService.autoLink(
+          LibraryBackup.merge(latest,
+            LibraryBackup(works: works, collections: const [])), codes));
       if (mounted) setState(() => libraryNavigationEpoch++);
       if (readerSettings.openAfterSave && works.length == 1) {
         openAfterSave = works.single;
@@ -827,12 +912,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           throw StateError('이미 묶인 작품은 Auto/수동 묶기로 바꿀 수 없어. '
               '먼저 기존 묶음을 해제해줘.');
         }
-        return LibraryBackup(
-          works: latest.works.map((work) {
-            final index = workIds.indexOf(work.workId);
-            return index < 0 ? work : work.copyWith(
-              groupId: id, groupTitle: name, groupOrder: index + 1);
-          }).toList(), collections: latest.collections);
+        return WorkEditionService.createSeries(latest,
+            workIds, id, name);
       });
       _status('작품 ' + selected.length.toString() + '개를 묶었어.');
     } catch (error) {
@@ -856,22 +937,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           newcomers.any((w) => w.groupId.isNotEmpty)) {
         throw StateError('이미 다른 묶음에 속한 작품은 추가하지 않아.');
       }
-      var maxOrder = 0;
-      for (final member in old) {
-        if (member.groupOrder > maxOrder) maxOrder = member.groupOrder;
-      }
-      final targetOrder = <String, int>{
-        for (var i = 0; i < orderedIds.length; i++)
-          orderedIds[i]: maxOrder + i + 1
-      };
-      return LibraryBackup(
-        works: latest.works.map((w) =>
-          targetOrder.containsKey(w.workId)
-            ? w.copyWith(groupId: groupId,
-                groupTitle: old.first.groupTitle,
-                groupOrder: targetOrder[w.workId]) : w).toList(),
-        collections: latest.collections,
-      );
+      return WorkEditionService.appendSeries(latest, groupId, orderedIds);
     });
     _status('기존 묶음에 ' + orderedIds.length.toString() + '개 작품을 추가했어.');
   }
@@ -896,14 +962,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _reorderGroup(String groupId, List<String> orderedIds) async {
-    await _commitLibrary((latest) => LibraryBackup(
-      works: latest.works.map((w) {
-        if (w.groupId != groupId) return w;
-        final position = orderedIds.indexOf(w.workId);
-        return position < 0 ? w : w.copyWith(groupOrder: position + 1);
-      }).toList(),
-      collections: latest.collections,
-    ));
+    await _commitLibrary((latest) =>
+        WorkEditionService.reorderSeries(latest, groupId, orderedIds));
   }
 
   Future<void> _deleteSelectedOffline(List<String> workIds) async {
@@ -957,6 +1017,16 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _setCompleted(WorkEntry work, bool completed) async {
+    try {
+      await _commitLibrary((latest) =>
+          latest.withCompleted(work.workId, completed));
+      _status(completed ? '완독 처리했어.' : '완독 표시를 해제했어.');
+    } catch (error) {
+      _status('완독 상태 변경 실패: ' + error.toString());
+    }
+  }
+
   Future<void> _updateWork(WorkEntry work) async {
     try {
       await _commitLibrary((latest) => LibraryBackup(
@@ -974,6 +1044,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             groupId: w.groupId,
             groupTitle: w.groupTitle,
             groupOrder: w.groupOrder,
+            editionGroupId: w.editionGroupId,
           );
         }).toList(),
         collections: latest.collections,
@@ -1007,31 +1078,27 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _openOriginal(WorkEntry work) async {
-    final uri = Uri.tryParse(work.videoUrl);
-    if (uri == null || uri.scheme != 'https' ||
-        !['www.youtube.com', 'youtube.com', 'm.youtube.com']
-            .contains(uri.host.toLowerCase())) {
-      _status('원본 쇼츠 링크가 유효하지 않아.');
+    final source = SourceLink.parse(work.videoUrl);
+    if (source == null) {
+      _status('보관된 원본 링크가 없어.');
       return;
     }
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await launchUrl(source.uri, mode: LaunchMode.externalApplication);
   }
 
   Future<void> _openShortsInput() async {
-    final id = ShortsLink.videoId(urlInput.text);
-    if (id == null) {
-      _status('정확한 YouTube Shorts 링크를 입력해줘.');
+    final links = SourceLink.extract(urlInput.text);
+    if (links.isEmpty) {
+      _status('유효한 HTTPS 링크를 입력해줘.');
       return;
     }
     try {
-      final opened = await launchUrl(
-        Uri.parse('https://www.youtube.com/shorts/$id'),
-        mode: LaunchMode.externalApplication,
-      );
-      if (!opened) throw Exception('유튜브 앱이나 브라우저를 열지 못했어.');
-      _status('유튜브에서 댓글을 복사한 다음 앱에 붙여넣어줘.');
-    } catch (e) {
-      _status('유튜브 열기 실패: ' + e.toString());
+      final opened = await launchUrl(links.first.uri,
+          mode: LaunchMode.externalApplication);
+      if (!opened) throw Exception('브라우저를 열지 못했어.');
+      _status('웹에서 본문·댓글을 복사해 앱에 붙여넣을 수 있어.');
+    } catch (error) {
+      _status('원본 링크 열기 실패: ' + error.toString());
     }
   }
 
@@ -1975,14 +2042,14 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             constraints: const BoxConstraints(maxWidth: 460),
             child: Column(mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('선택된 작품: ' + selected.length.toString() + '개',
+                HypText('선택된 작품: ' + selected.length.toString() + '개',
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 for (final work in selected.take(4))
-                  Text('#' + work.workId + ' · ' + work.title,
+                  HypText('#' + work.workId + ' · ' + work.title,
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                 if (selected.length > 4)
-                  Text('외 ' + (selected.length - 4).toString() + '개'),
+                  HypText('외 ' + (selected.length - 4).toString() + '개'),
                 const SizedBox(height: 10),
                 const HypText('선택한 작품의 즐겨찾기와 읽기 기록도 제거돼. '
                     '다른 작품과 컬렉션은 유지해.'),
@@ -2300,24 +2367,20 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
   }
 
+  /// One GitHub update check on every fresh launch; not a background poll.
+  /// Per-version 7-day snoozes are enforced by _checkRelease.
   Future<void> _automaticUpdateCheck() async {
     try {
-      final root = await getApplicationSupportDirectory();
-      final file = File(root.path + Platform.pathSeparator + 'update_check_at.txt');
-      final now = DateTime.now().toUtc();
-      if (await file.exists()) {
-        final last = DateTime.tryParse(await file.readAsString());
-        if (last != null && now.difference(last).inHours < 24) return;
-      }
-      await file.writeAsString(now.toIso8601String());
+      await _settingsLoad;
       if (mounted) await _checkRelease(silent: true);
     } catch (_) {
-      // Offline usage, including widget tests, must work without update checks.
+      // An offline session must never be blocked by the updater.
     }
   }
 
   Future<void> _checkRelease({bool silent = false}) async {
-    if (downloadingUpdate) return;
+    if (downloadingUpdate || _updateDialogOpen) return;
+    if (silent) await _settingsLoad;
     final client = http.Client();
     try {
       final current = (await PackageInfo.fromPlatform()).version;
@@ -2326,17 +2389,24 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         if (!silent) _status('현재 더 새로운 릴리스가 없어.');
         return;
       }
-      if (!mounted) return;
+      if (!mounted || !UpdatePrompt.shouldShow(readerSettings,
+          next.version, DateTime.now(), automatic: silent,
+          dismissedThisLaunch: _updateDismissedThisLaunch)) return;
       final asset = next.installerFor(defaultTargetPlatform);
-      final choice = await showDialog<String>(context: context, builder: (ctx) =>
+      _updateDialogOpen = true;
+      String? choice;
+      try {
+        choice = await showDialog<String>(context: context, builder: (ctx) =>
         AlertDialog(
           title: HypText('업데이트 v' + next.version),
           content: HypText(next.notes.isEmpty
               ? '새 버전이 공개됐어. 설치 파일을 다운로드할까?'
               : next.notes),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx),
-                child: const HypText('취소')),
+            TextButton(onPressed: () => Navigator.pop(ctx, 'later'),
+                child: const HypText('나중에')),
+            TextButton(onPressed: () => Navigator.pop(ctx, 'snooze'),
+                child: const HypText('7일간 보지 않기')),
             TextButton(onPressed: () => Navigator.pop(ctx, 'web'),
                 child: const HypText('릴리스 보기')),
             if (asset != null) FilledButton(
@@ -2347,7 +2417,15 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           ],
         ),
       );
-      if (choice == 'web') {
+      } finally {
+        _updateDialogOpen = false;
+      }
+      if (choice == 'snooze') {
+        await _saveReaderSettings(UpdatePrompt.snooze(
+            readerSettings, next.version, DateTime.now()));
+      } else if (choice == null || choice == 'later') {
+        if (silent) _updateDismissedThisLaunch = true;
+      } else if (choice == 'web') {
         await launchUrl(Uri.parse(next.url), mode: LaunchMode.externalApplication);
       } else if (choice == 'download' && asset != null) {
         await _downloadInstaller(next, asset);
@@ -2400,10 +2478,14 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     totalGalleryPages: totalGalleryPages,
     downloadedGalleryBytes: downloadedGalleryBytes,
     onAnalyze: _analyze,
+    onClearFinder: _clearFinder,
+    finderClearEpoch: finderClearEpoch,
     onFetch: _fetch,
     onSaveWork: _saveWork,
     onQuickAddNumber: _quickAddNumber,
     onSaveOnlineSearchWork: _saveOnlineSearchWork,
+    onLinkEdition: _linkEdition,
+    onUnlinkEdition: _unlinkEdition,
     onReadOnlineSearchWork: _readOnlineSearchWork,
     onSaveSelectedWorks: _saveSelectedWorks,
     onVerifyCandidateCodes: _verifyCandidateCodes,
@@ -2443,6 +2525,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     downloadCanPause: readerTransfer != null,
     onImportGallery: _importGallery,
     onUpdateWork: _updateWork,
+    onSetCompleted: _setCompleted,
     onSavePublicationDates: _savePublicationDates,
     onChooseCover: _chooseCover,
     onSaveReaderSettings: _saveReaderSettings,

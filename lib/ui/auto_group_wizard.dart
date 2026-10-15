@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
+import '../core/i18n.dart';
 
 /// Reviewed selection for either a new group or an existing one.
 class AutoGroupReview {
@@ -119,10 +120,10 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
         const SizedBox(width: 8),
         Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(work?.title ?? id, maxLines: 2,
+            HypText(work?.title ?? id, maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 13)),
-            Text('#$id' + (episode == null ? '' : ' · $episode화'),
+            HypText('#$id' + (episode == null ? '' : ' · $episode화'),
               maxLines: 1, overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall),
           ],
@@ -165,9 +166,9 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
             else { _approved.remove(i); }
           }),
         ),
-        title: Text(proposal.title, maxLines: 2,
+        title: HypText(proposal.title, maxLines: 2,
           overflow: TextOverflow.ellipsis),
-        subtitle: Text(
+        subtitle: HypText(
           (isExisting ? '기존 묶음에 추가' : '새 묶음') + ' · ' +
           proposal.workIds.length.toString() + '개 후보 · ' +
           '규칙 점수 ' + proposal.confidence.toString() + '/100\n' +
@@ -187,26 +188,26 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
           ),
           if (members.isNotEmpty) ...[
             Align(alignment: Alignment.centerLeft,
-              child: Text('기존 ' + members.length.toString() +
+              child: HypText('기존 ' + members.length.toString() +
                   '개 작품은 유지돼.',
                   style: Theme.of(context).textTheme.bodySmall)),
             for (final work in members.take(6))
               Align(alignment: Alignment.centerLeft,
-                child: Text('· ' + work.title + ' #' + work.workId,
+                child: HypText('· ' + work.title + ' #' + work.workId,
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall)),
             if (members.length > 6)
-              Text('그 외 ' + (members.length - 6).toString() + '개 작품',
+              HypText('그 외 ' + (members.length - 6).toString() + '개 작품',
                 style: Theme.of(context).textTheme.bodySmall),
             const Divider(height: 16),
           ],
           Align(alignment: Alignment.centerLeft,
-            child: Text('포함할 작품 선택 · 화살표로 순서 조정',
+            child: HypText('포함할 작품 선택 · 화살표로 순서 조정',
               style: Theme.of(context).textTheme.bodySmall)),
           for (var j = 0; j < _order[i]!.length; j++)
             _workRow(i, _order[i]![j], j),
           if (!isExisting && _included[i]!.length < 2)
-            const Text('새 묶음에는 최소 2개 작품이 필요해.',
+            const HypText('새 묶음에는 최소 2개 작품이 필요해.',
               style: TextStyle(color: Colors.orangeAccent)),
         ],
       ),
@@ -218,12 +219,12 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
     final plans = _reviewedPlans();
     return AlertDialog(
       key: const Key('auto-group-wizard'),
-      title: const Text('Auto 묶기 · 추천 확인'),
+      title: const HypText('Auto 묶기 · 추천 확인'),
       content: SizedBox(
         width: 610,
         height: MediaQuery.sizeOf(context).height * 0.58,
         child: Column(children: [
-          const Text('추천 묶음을 펼쳐 표지·제목·번호를 확인해 줘. '
+          const HypText('추천 묶음을 펼쳐 표지·제목·번호를 확인해 줘. '
               '개별 작품을 제외하거나 이름과 순서를 바꿀 수 있어. '
               '확인 전에는 서재가 바뀌지 않아.',
               style: TextStyle(fontSize: 12)),
@@ -237,12 +238,12 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context),
-          child: const Text('취소')),
+          child: const HypText('취소')),
         FilledButton(
           key: const Key('auto-group-confirm'),
           onPressed: plans.isEmpty ? null :
               () => Navigator.pop(context, plans),
-          child: Text('선택한 묶음 ' + plans.length.toString() + '개 적용'),
+          child: HypText('선택한 묶음 ' + plans.length.toString() + '개 적용'),
         ),
       ],
     );

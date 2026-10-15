@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import '../core/i18n.dart';
 import 'package:flutter/material.dart';
 
 import '../core/work.dart';
@@ -71,7 +72,7 @@ class HypWorkGroupCard extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 9, vertical: 5),
-                      child: Text('${members.length}권',
+                      child: HypText('${members.length}권',
                         style: const TextStyle(fontSize: 11,
                             fontWeight: FontWeight.w800)),
                     )),
@@ -82,17 +83,17 @@ class HypWorkGroupCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  HypText(title, maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 13,
                         fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
-                  Text('시리즈 · ${members.length}개 작품', maxLines: 1,
+                  HypText('시리즈 · ${members.length}개 작품', maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 11,
                         color: HypColors.muted)),
                   const SizedBox(height: 2),
                   Row(children: [
-                    const Expanded(child: Text('열어서 회차 보기',
+                    const Expanded(child: HypText('열어서 회차 보기',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 11))),
                     SizedBox(width: 27, height: 25,
@@ -104,11 +105,11 @@ class HypWorkGroupCard extends StatelessWidget {
                         onSelected: onAction,
                         itemBuilder: (_) => const [
                           PopupMenuItem(value: 'rename',
-                              child: Text('묶음 이름 수정')),
+                              child: HypText('묶음 이름 수정')),
                           PopupMenuItem(value: 'reorder',
-                              child: Text('회차 순서 변경')),
+                              child: HypText('회차 순서 변경')),
                           PopupMenuItem(value: 'ungroup',
-                              child: Text('묶음만 해제')),
+                              child: HypText('묶음만 해제')),
                         ],
                       )),
                   ]),

@@ -261,7 +261,7 @@ class CandidateEditorState extends State<CandidateEditor> {
           const Icon(Icons.verified_rounded,
               color: Colors.greenAccent, size: 16),
           const SizedBox(width: 5),
-          Flexible(child: Text(
+          Flexible(child: HypText(
             slot.result!.title.isEmpty
                 ? HypI18n.t(context, '작품 존재 확인')
                 : slot.result!.title,
@@ -331,7 +331,7 @@ class CandidateEditorState extends State<CandidateEditor> {
             if (slot.evidence.isNotEmpty)
               Tooltip(
                 message: slot.evidence,
-                child: Text(
+                child: HypText(
                   (slot.rule.isEmpty ? '' : slot.rule + ' · ') + slot.evidence,
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 10,
@@ -354,7 +354,7 @@ class CandidateEditorState extends State<CandidateEditor> {
         Row(children: [
           Expanded(child: HypText('후보 번호 편집 · 개수와 번호를 자유롭게 수정',
               style: Theme.of(context).textTheme.titleMedium)),
-          Text(_slots.length.toString(),
+          HypText(_slots.length.toString(),
               style: Theme.of(context).textTheme.bodySmall),
         ]),
         if (widget.suggestions.isNotEmpty) ...[
@@ -389,11 +389,11 @@ class CandidateEditorState extends State<CandidateEditor> {
         ],
         if (_checking)
           Padding(padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text('작품 확인 중: $_verifiedCount / $_verificationTotal',
+            child: HypText('작품 확인 중: $_verifiedCount / $_verificationTotal',
               style: Theme.of(context).textTheme.bodySmall)),
         if (_fallbackMessage.isNotEmpty)
           Padding(padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(_fallbackMessage,
+            child: HypText(_fallbackMessage,
               style: Theme.of(context).textTheme.bodySmall)),
         const SizedBox(height: 8),
         for (final slot in _slots) _slotCard(slot),

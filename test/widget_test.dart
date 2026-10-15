@@ -12,7 +12,7 @@ void main() {
     await tester.pump();
     expect(find.text('HYP Viewer'), findsWidgets);
     expect(find.byKey(const Key('nav-library')), findsOneWidget);
-    expect(find.text('쇼츠 작품 번호 찾기'), findsOneWidget);
+    expect(find.text('링크로 작품 찾기'), findsOneWidget);
     expect(find.byKey(const Key('shorts-url-input')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('nav-library')));
@@ -55,7 +55,7 @@ void main() {
     await tester.pumpWidget(const HypViewerApp());
     await tester.pump();
     expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('쇼츠 작품 번호 찾기'), findsOneWidget);
+    expect(find.text('링크로 작품 찾기'), findsOneWidget);
 
     await tester.enterText(
       find.byKey(const Key('library-search-input')), '없는 작품',
@@ -68,6 +68,6 @@ void main() {
       find.byKey(const Key('library-search-input')), '',
     );
     await tester.pump();
-    expect(find.text('쇼츠 작품 번호 찾기'), findsOneWidget);
+    expect(find.text('링크로 작품 찾기'), findsOneWidget);
   });
 }

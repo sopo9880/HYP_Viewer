@@ -1,0 +1,40 @@
+{
+  "@@locale": "ko",
+  "cancel": "취소",
+  "search": "검색",
+  "findOtherEditions": "다른 언어판 찾기",
+  "editionSearchLabel": "원제 또는 검색어",
+  "editionSearchHint": "원제를 수정하거나 작가·시리즈로 다른 번역 제목도 찾아봐.",
+  "editionConfirmSelection": "같은 작품인지 확인하고 추가",
+  "editionConfirmWarning": "시리즈가 같아도 회차가 다를 수 있어. 같은 회차의 다른 언어판인지 반드시 확인해줘.",
+  "editionSearchPartial": "일부 온라인 검색이 실패했어. 내 서재와 조회된 결과는 그대로 사용할 수 있어.",
+  "editionLikelyMatch": "일치 가능성 높음",
+  "editionManualReview": "직접 확인 필요",
+  "editionNoCandidates": "후보를 찾지 못했어. 원제나 작가명으로 다시 검색해줘.",
+  "editionLinkConfirmTitle": "언어판 묶기 확인",
+  "editionLinkAction": "같은 작품으로 묶기",
+  "editionChoose": "읽을 언어판 선택",
+  "editionCount": "{count}개 언어판",
+  "@editionCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "preferredEditionLanguage": "선호 작품 언어",
+  "startupUpdatePrompt": "실행 시 업데이트 알림",
+  "snoozeSevenDays": "7일간 보지 않기",
+  "updateLater": "나중에",
+  "updateAvailable": "새 버전이 공개됐어. 설치 파일을 다운로드할까?",
+  "releasePage": "릴리스 보기",
+  "clearFinder": "비우기",
+  "chapterSort": "회차순 (수동 순서)",
+  "completedMark": "완독 처리",
+  "completedUnmark": "완독 해제",
+  "editionUnlink": "언어판 묶음에서 분리",
+  "libraryWorks": "내 서재",
+  "searchOnline": "온라인 작품",
+  "editionSourceLocal": "서재",
+  "editionSourceRemote": "온라인"
+}

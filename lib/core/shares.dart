@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'youtube.dart';
+import 'source_links.dart';
 
 /// Listen for Android ACTION_SEND text; no native channel is needed on Windows.
 class SharedShorts {
@@ -15,18 +16,23 @@ class SharedShorts {
     return id == null ? null : 'https://www.youtube.com/shorts/$id';
   }
 
+  /// Shared URLs are kept intact (videos, posts and reels).
+  static String? findSourceUrl(String raw) {
+    final links = SourceLink.extract(raw);
+    return links.isEmpty ? null : links.first.url;
+  }
+
   static Future<void> start(void Function(String url) onShared) async {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'sharedText' && call.arguments is String) {
-        final url = findVideoUrl(call.arguments as String);
-        if (url != null) onShared(url);
+        final shared = call.arguments as String;
+        if (SourceLink.extract(shared).isNotEmpty) onShared(shared);
       }
     });
     try {
       final initial = await _channel.invokeMethod<String>('getSharedText');
       if (initial != null) {
-        final url = findVideoUrl(initial);
-        if (url != null) onShared(url);
+        if (SourceLink.extract(initial).isNotEmpty) onShared(initial);
       }
     } on MissingPluginException {
       // Desktop environments don't implement this optional platform channel.

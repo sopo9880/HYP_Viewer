@@ -30,6 +30,8 @@ jobs:
       - name: Generate Flutter Android host project
         run: flutter create --platforms=android --org com.sopo9880 --project-name hyp_viewer .
       - run: flutter pub get
+      - name: Check language packs and new UI strings
+        run: python3 scripts/check_l10n.py
       - name: Enforce 0.x release policy
         run: python3 scripts/check_release_version.py
       - run: flutter analyze --no-fatal-infos
@@ -53,6 +55,8 @@ jobs:
       - name: Generate Flutter Windows host project
         run: flutter create --platforms=windows --org com.sopo9880 --project-name hyp_viewer .
       - run: flutter pub get
+      - name: Check language packs and new UI strings
+        run: python scripts/check_l10n.py
       - run: flutter build windows --release
       - name: Install Inno Setup
         shell: pwsh

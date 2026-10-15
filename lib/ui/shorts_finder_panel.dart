@@ -16,6 +16,8 @@ class ShortsFinderPanel extends StatefulWidget {
   final TextEditingController author;
   final List<NumberCandidate> candidates;
   final bool busy;
+  final int clearEpoch;
+  final VoidCallback? onClear;
   final VoidCallback onAnalyze;
   final Future<void> Function() onFetch;
   final Future<void> Function() onOpenYoutube;
@@ -35,6 +37,8 @@ class ShortsFinderPanel extends StatefulWidget {
     required this.author,
     required this.candidates,
     required this.busy,
+    this.clearEpoch = 0,
+    this.onClear,
     required this.onAnalyze,
     required this.onFetch,
     required this.onOpenYoutube,
@@ -51,6 +55,14 @@ class ShortsFinderPanel extends StatefulWidget {
 
 class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
   bool _showDetails = false;
+  bool _userCollapsed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _showDetails = widget.candidates.isNotEmpty;
+  }
+
   bool _revealApiKey = false;
   final GlobalKey _quickCandidateAnchor = GlobalKey();
   final GlobalKey<CandidateEditorState> _editorKey =
@@ -59,10 +71,15 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
   @override
   void didUpdateWidget(covariant ShortsFinderPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.clearEpoch != oldWidget.clearEpoch) {
+      _showDetails = false;
+      _userCollapsed = false;
+      return;
+    }
     final before = oldWidget.candidates.map((e) => e.code).join(',');
     final after = widget.candidates.map((e) => e.code).join(',');
     if (before != after) {
-      if (widget.candidates.isNotEmpty) {
+      if (widget.candidates.isNotEmpty && !_userCollapsed) {
         _showDetails = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final anchor = _quickCandidateAnchor.currentContext;
@@ -85,7 +102,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
     if (workNumber.hasMatch(input) && widget.onQuickAddNumber != null) {
       widget.onQuickAddNumber!(input);
     } else if (input.isNotEmpty) {
-      setState(() => _showDetails = true);
+      setState(() { _showDetails = true; _userCollapsed = false; });
       widget.onFetch();
     } else if (workNumber.hasMatch(widget.workId.text.trim()) &&
         widget.comment.text.trim().isEmpty &&
@@ -100,7 +117,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final showDetails = _showDetails || widget.candidates.isNotEmpty;
+    final showDetails = _showDetails;
     return HypPanel(
       glow: true,
       padding: const EdgeInsets.all(22),
@@ -133,18 +150,22 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    HypText('쇼츠 작품 번호 찾기',
+                    HypText('링크로 작품 찾기',
                         style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 4),
                     HypText(
-                      'Shorts 링크만 붙여넣으면 공개 설명란·댓글에서 번호를 찾아봐. API 키는 필요 없어.',
+                      'YouTube·Instagram·Hitomi 링크나 공유 텍스트에서 작품 번호를 찾아봐.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.smart_display_outlined,
-                  size: 33, color: HypColors.border),
+              IconButton(key: const Key('finder-clear'),
+                tooltip: HypI18n.t(context, '비우기'),
+                onPressed: widget.busy || widget.onClear == null ? null : () {
+                  widget.onClear!();
+                  setState(() { _showDetails = false; _userCollapsed = false; });
+                }, icon: const Icon(Icons.cleaning_services_outlined)),
             ],
           ),
           const SizedBox(height: 17),
@@ -157,7 +178,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _search(),
               decoration: InputDecoration(
-                hintText: HypI18n.t(context, 'YouTube Shorts 링크 또는 작품 번호 입력'),
+                hintText: HypI18n.t(context, '링크 또는 작품 번호 입력 (여러 링크 가능)'),
                 prefixIcon: Icon(Icons.link_rounded, color: HypColors.muted),
               ),
             );
@@ -270,12 +291,15 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             TextButton.icon(
               onPressed: widget.onOpenYoutube,
               icon: const Icon(Icons.open_in_new, size: 19),
-              label: const HypText('유튜브 열고 댓글 복사'),
+              label: const HypText('원본 링크 열고 내용 복사'),
             ),
           ]),
           const SizedBox(height: 6),
           TextButton.icon(
-            onPressed: () => setState(() => _showDetails = !showDetails),
+            onPressed: () => setState(() {
+              _showDetails = !showDetails;
+              _userCollapsed = !_showDetails;
+            }),
             icon: Icon(showDetails
                 ? Icons.keyboard_arrow_up
                 : Icons.keyboard_arrow_down),

@@ -28,6 +28,8 @@ class WorkEntry {
   final String groupId;
   final String groupTitle;
   final int groupOrder;
+  /// Translated editions of the SAME chapter. groupId remains the series.
+  final String editionGroupId;
   /// 'auto', 'preset', 'page' or 'custom' (cropped/uploaded image).
   final String coverMode;
   final int coverPreset;
@@ -58,6 +60,7 @@ class WorkEntry {
     this.groupId = '',
     this.groupTitle = '',
     this.groupOrder = 0,
+    this.editionGroupId = '',
     this.coverMode = 'auto',
     this.coverPreset = 0,
     this.coverPage = 1,
@@ -113,6 +116,7 @@ class WorkEntry {
     String? groupId,
     String? groupTitle,
     int? groupOrder,
+    String? editionGroupId,
     String? coverMode,
     int? coverPreset,
     int? coverPage,
@@ -141,6 +145,7 @@ class WorkEntry {
       groupId: groupId ?? this.groupId,
       groupTitle: groupTitle ?? this.groupTitle,
       groupOrder: groupOrder ?? this.groupOrder,
+      editionGroupId: editionGroupId ?? this.editionGroupId,
       coverMode: coverMode ?? this.coverMode,
       coverPreset: coverPreset ?? this.coverPreset,
       coverPage: coverPage ?? this.coverPage,
@@ -173,6 +178,7 @@ class WorkEntry {
     if (groupId.isNotEmpty) 'groupId': groupId,
     if (groupTitle.isNotEmpty) 'groupTitle': groupTitle,
     if (groupOrder > 0) 'groupOrder': groupOrder,
+    if (editionGroupId.isNotEmpty) 'editionGroupId': editionGroupId,
     if (coverMode != 'auto') 'coverMode': coverMode,
     if (coverPreset != 0) 'coverPreset': coverPreset,
     if (coverPage != 1) 'coverPage': coverPage,
@@ -221,6 +227,7 @@ class WorkEntry {
       sourceDate: text('sourceDate'),
       groupId: text('groupId').length <= 120 ? text('groupId') : '',
       groupTitle: text('groupTitle').length <= 200 ? text('groupTitle') : '',
+      editionGroupId: text('editionGroupId').length <= 120 ? text('editionGroupId') : '',
       groupOrder: data['groupOrder'] is num
           ? (data['groupOrder'] as num).toInt().clamp(0, 10000).toInt() : 0,
       coverMode: const {'auto', 'preset', 'page', 'custom'}.contains(text('coverMode'))
@@ -240,6 +247,14 @@ class LibraryBackup {
   final List<WorkEntry> works;
   final List<String> collections;
   const LibraryBackup({required this.works, required this.collections});
+
+  /// A manual completion change affects only this edition. Never reset
+  /// page position, favorite status, local files or sibling translations.
+  LibraryBackup withCompleted(String workId, bool completed) => LibraryBackup(
+    works: works.map((work) => work.workId == workId
+        ? work.copyWith(completed: completed) : work).toList(),
+    collections: collections,
+  );
 
   /// Remove only the requested work from the saved library. Other entries,
   /// their reading progress, favorites and collection definitions stay intact.
@@ -403,6 +418,8 @@ class LibraryBackup {
             ? existing.groupTitle : incoming.groupTitle,
         groupOrder: existing.groupId.isNotEmpty
             ? existing.groupOrder : incoming.groupOrder,
+        editionGroupId: existing.editionGroupId.isNotEmpty
+            ? existing.editionGroupId : incoming.editionGroupId,
       );
     }
     return LibraryBackup(

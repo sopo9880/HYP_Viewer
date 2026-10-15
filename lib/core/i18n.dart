@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'i18n_extra.dart';
 
 /// Device-local UI language. Persisted with ReaderSettings; no account or
 /// network service is involved. Korean remains the default for old installs.
@@ -368,7 +369,7 @@ abstract final class HypI18n {
           ? '${saved.group(1)}作品を本棚に保存しました。'
           : 'Saved ${saved.group(1)} works to your library.';
     }
-    return text;
+    return HypExtraTranslations.translate(text, language) ?? text;
   }
 
   static String t(BuildContext context, String text) {

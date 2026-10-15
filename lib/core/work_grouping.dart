@@ -22,7 +22,8 @@ class WorkGrouping {
   static final _prefixChapter = RegExp(
       r'(?:episode|ep\.?|chapter|ch\.?|part|vol(?:ume)?\.?)\s*#?\s*(\d{1,3})(?!\d)',
       caseSensitive: false);
-  static final _japaneseChapter = RegExp(r'第\s*(\d{1,3})\s*[話巻部]');
+  // Both 第3話 and 3話 are common Japanese chapter labels.
+  static final _japaneseChapter = RegExp(r'(?<!\d)(?:第\s*)?(\d{1,3})\s*[話巻部]');
   static final _trailingNumber = RegExp(r'(?:[\s\-_.#]+)(\d{1,3})\s*$');
 
   static int? _chapterInText(String text) {
@@ -170,7 +171,17 @@ class WorkGrouping {
 
   static List<WorkGroupSuggestion> suggest(List<WorkEntry> works) {
     final groups = <String, List<WorkEntry>>{};
-    final sorted = [...works]..sort((a, b) => a.workId.compareTo(b.workId));
+    // Multiple translations of one chapter are a single logical title.
+    // Prefer its existing-series representative before any ungrouped copy.
+    final all = [...works]..sort((a, b) {
+      final grouped = (a.groupId.isEmpty ? 1 : 0)
+          .compareTo(b.groupId.isEmpty ? 1 : 0);
+      return grouped != 0 ? grouped : a.workId.compareTo(b.workId);
+    });
+    final seenEditions = <String>{};
+    final sorted = all.where((work) => work.editionGroupId.isEmpty ||
+        seenEditions.add(work.editionGroupId)).toList()
+      ..sort((a, b) => a.workId.compareTo(b.workId));
     final clusters = <List<WorkEntry>>[];
 
     // Existing series may receive new works, but are never recreated/changed.
@@ -239,7 +250,7 @@ class WorkGrouping {
   }
 }
 
-enum LibrarySort { newest, published, hitomiPopular, mostRead, title, number }
+enum LibrarySort { newest, published, hitomiPopular, mostRead, title, number, chapter }
 
 class WorkSorting {
   static List<WorkEntry> sort(Iterable<WorkEntry> values, LibrarySort mode,
@@ -269,6 +280,9 @@ class WorkSorting {
         case LibrarySort.number:
           return (BigInt.tryParse(a.workId) ?? BigInt.zero)
               .compareTo(BigInt.tryParse(b.workId) ?? BigInt.zero);
+        case LibrarySort.chapter:
+          final n = a.groupOrder.compareTo(b.groupOrder);
+          return n != 0 ? n : WorkGrouping.compareChapters(a, b);
       }
     }
     result.sort((a, b) {
