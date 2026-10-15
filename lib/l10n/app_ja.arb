@@ -417,5 +417,64 @@
   "workInfoAddedToLibrary": "本棚に追加した日",
   "androidSecurityNotice": "Samsung Galaxyのセキュリティ自動ブロック機能により、一部のAPKをインストールできない場合があります。これは端末を保護する重要な機能です。\n\nアプリから保護機能を自動解除することはできません。インストールできない場合、APKの発行元・GitHubリリースURL・SHA-256を先に確認し、端末の設定をご自身で確認してください。保護機能の無効化は推奨しません。",
   "coverCropHelp": "写真をドラッグするか2本指で拡大・縮小し、枠内を表紙として保存します。",
-  "coverCropImageFailed": "画像を開けませんでした。"
+  "coverCropImageFailed": "画像を開けませんでした。",
+  "groupCardVolumes": "{count}巻",
+  "@groupCardVolumes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "groupCardWorks": "シリーズ・{count}作品",
+  "@groupCardWorks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "candidateChecking": "作品を確認中: {checked} / {total}",
+  "@candidateChecking": {
+    "placeholders": {
+      "checked": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "candidateSave": "選択した{count}作品を一括保存",
+  "@candidateSave": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "autoGroupExistingCount": "既存の{count}作品は保持されます。",
+  "@autoGroupExistingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "autoGroupOthers": "ほか{count}作品",
+  "@autoGroupOthers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shortsCandidateCount": "検出した番号候補: {count}件",
+  "@shortsCandidateCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
