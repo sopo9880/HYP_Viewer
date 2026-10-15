@@ -3111,6 +3111,19 @@ class _HypDashboardState extends State<HypDashboard> {
           Material(
             color: Colors.transparent,
             child: SwitchListTile.adaptive(
+              key: const Key('reader-start-hidden-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(AppLocalizations.of(context)!.settingsReaderHideOnOpen),
+              subtitle: Text(AppLocalizations.of(context)!.settingsReaderHideOnOpenHint),
+              value: widget.readerSettings.hideReaderUiOnOpen,
+              onChanged: (v) => widget.onSaveReaderSettings(
+                  widget.readerSettings.copyWith(hideReaderUiOnOpen: v)),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Material(
+            color: Colors.transparent,
+            child: SwitchListTile.adaptive(
               key: const Key('reader-two-page-setting'),
               contentPadding: EdgeInsets.zero,
               title: const HypText('2쪽 모아보기'),
@@ -3166,8 +3179,8 @@ class _HypDashboardState extends State<HypDashboard> {
               SwitchListTile.adaptive(
                 key: const Key('reader-show-page-controls-action-setting'),
                 contentPadding: EdgeInsets.zero,
-                title: const HypText('페이지 도구 버튼 표시'),
-                subtitle: const HypText('하단 페이지 바 표시/숨기기 버튼'),
+                title: Text(AppLocalizations.of(context)!.settingsSpreadAction),
+                subtitle: Text(AppLocalizations.of(context)!.settingsSpreadActionHint),
                 value: widget.readerSettings.showPageControlsAction,
                 onChanged: (v) => widget.onSaveReaderSettings(
                     widget.readerSettings.copyWith(showPageControlsAction: v)),

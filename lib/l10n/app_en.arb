@@ -574,6 +574,12 @@
   "readerTooltipOpenWeb": "Open Current Page in Web Reader",
   "readerTooltipHorizontal": "Switch to Horizontal Paging",
   "readerTooltipVertical": "Switch to Vertical Paging",
+  "readerTooltipSinglePage": "Single-page view",
+  "readerTooltipTwoPage": "Two-page spread",
+  "settingsReaderHideOnOpen": "Hide reader UI on open",
+  "settingsReaderHideOnOpenHint": "Start with toolbar and page controls hidden. Tap the center or press Space to reveal.",
+  "settingsSpreadAction": "Show two-page toggle",
+  "settingsSpreadActionHint": "Switch between one and two pages from the reader toolbar.",
   "readingActivityDay": "{date}: {count} Sessions",
   "@readingActivityDay": {
     "placeholders": {

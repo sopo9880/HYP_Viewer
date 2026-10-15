@@ -1840,6 +1840,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             unawaited(_saveReaderSettings(
                 readerSettings.copyWith(verticalScrolling: vertical)));
           },
+          onTwoPageSpreadChanged: (twoPage) {
+            unawaited(_saveReaderSettings(
+                readerSettings.copyWith(twoPageSpread: twoPage)));
+          },
           onPageLoaded: (page, bytes) {
             unawaited(_captureAutomaticCover(work, page, bytes));
           },
@@ -2525,6 +2529,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           onVerticalScrollingChanged: (vertical) {
             unawaited(_saveReaderSettings(
                 readerSettings.copyWith(verticalScrolling: vertical)));
+          },
+          onTwoPageSpreadChanged: (twoPage) {
+            unawaited(_saveReaderSettings(
+                readerSettings.copyWith(twoPageSpread: twoPage)));
           },
           onPageLoaded: (page, bytes) {
             unawaited(_captureAutomaticCover(work, page, bytes));
