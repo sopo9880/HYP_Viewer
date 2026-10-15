@@ -324,5 +324,7 @@
   "legacyCompletionReview": "완독 후보 검토",
   "legacyCompletionHint": "마지막 페이지에 도달했지만 완독으로 표시되지 않은 작품이야. 직접 확인해서 선택해줘.",
   "legacyCompletionApply": "선택한 작품 완독 처리",
-  "legacyCompletionEmpty": "검토할 완독 후보가 없어."
+  "legacyCompletionEmpty": "검토할 완독 후보가 없어.",
+  "youtubeChooseVideos": "YouTube 목록에서 영상 선택",
+  "youtubeAnalyzeSelected": "선택한 영상 분석 (최대 5개)"
 }
