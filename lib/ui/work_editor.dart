@@ -59,7 +59,12 @@ class _WorkEditorDialogState extends State<WorkEditorDialog> {
     authorInput = TextEditingController(text: widget.work.author);
     commentInput = TextEditingController(text: widget.work.originalComment);
     aliasInput = TextEditingController(text: widget.work.titleAliases.join('\n'));
-    sourcesInput = TextEditingController(text: widget.work.sourceUrls.join('\n'));
+    sourcesInput = TextEditingController(text: [
+      ...widget.work.sourceUrls,
+      if (widget.work.videoUrl.isNotEmpty &&
+          !widget.work.sourceUrls.contains(widget.work.videoUrl))
+        widget.work.videoUrl,
+    ].join('\n'));
   }
 
   @override
