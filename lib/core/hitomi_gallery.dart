@@ -91,6 +91,7 @@ class HitomiGallery implements GalleryPageSource {
 class GalleryInfo {
   final String workId;
   final String title;
+  final List<String> titleAliases;
   final String author;
   final String group;
   final String series;
@@ -105,6 +106,7 @@ class GalleryInfo {
   const GalleryInfo({
     required this.workId,
     required this.title,
+    this.titleAliases = const [],
     this.author = '',
     this.group = '',
     this.series = '',
@@ -139,9 +141,26 @@ class GalleryInfo {
     }
     String scalar(String key) =>
         raw[key] is String ? (raw[key] as String).trim() : '';
+    final aliases = <String>{};
+    for (final name in [
+      'original_title', 'title_english', 'title_japanese',
+      'title_korean', 'title_romanized',
+    ]) {
+      if (scalar(name).isNotEmpty) aliases.add(scalar(name));
+    }
+    for (final field in ['aliases', 'titles', 'alternative_titles']) {
+      final value = raw[field];
+      if (value is List) {
+        aliases.addAll(value.whereType<String>().take(20));
+      } else if (value is Map) {
+        aliases.addAll(value.values.whereType<String>().take(20));
+      }
+    }
+    aliases.removeWhere((alias) => alias.length < 2 || alias.length > 180);
     return GalleryInfo(
       workId: code,
       title: scalar('title'),
+      titleAliases: aliases.take(24).toList(),
       author: _names(raw['artists']).join(', '),
       group: _names(raw['groups']).join(', '),
       series: _names(raw['parodys']).join(', '),
