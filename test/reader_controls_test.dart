@@ -99,7 +99,7 @@ void main() {
       await tester.tapAt(Offset(rect.left + rect.width * 0.15,
           rect.top + rect.height * 0.5));
       await tester.pumpAndSettle();
-      expect(find.text(rtl ? '4 / 5' : '2 / 5'), findsOneWidget);
+      expect(find.text(rtl ? '2 / 5' : '4 / 5'), findsOneWidget);
       await tester.tapAt(Offset(rect.left + rect.width * 0.85,
           rect.top + rect.height * 0.5));
       await tester.pumpAndSettle();
