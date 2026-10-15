@@ -27,6 +27,25 @@ abstract final class LocalWorkSearch {
         code == selected;
   }
 
+  /// A query matching one saved translation should surface the entire
+  /// known logical work. Language filters still apply to each displayed
+  /// edition, and unrelated works are never added.
+  static List<WorkEntry> queryLibrary(Iterable<WorkEntry> works, String raw,
+      {String language = ''}) {
+    final all = works.toList();
+    final hits = all.where((work) =>
+        matches(work, raw, language: language)).toList();
+    if (raw.trim().isEmpty) return hits;
+    final hitIds = hits.map((entry) => entry.workId).toSet();
+    final knownGroups = hits.where((entry) =>
+        entry.editionGroupId.isNotEmpty).map((entry) =>
+        entry.editionGroupId).toSet();
+    return all.where((entry) => hitIds.contains(entry.workId) ||
+        entry.editionGroupId.isNotEmpty &&
+        knownGroups.contains(entry.editionGroupId) &&
+        matchesLanguage(entry, language)).toList();
+  }
+
   static bool matches(WorkEntry work, String raw, {String language = ''}) {
     if (!matchesLanguage(work, language)) return false;
     final term = normalize(raw);
