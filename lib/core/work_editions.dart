@@ -66,7 +66,13 @@ abstract final class WorkEditions {
     final hasPages = a.totalPages > 0 && b.totalPages > 0;
     final pageDifference = hasPages
         ? (a.totalPages - b.totalPages).abs() : 9999;
-    final sameTitle = titleA == titleB;
+    // Titles can contain multiple original/translated aliases separated by
+    // '|'. Any independently matching alias counts as shared title evidence.
+    Set<String> aliases(String title) => title.split('|')
+        .map((name) => WorkGrouping.normalizedSeries(name))
+        .where((name) => name.length >= 4).toSet();
+    final sameTitle = titleA == titleB ||
+        aliases(a.title).intersection(aliases(b.title)).isNotEmpty;
     if (!sameTitle) {
       // Different translations can have entirely different titles.
       // Auto-link only with independent creator, series, chapter and
@@ -127,14 +133,21 @@ abstract final class WorkEditions {
           !result.contains(cleaned)) result.add(cleaned);
     }
     add(entered);
+    // Retain both sides of "original | translated": a plain search can
+    // otherwise miss a differently localized title.
+    for (final title in work.title.split('|')) {
+      add(title);
+    }
     final creator = work.author.split(',').first.trim();
     if (creator.isNotEmpty) add('artist:' + creator);
     final circle = work.sourceGroup.split(',').first.trim();
     if (circle.isNotEmpty) add('group:' + circle);
+    // series: is not consistently understood by provider APIs. A plain
+    // keyword query is safe even on mirrors without that operator.
     if (work.sourceSeries.trim().isNotEmpty) {
-      add('series:' + work.sourceSeries.trim());
+      add(work.sourceSeries.trim());
     }
-    return result.take(4).toList();
+    return result.take(7).toList();
   }
 
   static String groupKey(WorkEntry work) =>
@@ -148,6 +161,12 @@ abstract final class WorkEditions {
 
   static WorkEntry preferred(List<WorkEntry> editions, String language) {
     if (editions.isEmpty) throw ArgumentError('No editions');
+    if (language == 'recent') {
+      final recent = [...editions]
+        ..sort((a, b) => (b.lastOpenedAt ?? '')
+            .compareTo(a.lastOpenedAt ?? ''));
+      return recent.first;
+    }
     if (language == 'auto') return editions.first;
     for (final work in editions) {
       if (work.sourceLanguage.toLowerCase() == language) return work;
