@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:hyp_viewer/l10n/app_localizations.dart';
 import 'package:hyp_viewer/ui/cover_cropper.dart';
 
 Future<Uint8List> _testPng() async {
@@ -33,6 +35,14 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     Uint8List? cropped;
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('ko'),
+      supportedLocales: const [Locale('ko'), Locale('en'), Locale('ja')],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(body: Builder(builder: (context) => ElevatedButton(
         onPressed: () async { cropped = await showCoverCropper(context, png); },
         child: const Text('표지 자르기 열기'),
