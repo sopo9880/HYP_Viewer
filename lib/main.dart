@@ -45,6 +45,7 @@ import 'core/reading_history.dart';
 import 'core/youtube.dart';
 import 'core/youtube_public.dart';
 import 'core/source_links.dart';
+import 'core/youtube_collection.dart';
 import 'core/work_edition_service.dart';
 import 'core/update_prompt.dart';
 
@@ -544,6 +545,51 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     });
   }
 
+  Future<List<YoutubeCollectionItem>?> _chooseYoutubeCollection(
+      List<YoutubeCollectionItem> items) async {
+    if (items.isEmpty || !mounted) return null;
+    final selected = <String>{};
+    return showDialog<List<YoutubeCollectionItem>>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (context, refresh) => AlertDialog(
+          title: const HypText('YouTube 목록에서 영상 선택'),
+          content: SizedBox(width: 550, height: 420,
+            child: ListView.builder(
+              itemCount: items.length,
+              itemBuilder: (_, index) {
+                final item = items[index];
+                return CheckboxListTile(
+                  dense: true,
+                  value: selected.contains(item.videoId),
+                  title: Text(item.title, maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  subtitle: Text(item.videoId),
+                  onChanged: (value) => refresh(() {
+                    if (value == true && selected.length < 5) {
+                      selected.add(item.videoId);
+                    } else if (value != true) {
+                      selected.remove(item.videoId);
+                    }
+                  }),
+                );
+              },
+            )),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog),
+                child: const HypText('취소')),
+            FilledButton(
+              onPressed: selected.isEmpty ? null : () => Navigator.pop(
+                dialog, items.where((item) =>
+                    selected.contains(item.videoId)).toList()),
+              child: const HypText('선택한 영상 분석 (최대 5개)'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _fetch() async {
     final raw = urlInput.text.trim();
     if (RegExp(r'^\d{1,12}$').hasMatch(raw)) {
@@ -567,6 +613,30 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         try {
           if (link.kind == SourceKind.hitomiWork) {
             content = link.url;
+          } else if (link.kind == SourceKind.youtubeCollection) {
+            final entries = await YoutubeCollectionReader(client).list(link);
+            if (entries.isEmpty) {
+              errors.add('YouTube 영상 목록을 읽지 못했어. 직접 영상 주소를 공유해줘.');
+            } else {
+              final selected = await _chooseYoutubeCollection(entries);
+              for (final video in selected ?? <YoutubeCollectionItem>[]) {
+                try {
+                  final result = key.isEmpty
+                      ? await YoutubePublicClient(client).fetch(video.videoId)
+                      : await YoutubeClient(client).fetch(video.videoId, key);
+                  final text = [result.title, result.description,
+                      ...result.comments].where((part) =>
+                          part.trim().isNotEmpty).join('\n\n');
+                  blocks.add(text);
+                  for (final candidate in NumberExtractor.extract(
+                      text, source: video.url)) {
+                    mapped.putIfAbsent(candidate.code, () => video.url);
+                  }
+                } catch (error) {
+                  errors.add(video.videoId + ': ' + error.toString());
+                }
+              }
+            }
           } else if (link.kind == SourceKind.youtubeVideo) {
             final result = key.isEmpty
                 ? await YoutubePublicClient(client).fetch(link.videoId)
