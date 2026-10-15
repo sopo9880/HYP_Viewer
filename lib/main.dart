@@ -40,6 +40,7 @@ import 'core/shares.dart';
 import 'core/storage.dart';
 import 'core/updates.dart';
 import 'core/work.dart';
+import 'core/reading_history.dart';
 import 'core/youtube.dart';
 import 'core/youtube_public.dart';
 
@@ -76,12 +77,16 @@ class LibraryHome extends StatefulWidget {
   State<LibraryHome> createState() => _LibraryHomeState();
 }
 
-class _LibraryHomeState extends State<LibraryHome> {
+class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   final storage = LibraryStorage();
   final coverStore = const CoverStore();
   final heroArtworkStore = const HeroArtworkStore();
   Uint8List? heroArtwork;
   final readerSettingsStorage = const ReaderSettingsStorage();
+  final readingHistoryStore = const ReadingHistoryStore();
+  List<ReadingSession> readingSessions = [];
+  Future<void> _historyWrites = Future<void>.value();
+  ReadingActivityTracker? _activeReading;
   ReaderSettings readerSettings = const ReaderSettings();
   int coverEpoch = 0;
   Future<void> _libraryWrites = Future<void>.value();
@@ -123,6 +128,8 @@ class _LibraryHomeState extends State<LibraryHome> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadReadingHistory();
     _load();
     _loadOnlineSource();
     _loadReaderSettings();
@@ -133,6 +140,60 @@ class _LibraryHomeState extends State<LibraryHome> {
       _automaticUpdateCheck();
       if (Platform.isAndroid) _showSecurityNoticeOnce();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _activeReading?.resume();
+    } else {
+      _activeReading?.pause();
+    }
+  }
+
+  Future<void> _loadReadingHistory() async {
+    try {
+      final saved = await readingHistoryStore.load();
+      await _historyWrites;
+      if (mounted) setState(() => readingSessions = saved);
+    } catch (error) {
+      _status('독서 활동 기록 불러오기 실패: ' + error.toString());
+    }
+  }
+
+  Future<void> _commitReadingHistory(
+      List<ReadingSession> Function(List<ReadingSession>) edit) {
+    final task = _historyWrites.then((_) async {
+      final updated = edit(readingSessions);
+      if (updated.length > ReadingHistoryStore.maxSessions) {
+        updated.removeRange(0, updated.length - ReadingHistoryStore.maxSessions);
+      }
+      await readingHistoryStore.save(updated);
+      if (mounted) setState(() => readingSessions = updated);
+    });
+    _historyWrites = task.then<void>((_) {},
+        onError: (Object _, StackTrace __) {});
+    return task;
+  }
+
+  Future<void> _finishReading(ReadingActivityTracker tracker) async {
+    if (identical(_activeReading, tracker)) _activeReading = null;
+    if (!readerSettings.analyticsEnabled) return;
+    try {
+      final record = tracker.finish();
+      await _commitReadingHistory((old) => [...old, record]);
+    } catch (error) {
+      _status('독서 활동 기록 저장 실패: ' + error.toString());
+    }
+  }
+
+  Future<void> _clearReadingHistory() async {
+    try {
+      await _commitReadingHistory((_) => <ReadingSession>[]);
+      _status('독서 활동 기록 삭제 완료. 서재의 읽기 진행률은 유지돼.');
+    } catch (error) {
+      _status('독서 활동 기록 삭제 실패: ' + error.toString());
+    }
   }
 
   Future<void> _loadVersionInfo() async {
@@ -1030,6 +1091,8 @@ class _LibraryHomeState extends State<LibraryHome> {
           includesLibrary: choices[0],
           bannerImage: banner,
           covers: covers,
+          readingSessions: choices[0] ? readingSessions : const [],
+          includesReadingHistory: choices[0],
         ).encode();
       }
       final extension = excel ? 'xlsx' : 'json';
@@ -1125,6 +1188,9 @@ class _LibraryHomeState extends State<LibraryHome> {
                       ? '앱 설정 포함됨' : '앱 설정 없음 (기존 형식)'),
                   if (incoming.hasImages)
                     const HypText('표지·배너 이미지 포함됨'),
+                  if (incoming.includesReadingHistory)
+                    HypText('독서 활동 기록 ' + incoming.readingSessions.length.toString() +
+                        '개 포함됨'),
                   const SizedBox(height: 10),
                   ListTile(
                     key: const Key('backup-mode-add'),
@@ -1232,6 +1298,22 @@ class _LibraryHomeState extends State<LibraryHome> {
       }
       final imageErrors = await _restoreBackupImages(
           incoming, selected, previousLibrary);
+      if (incoming.includesReadingHistory &&
+          selected != AppRestoreMode.replaceSettings) {
+        await _commitReadingHistory((current) {
+          if (selected == AppRestoreMode.replaceEverything) {
+            return [...incoming.readingSessions];
+          }
+          final all = <String, ReadingSession>{
+            for (final session in current) session.id: session,
+          };
+          for (final session in incoming.readingSessions) {
+            all[session.id] = session;
+          }
+          return all.values.toList()
+            ..sort((a,b) => a.startedAt.compareTo(b.startedAt));
+        });
+      }
       if (mounted && plan.changesLibrary) {
         setState(() => libraryNavigationEpoch++);
       }
@@ -1423,14 +1505,22 @@ class _LibraryHomeState extends State<LibraryHome> {
             ? remote.title.trim() : work.title,
       );
       if (!mounted) return;
+      final reading = ReadingActivityTracker(work.workId, readerWork.currentPage);
+      _activeReading = reading;
+      try {
       await Navigator.push<void>(
         context,
         MaterialPageRoute(builder: (ctx) => GalleryReader(
           work: readerWork,
           archive: remote,
           persistentCacheDirectory: persistentCache,
-          onPageChanged: (page) { _touchRead(work, page: page); },
+          onPageChanged: (page) {
+            reading.pageChanged(page);
+            _touchRead(work, page: page);
+          },
           onFinishedReading: (total) {
+            reading.completed = true;
+            reading.pageChanged(total);
             unawaited(_touchRead(work, page: total,
                 pageCount: total, completed: true));
           },
@@ -1447,6 +1537,9 @@ class _LibraryHomeState extends State<LibraryHome> {
           onChooseCover: (page, bytes) => _usePageAsCover(work, page, bytes),
         )),
       );
+      } finally {
+        await _finishReading(reading);
+      }
     } catch (e) {
       _status('앱 내 온라인 읽기 실패: ' + e.toString() +
           ' / 작품 메뉴의 웹 리더로 열기를 이용할 수 있어.');
@@ -2047,15 +2140,21 @@ class _LibraryHomeState extends State<LibraryHome> {
       final book = archive ?? await galleryStore.read(work.workId);
       if (!mounted) return;
       await _touchRead(work, pageCount: book.pageCount);
+      final reading = ReadingActivityTracker(work.workId, work.currentPage);
+      _activeReading = reading;
+      try {
       await Navigator.push<void>(
         context,
         MaterialPageRoute(builder: (ctx) => GalleryReader(
           work: work,
           archive: book,
           onPageChanged: (page) {
+            reading.pageChanged(page);
             _touchRead(work, page: page);
           },
           onFinishedReading: (total) {
+            reading.completed = true;
+            reading.pageChanged(total);
             unawaited(_touchRead(work, page: total,
                 pageCount: total, completed: true));
           },
@@ -2070,6 +2169,9 @@ class _LibraryHomeState extends State<LibraryHome> {
           onChooseCover: (page, bytes) => _usePageAsCover(work, page, bytes),
         )), 
       );
+    } finally {
+        await _finishReading(reading);
+      }
     } catch (e) {
       _status('읽기 실패: ' + e.toString() + ' / CBZ 또는 ZIP 파일을 먼저 연결해줘.');
     }
@@ -2217,6 +2319,7 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _noticesTimer?.cancel();
     for (final ctrl in [urlInput, commentInput, numberInput, titleInput, authorInput, apiKeyInput, onlineSourceInput]) {
       ctrl.dispose();
@@ -2227,6 +2330,8 @@ class _LibraryHomeState extends State<LibraryHome> {
   @override
   Widget build(BuildContext context) => HypDashboard(
     library: library,
+    readingSessions: readingSessions,
+    onClearReadingHistory: _clearReadingHistory,
     galleryStore: galleryStore,
     coverStore: coverStore,
     coverEpoch: coverEpoch,
