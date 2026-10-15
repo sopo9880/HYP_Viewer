@@ -1724,11 +1724,11 @@ class _HypDashboardState extends State<HypDashboard> {
         compareClient.close();
       }
     }
+    EditionMatch evaluated(EditionMatch match, String id) =>
+        WorkEditions.withCoverEvidence(match, coverScores[id]);
     items.sort((a, b) {
-      final coverA = coverScores[a.id] ?? 0;
-      final coverB = coverScores[b.id] ?? 0;
-      final score = (b.match.score + coverB * 8).compareTo(
-          a.match.score + coverA * 8);
+      final score = evaluated(b.match, b.id).score.compareTo(
+          evaluated(a.match, a.id).score);
       if (score != 0) return score;
       return a.inLibrary == b.inLibrary ? a.id.compareTo(b.id) :
           a.inLibrary ? -1 : 1;
@@ -1756,10 +1756,10 @@ class _HypDashboardState extends State<HypDashboard> {
                     overflow: TextOverflow.ellipsis),
                 subtitle: Text('#' + item.id + ' · ' +
                     WorkEditions.languageName(item.language) + ' · ' +
-                    (item.match.autoLink ? labels.editionLikelyMatch :
-                        labels.editionManualReview) +
-                    ' · ' + item.match.score.toString() + '/100' +
-                    ' · ' + item.match.reason +
+                    (evaluated(item.match, item.id).autoLink
+                        ? labels.editionLikelyMatch : labels.editionManualReview) +
+                    ' · ' + evaluated(item.match, item.id).score.toString() + '/100' +
+                    ' · ' + evaluated(item.match, item.id).reason +
                     (coverScores[item.id] == null ? '' :
                         ' · ' + labels.editionCoverPercent(
                             (coverScores[item.id]! * 100).round()))),
