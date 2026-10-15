@@ -245,6 +245,9 @@ class _HypDashboardState extends State<HypDashboard> {
   List<OnlineSearchWork> _remoteResults = [];
   int _remoteTotal = 0;
   int _remotePage = 0;
+  bool _remoteHasMore = false;
+  Map<String, int> _remoteFieldTotals = const {};
+  List<String> _remoteWarnings = const [];
   final Map<String, (DateTime, OnlineSearchResult)> _remoteCache = {};
   final FocusNode _searchFocus = FocusNode();
   HypPage _page = HypPage.home;
@@ -445,6 +448,9 @@ class _HypDashboardState extends State<HypDashboard> {
     _remoteError = null;
     _remotePage = 0;
     _remoteTotal = 0;
+    _remoteHasMore = false;
+    _remoteFieldTotals = const {};
+    _remoteWarnings = const [];
     _remoteBusy = false;
     if (mounted) setState(() {});
     if (_search.text.trim().isNotEmpty && _searchScope != 'local') {
@@ -472,7 +478,7 @@ class _HypDashboardState extends State<HypDashboard> {
     final client = http.Client();
     try {
       final service = OnlineWorkSearch(client);
-      final result = await service.search(term, page: page,
+      final result = await service.searchUnified(term, page: page,
           language: _searchLanguage);
       if (!mounted || epoch != _searchEpoch) return;
       _remoteCache[key] = (DateTime.now(), result);
@@ -493,10 +499,13 @@ class _HypDashboardState extends State<HypDashboard> {
     if (!mounted || epoch != _searchEpoch) return;
     setState(() {
       _remotePage = result.page;
-      _remoteTotal = result.total;
+      _remoteHasMore = result.hasNextPage;
+      _remoteFieldTotals = result.fieldTotals;
+      _remoteWarnings = result.warnings;
       final seen = <String>{};
       _remoteResults = [...next ? _remoteResults : <OnlineSearchWork>[],
         ...result.works].where((work) => seen.add(work.workId)).toList();
+      _remoteTotal = _remoteResults.length;
     });
   }
 
@@ -706,6 +715,15 @@ class _HypDashboardState extends State<HypDashboard> {
     final term = _search.text.trim().toLowerCase();
     if (term.isEmpty) return _works;
     return _works.where((w) {
+      final code = w.sourceLanguage.toLowerCase().trim();
+      final allowed = switch (_searchLanguage) {
+        'korean' => const {'korean', 'ko'},
+        'japanese' => const {'japanese', 'ja'},
+        'english' => const {'english', 'en'},
+        'chinese' => const {'chinese', 'zh', 'zh-cn', 'zh-tw'},
+        _ => <String>{},
+      };
+      if (_searchLanguage.isNotEmpty && !allowed.contains(code)) return false;
       return [
         w.title, w.author, w.workId, w.sourceGroup, w.sourceSeries,
         w.sourceType, w.sourceLanguage, ...w.tags, ...w.collections,
@@ -2083,14 +2101,15 @@ class _HypDashboardState extends State<HypDashboard> {
           PopupMenuButton<String>(
             tooltip: '검색 언어 필터',
             onSelected: (value) {
-              _searchLanguage = value;
+              setState(() => _searchLanguage = value);
               _changedSearch();
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: '', child: HypText('모든 언어')),
               PopupMenuItem(value: 'korean', child: HypText('한국어')),
               PopupMenuItem(value: 'japanese', child: HypText('일본어')),
-              PopupMenuItem(value: 'english', child: HypText('영어')),
+              PopupMenuItem(value: 'english', child: HypText('English')),
+              PopupMenuItem(value: 'chinese', child: HypText('中文')),
             ],
             child: Chip(label: HypText(_searchLanguage.isEmpty
                 ? '언어 전체 ▾' : '언어: ' + _searchLanguage + ' ▾')),
@@ -2113,8 +2132,23 @@ class _HypDashboardState extends State<HypDashboard> {
       ],
       if (showOnline) ...[
         const SizedBox(height: 18),
-        HypText('온라인 작품 · ' + _remoteTotal.toString() + '개 결과',
+        HypText('온라인 작품 · ' + _remoteTotal.toString() + '개 고유 결과 수집',
             style: Theme.of(context).textTheme.titleMedium),
+        if (_remoteFieldTotals.isNotEmpty)
+          Wrap(spacing: 6, runSpacing: 3, children: [
+            for (final entry in _remoteFieldTotals.entries)
+              Chip(label: HypText(
+                switch (entry.key) {
+                  'general' => '일반·제목',
+                  'artist' => '작가',
+                  'group' => '서클',
+                  'female' => '여성 태그',
+                  'male' => '남성 태그',
+                  _ => entry.key,
+                } + ': ' + entry.value.toString() + '건 (중복 가능)')),
+          ]),
+        if (_remoteWarnings.isNotEmpty)
+          const HypText('일부 분야 검색이 실패했어. 조회된 결과만 표시해.'),
         const SizedBox(height: 8),
         if (_remoteBusy) const LinearProgressIndicator(),
         if (_remoteError != null) ...[
@@ -2144,8 +2178,7 @@ class _HypDashboardState extends State<HypDashboard> {
             onTap: () => _showOnlineWork(work),
           ),
         ),
-        if (!_remoteBusy && _remoteResults.length < _remoteTotal &&
-            _remoteResults.isNotEmpty)
+        if (!_remoteBusy && _remoteHasMore && _remoteResults.isNotEmpty)
           OutlinedButton.icon(
             onPressed: () => _fetchOnlineSearch(
                 epoch: _searchEpoch, next: true),
