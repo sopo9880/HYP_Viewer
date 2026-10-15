@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/i18n.dart';
+import '../l10n/app_localizations.dart';
 
 import '../core/number_extractor.dart';
 import 'candidate_editor.dart';
@@ -243,7 +244,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  HypText('발견된 번호 후보: ${widget.candidates.length}개',
+                  Text(AppLocalizations.of(context)!.shortsCandidateCount(widget.candidates.length),
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 7),
                   SizedBox(
