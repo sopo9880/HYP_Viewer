@@ -24,25 +24,35 @@ class DownloadQueueStore {
 
   Future<Map<String, String>> _read() async {
     final file = await _file;
+    var found = false;
+    Object? lastError;
     for (final path in [file.path, file.path + '.previous']) {
       final candidate = File(path);
       if (!await candidate.exists()) continue;
-      final parsed = jsonDecode(await candidate.readAsString());
-      if (parsed is! Map || parsed['version'] != 1 ||
-          parsed['jobs'] is! List) {
-        throw const FormatException('다운로드 대기열이 손상됐어.');
-      }
-      final pending = <String, String>{};
-      for (final item in (parsed['jobs'] as List).take(5000)) {
-        if (item is! Map) continue;
-        final id = item['id'];
-        final source = item['source'];
-        if (id is String && RegExp(r'^\d{1,12}$').hasMatch(id) &&
-            (source == 'hitomi' || source == 'json')) {
-          pending[id] = source as String;
+      found = true;
+      try {
+        final parsed = jsonDecode(await candidate.readAsString());
+        if (parsed is! Map || parsed['version'] != 1 ||
+            parsed['jobs'] is! List) {
+          throw const FormatException('다운로드 대기열이 손상됐어.');
         }
+        final pending = <String, String>{};
+        for (final item in (parsed['jobs'] as List).take(5000)) {
+          if (item is! Map) continue;
+          final id = item['id'];
+          final source = item['source'];
+          if (id is String && RegExp(r'^\d{1,12}$').hasMatch(id) &&
+              (source == 'hitomi' || source == 'json')) {
+            pending[id] = source as String;
+          }
+        }
+        return pending;
+      } catch (error) {
+        lastError = error;
       }
-      return pending;
+    }
+    if (found) {
+      throw StateError('다운로드 대기열 복구 실패: ' + lastError.toString());
     }
     return <String, String>{};
   }

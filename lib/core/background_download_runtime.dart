@@ -27,11 +27,12 @@ class BackgroundDownloadRuntime {
     if (_leases == 0) {
       if (Platform.isAndroid) {
         final ok = await FlutterBackground.initialize(
-          androidConfig: const FlutterBackgroundAndroidConfig(
+          androidConfig: FlutterBackgroundAndroidConfig(
             notificationTitle: 'HYP Viewer',
             notificationText: '승인된 작품을 오프라인으로 다운로드 중',
             notificationImportance: AndroidNotificationImportance.normal,
             enableWifiLock: false,
+            shouldRequestBatteryOptimizationsOff: false,
           ),
         );
         if (!ok || !await FlutterBackground.enableBackgroundExecution()) {

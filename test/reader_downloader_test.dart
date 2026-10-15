@@ -20,9 +20,12 @@ class _TestPages implements GalleryPageSource {
 }
 
 class _FailAfterOne extends _TestPages {
+  bool failOnce = true;
+
   @override
   Future<Uint8List> loadPage(int index) async {
-    if (index == 1) {
+    if (index == 1 && failOnce) {
+      failOnce = false;
       requested++;
       throw StateError('temporary disconnect');
     }
@@ -91,13 +94,12 @@ void main() {
     );
     expect(first.requested, 2);
     expect(await store.exists('78123'), false);
-    final second = _TestPages();
     final events = <int>[];
-    final result = await downloader.download('78123', second,
+    final result = await downloader.download('78123', first,
         transfer: GalleryTransfer(),
         onProgress: (n, _, __) => events.add(n));
     expect(result.pageCount, 3);
-    expect(second.requested, 2); // First completed page was reused.
+    expect(first.requested, 4); // Only the remaining two pages were fetched.
     expect(events, [1, 2, 3]);
   });
 
