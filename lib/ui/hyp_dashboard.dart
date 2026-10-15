@@ -792,12 +792,12 @@ class _HypDashboardState extends State<HypDashboard> {
         title: const HypText('HYP Viewer'),
         actions: [
           IconButton(
-            tooltip: '업데이트 확인',
+            tooltip: AppLocalizations.of(context)!.tooltipUpdate,
             onPressed: widget.onCheckRelease,
             icon: const Icon(Icons.system_update_alt_rounded),
           ),
           PopupMenuButton<String>(
-            tooltip: '추가 메뉴',
+            tooltip: AppLocalizations.of(context)!.tooltipMore,
             onSelected: _toolsAction,
             itemBuilder: (_) => _toolsMenu,
           ),
@@ -872,7 +872,7 @@ class _HypDashboardState extends State<HypDashboard> {
                             Expanded(child: HypText(widget.message, maxLines: 4,
                                 overflow: TextOverflow.ellipsis)),
                             IconButton(
-                              tooltip: '알림 닫기',
+                              tooltip: AppLocalizations.of(context)!.tooltipDismiss,
                               onPressed: widget.onDismissMessage,
                               icon: const Icon(Icons.close_rounded, size: 18),
                             ),
@@ -1040,7 +1040,7 @@ class _HypDashboardState extends State<HypDashboard> {
       _toolIcon(Icons.system_update_alt, '앱 업데이트', widget.onCheckRelease),
       const SizedBox(width: 8),
       PopupMenuButton<String>(
-        tooltip: '추가 메뉴',
+        tooltip: AppLocalizations.of(context)!.tooltipMore,
         color: HypColors.raised,
         onSelected: _toolsAction,
         itemBuilder: (_) => _toolsMenu,
@@ -1439,7 +1439,7 @@ class _HypDashboardState extends State<HypDashboard> {
           children: [
             Row(children: [
               IconButton(key: const Key('library-group-back'),
-                tooltip: '서재로 돌아가기',
+                tooltip: AppLocalizations.of(context)!.tooltipBackLibrary,
                 onPressed: () => setState(() => _openedGroupId = null),
                 icon: const Icon(Icons.arrow_back)),
               Expanded(child: HypText(
@@ -1449,7 +1449,7 @@ class _HypDashboardState extends State<HypDashboard> {
                 style: Theme.of(context).textTheme.titleMedium)),
               PopupMenuButton<String>(
                 key: Key('work-group-menu-' + _openedGroupId!),
-                tooltip: '묶음 관리',
+                tooltip: AppLocalizations.of(context)!.tooltipManageGroup,
                 onSelected: (action) => _groupAction(
                     action, _openedGroupId!, selected),
                 itemBuilder: (_) => const [
@@ -1965,14 +1965,14 @@ class _HypDashboardState extends State<HypDashboard> {
                   trailing: Row(mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        tooltip: '위로',
+                        tooltip: AppLocalizations.of(context)!.tooltipMoveUp,
                         onPressed: index == 0 ? null : () => update(() {
                           final item = ordered.removeAt(index);
                           ordered.insert(index - 1, item);
                         }),
                         icon: const Icon(Icons.arrow_upward)),
                       IconButton(
-                        tooltip: '아래로',
+                        tooltip: AppLocalizations.of(context)!.tooltipMoveDown,
                         onPressed: index == ordered.length - 1
                             ? null : () => update(() {
                           final item = ordered.removeAt(index);
@@ -2111,7 +2111,7 @@ class _HypDashboardState extends State<HypDashboard> {
         )),
         IconButton(
           key: const Key('library-sort-direction'),
-          tooltip: '정렬 방향 바꾸기',
+          tooltip: AppLocalizations.of(context)!.tooltipSortDirection,
           onPressed: () => widget.onSaveReaderSettings(
               widget.readerSettings.copyWith(
                 librarySortDescending:
@@ -2125,8 +2125,8 @@ class _HypDashboardState extends State<HypDashboard> {
           Expanded(child: DropdownButtonFormField<String>(
             key: const Key('library-popularity-period'),
             initialValue: widget.readerSettings.popularityPeriod,
-            decoration: const InputDecoration(isDense: true,
-                labelText: '히토미 인기 기간'),
+            decoration: InputDecoration(isDense: true,
+                labelText: AppLocalizations.of(context)!.tooltipPopularPeriod),
             items: const [
               DropdownMenuItem(value: 'today', child: HypText('일간')),
               DropdownMenuItem(value: 'week', child: HypText('주간')),
@@ -2138,7 +2138,7 @@ class _HypDashboardState extends State<HypDashboard> {
                 widget.readerSettings.copyWith(popularityPeriod: period));
             },
           )),
-          IconButton(tooltip: '인기 순위 새로고침',
+          IconButton(tooltip: AppLocalizations.of(context)!.tooltipRefreshPopular,
               onPressed: _popularityBusy ? null :
                   () => _loadPopularity(refresh: true),
               icon: const Icon(Icons.refresh)),
@@ -2224,6 +2224,14 @@ class _HypDashboardState extends State<HypDashboard> {
     ],
   );
 
+  static String _nativeLanguageName(String code) => switch (code) {
+    'korean' => '한국어',
+    'japanese' => '日本語',
+    'english' => 'English',
+    'chinese' => '中文',
+    _ => code,
+  };
+
   String _searchFieldLabel(BuildContext context, String field) {
     final l = AppLocalizations.of(context)!;
     return switch (field) {
@@ -2266,20 +2274,22 @@ class _HypDashboardState extends State<HypDashboard> {
               }),
             ),
           PopupMenuButton<String>(
-            tooltip: '검색 언어 필터',
+            tooltip: AppLocalizations.of(context)!.tooltipSearchLanguage,
             onSelected: (value) {
               setState(() => _searchLanguage = value);
               _changedSearch();
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: '', child: HypText('모든 언어')),
-              PopupMenuItem(value: 'korean', child: HypText('한국어')),
-              PopupMenuItem(value: 'japanese', child: HypText('일본어')),
+              PopupMenuItem(value: 'korean', child: Text('한국어')),
+              PopupMenuItem(value: 'japanese', child: Text('日本語')),
               PopupMenuItem(value: 'english', child: HypText('English')),
               PopupMenuItem(value: 'chinese', child: HypText('中文')),
             ],
-            child: Chip(label: HypText(_searchLanguage.isEmpty
-                ? '언어 전체 ▾' : '언어: ' + _searchLanguage + ' ▾')),
+            child: Chip(label: Text(_searchLanguage.isEmpty
+                ? HypI18n.t(context, '언어 전체 ▾')
+                : AppLocalizations.of(context)!.searchLanguageChip(
+                    _nativeLanguageName(_searchLanguage)))),
           ),
         ]),
       if (showLocal) ...[
@@ -2341,7 +2351,7 @@ class _HypDashboardState extends State<HypDashboard> {
               '#' + work.workId,
             ].join(' · '), maxLines: 2),
             trailing: IconButton(
-              tooltip: '서재에 추가',
+              tooltip: AppLocalizations.of(context)!.tooltipAddLibrary,
               onPressed: () => widget.onSaveOnlineSearchWork(work),
               icon: const Icon(Icons.bookmark_add_outlined),
             ),
@@ -2860,9 +2870,8 @@ class _HypDashboardState extends State<HypDashboard> {
               ),
           ]),
           const SizedBox(height: 7),
-          const HypText('PNG · JPG · WebP (최대 12MB). 이미지 자체는 '
-              '이 기기에 저장되며 JSON 통합 백업에서 선택적으로 포함할 수 있어.',
-              style: TextStyle(fontSize: 12, color: HypColors.muted)),
+          Text(AppLocalizations.of(context)!.settingsHeroUploadNote,
+              style: const TextStyle(fontSize: 12, color: HypColors.muted)),
         ],
       )),
       const SizedBox(height: 10),
@@ -2923,8 +2932,7 @@ class _HypDashboardState extends State<HypDashboard> {
               key: const Key('reader-tap-navigation-setting'),
               contentPadding: EdgeInsets.zero,
               title: const HypText('화면 좌우 터치로 페이지 넘기기 (기본 켜짐)'),
-              subtitle: const HypText('왼쪽 30%는 이전 페이지, 오른쪽 30%는 다음 페이지. '
-                  '가운데 40%는 화면 UI 숨김·표시. 기존에 꺼둔 설정은 유지돼.'),
+              subtitle: Text(AppLocalizations.of(context)!.settingsTapZonesNote),
               value: widget.readerSettings.tapNavigation,
               onChanged: (v) => widget.onSaveReaderSettings(
                   widget.readerSettings.copyWith(tapNavigation: v)),
@@ -3055,18 +3063,14 @@ class _HypDashboardState extends State<HypDashboard> {
             key: const Key('data-saver-setting'),
             contentPadding: EdgeInsets.zero,
             title: const HypText('데이터 절약 모드'),
-            subtitle: const HypText('켜면 -1 전체 로딩을 잠시 멈추고 '
-                '보이는 페이지와 다음 1장 위주로 요청해. '
-                '동시 네트워크 요청도 1개로 제한해.'),
+            subtitle: Text(AppLocalizations.of(context)!.settingsDataSaverNote),
             value: widget.readerSettings.dataSaverMode,
             onChanged: (v) => widget.onSaveReaderSettings(
               widget.readerSettings.copyWith(dataSaverMode: v)),
           ),
           const SizedBox(height: 8),
-          const HypText(
-            '키보드(뷰어): ← / →, PageUp / PageDown, Space, Home / End, '
-            'Esc(닫기). 서재의 작품 메뉴에서 표지 선택 가능.',
-            style: TextStyle(fontSize: 12, color: HypColors.muted),
+          Text(AppLocalizations.of(context)!.settingsKeyboardHint,
+            style: const TextStyle(fontSize: 12, color: HypColors.muted),
           ),
         ],
       )),
