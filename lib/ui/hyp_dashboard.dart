@@ -249,6 +249,7 @@ class HypDashboard extends StatefulWidget {
 class _HypDashboardState extends State<HypDashboard> {
   final TextEditingController _search = TextEditingController();
   Timer? _searchDebounce;
+  http.Client? _activeRemoteSearchClient;
   int _searchEpoch = 0;
   String _searchScope = 'all'; // all, local, online
   String _searchLanguage = '';
@@ -444,6 +445,8 @@ class _HypDashboardState extends State<HypDashboard> {
     _notificationExitTimer?.cancel();
     _preloadInput.dispose();
     _searchDebounce?.cancel();
+    _activeRemoteSearchClient?.close();
+    _activeRemoteSearchClient = null;
     _search.removeListener(_changedSearch);
     _search.dispose();
     _searchFocus.dispose();
@@ -471,6 +474,8 @@ class _HypDashboardState extends State<HypDashboard> {
 
   void _changedSearch() {
     _searchDebounce?.cancel();
+    _activeRemoteSearchClient?.close();
+    _activeRemoteSearchClient = null;
     _searchEpoch++;
     _remoteResults = [];
     _remoteError = null;
@@ -529,6 +534,7 @@ class _HypDashboardState extends State<HypDashboard> {
       _remoteError = null;
     });
     final client = http.Client();
+    _activeRemoteSearchClient = client;
     try {
       final service = OnlineWorkSearch(client);
       final result = await service.searchUnified(expanded, page: page,
@@ -540,6 +546,11 @@ class _HypDashboardState extends State<HypDashboard> {
                 _remoteProgressTotal = total;
               });
             }
+          },
+          onPartial: (partial) {
+            if (mounted && epoch == _searchEpoch) {
+              _useOnlineResults(partial, epoch, next: next);
+            }
           });
       if (!mounted || epoch != _searchEpoch) return;
       _remoteCache[key] = (DateTime.now(), result);
@@ -550,6 +561,9 @@ class _HypDashboardState extends State<HypDashboard> {
         _remoteError = error.toString();
       });
     } finally {
+      if (identical(_activeRemoteSearchClient, client)) {
+        _activeRemoteSearchClient = null;
+      }
       client.close();
       if (mounted && epoch == _searchEpoch) setState(() => _remoteBusy = false);
     }
