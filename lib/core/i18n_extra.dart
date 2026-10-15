@@ -1,6 +1,7 @@
 /// Additional 0.4 translations for on-device UI; titles remain verbatim.
 abstract final class HypExtraTranslations {
   static const Map<String, List<String>> labels = {
+    "서재 정렬": ["Library Sorting", "本棚の並べ替え"],
     "작품·CBZ·읽기 기록은 그대로 두고 그룹 표시만 해제할까?": ["Keep the work, CBZ, and reading history and remove only its grouping?","作品・CBZ・読書履歴を残して、グループ表示だけ解除しますか？"],
     "추천 묶음을 펼쳐 표지·제목·번호를 확인해 줘. 개별 작품을 제외하거나 이름과 순서를 바꿀 수 있어. 확인 전에는 서재가 바뀌지 않아.": ["Expand the suggested group to review its covers, titles and IDs. You can exclude works or adjust its name and order. Nothing changes until you confirm.","おすすめのグループを展開して表紙・タイトル・番号を確認してください。作品の除外や名前・順序の変更ができます。確認前に本棚は変更されません。"],
     "HYP Viewer 관리자 공지": ["HYP Viewer Announcements","HYP Viewer管理者のお知らせ"],
