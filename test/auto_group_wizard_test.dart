@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:hyp_viewer/l10n/app_localizations.dart';
 import 'package:hyp_viewer/core/work.dart';
 import 'package:hyp_viewer/core/work_grouping.dart';
 import 'package:hyp_viewer/ui/auto_group_wizard.dart';
@@ -16,7 +18,15 @@ void main() {
         title: '멋대로 눌러앉은 유령 2편');
     final c = WorkEntry.create(workId: '3419120',
         title: '멋대로 눌러앉은 유령 3편');
-    await tester.pumpWidget(MaterialApp(home: Scaffold(
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('ko'),
+      supportedLocales: const [Locale('ko'), Locale('en'), Locale('ja')],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],home: Scaffold(
       body: Center(child: TextButton(
         onPressed: () async {
           chosen = await showDialog<List<AutoGroupReview>>(
@@ -62,7 +72,15 @@ void main() {
         groupId: 'group1', groupTitle: '수학여행', groupOrder: 1);
     final next = WorkEntry.create(workId: '100002',
         title: '수학여행 2편');
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Center(
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('ko'),
+      supportedLocales: const [Locale('ko'), Locale('en'), Locale('ja')],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],home: Scaffold(body: Center(
       child: AutoGroupWizard(
         suggestions: const [WorkGroupSuggestion(
           '수학여행', ['100002'], '기존 시리즈',
