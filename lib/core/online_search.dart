@@ -165,6 +165,8 @@ class OnlineWorkSearch {
     int page = 1,
     String language = '',
     void Function(int completed, int total)? onProgress,
+    /// Immutable snapshots for immediate incremental rendering.
+    void Function(OnlineSearchResult snapshot)? onPartial,
   }) async {
     final queries = planQueries(raw);
     final unique = <String, OnlineSearchWork>{};
@@ -174,31 +176,57 @@ class OnlineWorkSearch {
     var successes = 0;
     var hasMore = false;
     var completed = 0;
-    // Keep concurrent requests bounded so a partially down mirror never
-    // floods either server when the user types a short common word.
+    const weights = {
+      'general': 12, 'advanced': 12, 'artist': 10, 'series': 8,
+      'group': 7, 'tag': 4, 'female': 4, 'male': 4,
+    };
+
+    OnlineSearchResult snapshot() {
+      final ordered = unique.values.toList();
+      int score(OnlineSearchWork work) =>
+          (matched[work.workId] ?? const <String>{}).fold<int>(
+              0, (sum, field) => sum + (weights[field] ?? 1));
+      ordered.sort((a, b) {
+        final relevance = score(b).compareTo(score(a));
+        if (relevance != 0) return relevance;
+        return a.workId.compareTo(b.workId);
+      });
+      // Never share mutable maps with UI state or the 10-minute cache.
+      return OnlineSearchResult(ordered, unique.length, page,
+          fieldTotals: Map<String, int>.of(counts),
+          matchedFields: matched.map((id, fields) =>
+              MapEntry(id, fields.toList())),
+          warnings: List<String>.of(warnings),
+          hasNextPage: hasMore);
+    }
+
+    // Keep at most three provider requests running at the same time. Each
+    // completed category is emitted without waiting for slower categories.
     for (var i = 0; i < queries.length; i += 3) {
       final batch = queries.skip(i).take(3);
       await Future.wait(batch.map((entry) async {
         try {
-          final r = await search(entry.$2, page: page, language: language);
+          final result = await search(entry.$2,
+              page: page, language: language);
           successes++;
-          for (final warning in r.warnings) {
+          for (final warning in result.warnings) {
             warnings.add(entry.$1 + ': ' + warning);
           }
-          counts.update(entry.$1, (n) => n + r.total,
-              ifAbsent: () => r.total);
-          hasMore = hasMore || r.works.isNotEmpty &&
-              (r.total > page * 25 || r.works.length >= 25);
-          for (final work in r.works) {
+          counts.update(entry.$1, (n) => n + result.total,
+              ifAbsent: () => result.total);
+          hasMore = hasMore || result.works.isNotEmpty &&
+              (result.total > page * 25 || result.works.length >= 25);
+          for (final work in result.works) {
             unique.putIfAbsent(work.workId, () => work);
             matched.putIfAbsent(work.workId, () => <String>{})
                 .add(entry.$1);
           }
-        } catch (e) {
-          warnings.add(entry.$1 + ': ' + e.toString());
+        } catch (error) {
+          warnings.add(entry.$1 + ': ' + error.toString());
         } finally {
           completed++;
           onProgress?.call(completed, queries.length);
+          if (successes > 0) onPartial?.call(snapshot());
         }
       }));
     }
@@ -206,24 +234,7 @@ class OnlineWorkSearch {
       throw StateError('모든 검색 서버 요청이 실패했어: ' +
           warnings.take(2).join(' / '));
     }
-    final ordered = unique.values.toList();
-    const weights = {
-      'general': 12, 'advanced': 12, 'artist': 10, 'series': 8,
-      'group': 7, 'tag': 4, 'female': 4, 'male': 4,
-    };
-    int score(OnlineSearchWork work) =>
-        (matched[work.workId] ?? const <String>{}).fold<int>(
-            0, (sum, field) => sum + (weights[field] ?? 1));
-    ordered.sort((a, b) {
-      final relevance = score(b).compareTo(score(a));
-      if (relevance != 0) return relevance;
-      return a.workId.compareTo(b.workId);
-    });
-    return OnlineSearchResult(ordered, unique.length, page,
-        fieldTotals: counts,
-        matchedFields: matched.map((id, fields) =>
-            MapEntry(id, fields.toList())),
-        warnings: warnings, hasNextPage: hasMore);
+    return snapshot();
   }
 
   Future<OnlineSearchResult> search(String raw, {
