@@ -1213,7 +1213,7 @@ class _HypDashboardState extends State<HypDashboard> {
           const HypText('읽을 언어판 선택',
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
           const SizedBox(height: 7),
-          Flexible(child: ListView(shrinkWrap: true, children: [
+          SizedBox(height: 300, child: ListView(children: [
             for (final work in [
               WorkEditions.preferred(editions,
                   widget.readerSettings.preferredEditionLanguage),
