@@ -104,6 +104,32 @@ void main() {
     expect(parsed.covers.single.bytes, cover);
   });
 
+  test('v0.3-era JSON without edition fields remains compatible', () {
+    final legacy = LibraryBackup(
+      works: [WorkEntry.create(workId: '1111111', title: 'Legacy')
+          .copyWith(currentPage: 14, favorite: true,
+              collections: ['Old Shelf'])],
+      collections: const ['Old Shelf'],
+    ).toJson();
+    final oldWorks = (legacy['works'] as List).cast<Map<String, Object?>>();
+    for (final entry in oldWorks) {
+      entry.remove('editionGroupId');
+      entry.remove('sourceLanguage');
+      entry.remove('groupOrder');
+      entry.remove('lastOpenedAt');
+    }
+    final restored = AppBackup.decode(jsonEncode(legacy));
+    final work = restored.library.works.single;
+    expect(work.editionGroupId, isEmpty);
+    expect(work.currentPage, 14);
+    expect(work.favorite, true);
+    expect(work.collections, ['Old Shelf']);
+    expect(restored.library.collections, ['Old Shelf']);
+    expect(AppBackup.decode(utf8.decode(
+        AppBackup(library: restored.library).encode()))
+        .library.works.single.currentPage, 14);
+  });
+
   test('unknown schema and malicious cover path fail before import', () {
     final raw = AppBackup(library: phone, settings: phoneSettings).toJson();
     raw['schemaVersion'] = 999;
