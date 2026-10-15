@@ -686,6 +686,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final blocks = <String>[];
     final errors = <String>[];
     final youtubePartialText = AppLocalizations.of(context)!.youtubeCommentsPartial;
+    final sourceIncompleteText = AppLocalizations.of(context)!.sourceIncomplete;
     final mapped = <String, String>{};
     final evidence = <String, Set<String>>{};
     void remember(String id, String url) {
@@ -743,7 +744,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             if (!preview.fullBody) {
               // Unavailable Instagram captions/comments and truncated
               // community text must never be reported as complete.
-              errors.add(AppLocalizations.of(context)!.sourceIncomplete);
+              errors.add(sourceIncompleteText);
             }
           } else {
             errors.add('원문 자동 분석 미지원: ' + link.uri.host);
