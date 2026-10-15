@@ -1415,6 +1415,19 @@ class _HypDashboardState extends State<HypDashboard> {
         editions: members,
         coverImages: _coverImages,
         onOpen: () => _openEditionStack(members),
+        onOpenCover: () {
+          final opened = members.where((entry) =>
+              entry.lastOpenedAt?.isNotEmpty == true).toList();
+          final selected = WorkEditions.preferred(
+              opened.isEmpty ? members : opened,
+              opened.isEmpty
+                  ? widget.readerSettings.preferredEditionLanguage : 'recent');
+          if (_offlineKeys.contains(selected.key)) {
+            _openReaderWith(() => widget.onOpenGallery(selected));
+          } else {
+            _openReaderWith(() => widget.onReadOnline(selected));
+          }
+        },
       );
     }
     final work = members.first;
