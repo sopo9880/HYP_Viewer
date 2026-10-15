@@ -15,8 +15,8 @@ abstract final class WorkEditionService {
           incoming.sourceLanguage.isEmpty) continue;
       final found = entries.where((old) =>
           old.workId != id && old.sourceLanguage.isNotEmpty &&
-          old.sourceLanguage.toLowerCase() !=
-              incoming.sourceLanguage.toLowerCase() &&
+          WorkEditions.canonicalLanguage(old.sourceLanguage) !=
+              WorkEditions.canonicalLanguage(incoming.sourceLanguage) &&
           WorkEditions.compare(old, incoming).autoLink).toList();
       if (found.isEmpty) continue;
       // Multiple competing chapter groups are ambiguous: never pick the
@@ -49,8 +49,8 @@ abstract final class WorkEditionService {
     }
     if (anchor.first.sourceLanguage.trim().isNotEmpty &&
         edition.first.sourceLanguage.trim().isNotEmpty &&
-        anchor.first.sourceLanguage.toLowerCase() ==
-            edition.first.sourceLanguage.toLowerCase()) {
+        WorkEditions.canonicalLanguage(anchor.first.sourceLanguage) ==
+            WorkEditions.canonicalLanguage(edition.first.sourceLanguage)) {
       throw StateError('같은 언어끼리는 언어판 묶음으로 만들 수 없어.');
     }
     if (anchor.first.groupId.isNotEmpty &&
