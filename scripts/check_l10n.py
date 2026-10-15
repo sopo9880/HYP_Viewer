@@ -102,7 +102,7 @@ def check():
     for base in ("origin/main", "main"):
         result = subprocess.run(
             ["git", "diff", "--unified=0", f"{base}...HEAD", "--", "lib"],
-            capture_output=True, text=True)
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
         if result.returncode == 0:
             diff = result.stdout
             break

@@ -64,7 +64,7 @@ class YoutubeCollectionReader {
   Future<YoutubeCollectionPage> listNext(YoutubeCollectionPage previous,
       {bool playlist = false}) async {
     if (!previous.hasMore) {
-      throw const StateError('공개 목록의 다음 페이지 정보가 없어.');
+      throw StateError('공개 목록의 다음 페이지 정보가 없어.');
     }
     final token = previous.continuation!;
     if (token.length > 4096 || token.isEmpty) {
