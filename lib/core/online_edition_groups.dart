@@ -16,6 +16,25 @@ abstract final class OnlineEditionGroups {
         sourceSeries: work.series.join(', '),
       );
 
+  /// Find one unambiguous saved logical work for an online edition.
+  /// An uncertain candidate is never automatically stored or merged.
+  static WorkEntry? savedAnchor(OnlineSearchWork remote,
+      Iterable<WorkEntry> library) {
+    final candidate = _candidate(remote).copyWith(
+        titleAliases: remote.titleAliases);
+    final grouped = <String, WorkEntry>{};
+    for (final local in library) {
+      if (local.workId == remote.workId) return local;
+      if (local.sourceLanguage.trim().toLowerCase() ==
+          remote.language.trim().toLowerCase()) continue;
+      if (!WorkEditions.compare(local, candidate).autoLink) continue;
+      grouped.putIfAbsent(WorkEditions.groupKey(local), () => local);
+    }
+    // Multiple unrelated saved chapter groups matched this metadata:
+    // leave the choice to the reader rather than silently selecting one.
+    return grouped.length == 1 ? grouped.values.single : null;
+  }
+
   static List<List<OnlineSearchWork>> cluster(
       Iterable<OnlineSearchWork> searchResults) {
     final groups = <List<OnlineSearchWork>>[];
