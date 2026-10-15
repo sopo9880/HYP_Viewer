@@ -123,6 +123,30 @@ abstract final class WorkEditions {
         sameAuthor || sameCircle ? '원제 및 제작자 일치' : '원제 일치 · 확인 필요');
   }
 
+  /// Adjust the *displayed* evidence using two available covers.
+  ///
+  /// Cover similarity alone never promotes a non-automatic metadata match
+  /// into an automatic match. A striking visual mismatch can instead mark a
+  /// potential automatic match for the reader to review manually.
+  static EditionMatch withCoverEvidence(EditionMatch metadata,
+      double? similarity) {
+    if (similarity == null || !similarity.isFinite ||
+        similarity < 0 || similarity > 1 || metadata.score <= 0) {
+      return metadata;
+    }
+    if (similarity <= .18 && metadata.autoLink) {
+      return EditionMatch(74,
+          metadata.reason + ' · 표지 차이 큼, 수동 확인 필요');
+    }
+    if (similarity >= .9 && metadata.isCandidate) {
+      final boosted = (metadata.score + 7).clamp(
+          0, metadata.autoLink ? 100 : 79).toInt();
+      return EditionMatch(boosted,
+          metadata.reason + ' · 표지 유사도 높음 (보조 근거)');
+    }
+    return metadata;
+  }
+
   /// Hide a logical chapter on the shelf when any language edition is
   /// completed. Search and each edition's underlying reading status remain
   /// independent.
