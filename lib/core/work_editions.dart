@@ -47,8 +47,10 @@ abstract final class WorkEditions {
     bool meaningful(String title) => title.length >= 4 &&
         !RegExp(r'^(?:작품|work|gallery)\s*\d+$', caseSensitive: false)
             .hasMatch(title);
-    if (!meaningful(titleA) || !meaningful(titleB)) {
-      return const EditionMatch(0, '확인 가능한 원제 부족');
+    final hasTitleEvidence = meaningful(titleA) && meaningful(titleB) ||
+        a.titleAliases.isNotEmpty && b.titleAliases.isNotEmpty;
+    if (!hasTitleEvidence) {
+      return const EditionMatch(0, '확인 가능한 원제 또는 별칭 부족');
     }
 
     String normal(String text) => text.trim().toLowerCase();
@@ -68,11 +70,13 @@ abstract final class WorkEditions {
         ? (a.totalPages - b.totalPages).abs() : 9999;
     // Titles can contain multiple original/translated aliases separated by
     // '|'. Any independently matching alias counts as shared title evidence.
-    Set<String> aliases(String title) => title.split('|')
+    Set<String> aliases(WorkEntry work) => [
+      work.title, ...work.titleAliases,
+    ].expand((title) => title.split('|'))
         .map((name) => WorkGrouping.normalizedSeries(name))
-        .where((name) => name.length >= 4).toSet();
+        .where((name) => name.length >= 3).toSet();
     final sameTitle = titleA == titleB ||
-        aliases(a.title).intersection(aliases(b.title)).isNotEmpty;
+        aliases(a).intersection(aliases(b)).isNotEmpty;
     if (!sameTitle) {
       // Different translations can have entirely different titles.
       // Auto-link only with independent creator, series, chapter and
@@ -135,8 +139,8 @@ abstract final class WorkEditions {
     add(entered);
     // Retain both sides of "original | translated": a plain search can
     // otherwise miss a differently localized title.
-    for (final title in work.title.split('|')) {
-      add(title);
+    for (final title in [work.title, ...work.titleAliases]) {
+      for (final part in title.split('|')) add(part);
     }
     final creator = work.author.split(',').first.trim();
     if (creator.isNotEmpty) add('artist:' + creator);
@@ -147,7 +151,7 @@ abstract final class WorkEditions {
     if (work.sourceSeries.trim().isNotEmpty) {
       add(work.sourceSeries.trim());
     }
-    return result.take(7).toList();
+    return result.take(12).toList();
   }
 
   static String groupKey(WorkEntry work) =>
