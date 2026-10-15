@@ -58,7 +58,7 @@ class HypWorkEditionCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12)),
                     child: Padding(padding: const EdgeInsets.all(5),
                       child: HypText(editions.length.toString() + '개 언어판',
-                        style: const TextStyle(fontSize: 11)))),
+                        style: const TextStyle(fontSize: 11))))),
               ])),
               Padding(padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start,
