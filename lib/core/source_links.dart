@@ -204,7 +204,7 @@ class PublicSourcePreview {
       if (quoted) {
         if (escaped) {
           escaped = false;
-        } else if (current == r'\') {
+        } else if (current.codeUnitAt(0) == 92) {
           escaped = true;
         } else if (current == '"') {
           quoted = false;
