@@ -24,6 +24,7 @@ import 'candidate_editor.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
 import '../core/work_editions.dart';
+import '../core/local_search.dart';
 import '../core/cover_similarity.dart';
 import 'work_edition_card.dart';
 import 'hero_banner.dart';
@@ -252,6 +253,8 @@ class _HypDashboardState extends State<HypDashboard> {
   int _remotePage = 0;
   bool _remoteHasMore = false;
   Map<String, int> _remoteFieldTotals = const {};
+  Map<String, List<String>> _remoteFieldMatches = const {};
+  String _remoteFieldFilter = '';
   List<String> _remoteWarnings = const [];
   final Map<String, (DateTime, OnlineSearchResult)> _remoteCache = {};
   final FocusNode _searchFocus = FocusNode();
@@ -465,6 +468,8 @@ class _HypDashboardState extends State<HypDashboard> {
     _remoteTotal = 0;
     _remoteHasMore = false;
     _remoteFieldTotals = const {};
+    _remoteFieldMatches = const {};
+    _remoteFieldFilter = '';
     _remoteWarnings = const [];
     _remoteBusy = false;
     if (mounted) setState(() {});
@@ -516,7 +521,16 @@ class _HypDashboardState extends State<HypDashboard> {
       _remotePage = result.page;
       _remoteHasMore = result.hasNextPage;
       _remoteFieldTotals = result.fieldTotals;
-      _remoteWarnings = result.warnings;
+      _remoteFieldMatches = <String, List<String>>{
+        if (next) ..._remoteFieldMatches,
+        for (final entry in result.matchedFields.entries)
+          entry.key: {...?_remoteFieldMatches[entry.key],
+             ...entry.value}.toList(),
+      };
+      _remoteWarnings = [
+        if (next) ..._remoteWarnings,
+        ...result.warnings,
+      ];
       final seen = <String>{};
       _remoteResults = [...next ? _remoteResults : <OnlineSearchWork>[],
         ...result.works].where((work) => seen.add(work.workId)).toList();
@@ -726,25 +740,9 @@ class _HypDashboardState extends State<HypDashboard> {
   List<WorkEntry> get _downloaded =>
       _works.where((w) => _offlineKeys.contains(w.key)).toList();
 
-  List<WorkEntry> get _results {
-    final term = _search.text.trim().toLowerCase();
-    if (term.isEmpty) return _works;
-    return _works.where((w) {
-      final code = w.sourceLanguage.toLowerCase().trim();
-      final allowed = switch (_searchLanguage) {
-        'korean' => const {'korean', 'ko'},
-        'japanese' => const {'japanese', 'ja'},
-        'english' => const {'english', 'en'},
-        'chinese' => const {'chinese', 'zh', 'zh-cn', 'zh-tw'},
-        _ => <String>{},
-      };
-      if (_searchLanguage.isNotEmpty && !allowed.contains(code)) return false;
-      return [
-        w.title, w.author, w.workId, w.sourceGroup, w.sourceSeries,
-        w.sourceType, w.sourceLanguage, ...w.tags, ...w.collections,
-      ].join(' ').toLowerCase().contains(term);
-    }).toList();
-  }
+  List<WorkEntry> get _results => _works.where((work) =>
+      LocalWorkSearch.matches(work, _search.text,
+          language: _searchLanguage)).toList();
 
   KeyEventResult _onKeyboardShortcut(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent ||
@@ -2226,10 +2224,28 @@ class _HypDashboardState extends State<HypDashboard> {
     ],
   );
 
+  String _searchFieldLabel(BuildContext context, String field) {
+    final l = AppLocalizations.of(context)!;
+    return switch (field) {
+      'general' => l.searchGeneral,
+      'artist' => l.searchArtist,
+      'group' => l.searchGroup,
+      'series' => l.searchSeries,
+      'tag' => l.searchTag,
+      'female' => l.searchFemale,
+      'male' => l.searchMale,
+      'advanced' => l.searchAdvanced,
+      _ => field,
+    };
+  }
+
   Widget _searchContent() {
     final existingIds = widget.library.works.map((w) => w.workId).toSet();
     final online = _remoteResults.where((w) =>
-        !existingIds.contains(w.workId)).toList();
+        !existingIds.contains(w.workId) &&
+        (_remoteFieldFilter.isEmpty ||
+         (_remoteFieldMatches[w.workId] ?? const <String>[])
+             .contains(_remoteFieldFilter))).toList();
     final showLocal = _searchScope != 'online';
     final showOnline = _searchScope != 'local';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -2268,7 +2284,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ]),
       if (showLocal) ...[
         const SizedBox(height: 13),
-        HypText('내 서재 · ' + _results.length.toString() + '개',
+        Text(AppLocalizations.of(context)!.searchLocalCount(_results.length),
             style: Theme.of(context).textTheme.titleMedium),
         Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(
           key: const Key('search-select-mode'),
@@ -2283,20 +2299,23 @@ class _HypDashboardState extends State<HypDashboard> {
       ],
       if (showOnline) ...[
         const SizedBox(height: 18),
-        HypText('온라인 작품 · ' + _remoteTotal.toString() + '개 고유 결과 수집',
+        Text(AppLocalizations.of(context)!.searchFetchedUnique(_remoteTotal),
             style: Theme.of(context).textTheme.titleMedium),
         if (_remoteFieldTotals.isNotEmpty)
           Wrap(spacing: 6, runSpacing: 3, children: [
+            FilterChip(
+              label: Text(AppLocalizations.of(context)!.searchAllFields),
+              selected: _remoteFieldFilter.isEmpty,
+              onSelected: (_) => setState(() => _remoteFieldFilter = ''),
+            ),
             for (final entry in _remoteFieldTotals.entries)
-              Chip(label: HypText(
-                switch (entry.key) {
-                  'general' => '일반·제목',
-                  'artist' => '작가',
-                  'group' => '서클',
-                  'female' => '여성 태그',
-                  'male' => '남성 태그',
-                  _ => entry.key,
-                } + ': ' + entry.value.toString() + '건 (중복 가능)')),
+              FilterChip(
+                label: Text(AppLocalizations.of(context)!.searchFieldCount(
+                    _searchFieldLabel(context, entry.key), entry.value)),
+                selected: _remoteFieldFilter == entry.key,
+                onSelected: (chosen) => setState(() =>
+                    _remoteFieldFilter = chosen ? entry.key : ''),
+              ),
           ]),
         if (_remoteWarnings.isNotEmpty)
           const HypText('일부 분야 검색이 실패했어. 조회된 결과만 표시해.'),
