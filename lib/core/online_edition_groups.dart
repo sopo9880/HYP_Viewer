@@ -26,8 +26,8 @@ abstract final class OnlineEditionGroups {
     final grouped = <String, WorkEntry>{};
     for (final local in library) {
       if (local.workId == remote.workId) return local;
-      if (local.sourceLanguage.trim().toLowerCase() ==
-          remote.language.trim().toLowerCase()) continue;
+      if (WorkEditions.canonicalLanguage(local.sourceLanguage) ==
+          WorkEditions.canonicalLanguage(remote.language)) continue;
       if (!WorkEditions.compare(local, candidate).autoLink) continue;
       grouped.putIfAbsent(WorkEditions.groupKey(local), () => local);
     }
@@ -44,13 +44,13 @@ abstract final class OnlineEditionGroups {
       if (!seen.add(item.workId)) continue;
       final candidate = _candidate(item);
       List<OnlineSearchWork>? target;
-      final code = item.language.trim().toLowerCase();
+      final code = WorkEditions.canonicalLanguage(item.language);
       if (code.isNotEmpty) {
         for (final group in groups) {
           // Every edition must agree with EVERY member, not just the first;
           // this avoids accidentally grouping a chain of different chapters.
           if (group.every((other) {
-            final otherCode = other.language.trim().toLowerCase();
+            final otherCode = WorkEditions.canonicalLanguage(other.language);
             return otherCode.isNotEmpty && otherCode != code &&
                 WorkEditions.compare(candidate, _candidate(other)).autoLink;
           })) {
