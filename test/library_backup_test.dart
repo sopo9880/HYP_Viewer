@@ -23,6 +23,57 @@ void main() {
     expect(restored.collections, ['나중에 볼 작품']);
   });
 
+  test('multi-origin provenance and verified title aliases survive JSON', () {
+    final japanese = WorkEntry.create(
+      workId: '2711759',
+      videoUrl: 'https://www.youtube.com/watch?v=abcD123xyZ0',
+      sourceUrls: [
+        'https://youtube.com/post/Ugkx1234567890',
+        'https://www.instagram.com/reel/ABC12345/',
+        'http://example.org/unsafe',
+        'https://youtube.com/post/Ugkx1234567890',
+      ],
+      titleAliases: ['風の空', '하늘의 바람'],
+      title: 'Kaze no Sora',
+    ).copyWith(
+      editionGroupId: 'edition_2711759', currentPage: 14,
+      favorite: true, coverMode: 'page', coverPage: 3,
+    );
+    expect(japanese.sourceUrls.length, 3);
+    expect(japanese.sourceUrls, isNot(contains('http://example.org/unsafe')));
+    final exported = LibraryBackup(works: [japanese], collections: const []);
+    final restored = LibraryBackup.decode(exported.encode()).works.single;
+    expect(restored.toJson(), japanese.toJson());
+    expect(restored.sourceUrls, contains(
+        'https://www.instagram.com/reel/ABC12345/'));
+    expect(restored.titleAliases, contains('하늘의 바람'));
+    expect(restored.currentPage, 14);
+    expect(restored.favorite, true);
+    expect(restored.coverPage, 3);
+  });
+
+  test('reimport merges sources and aliases without resetting reader status', () {
+    final old = WorkEntry.create(
+        workId: '100', title: 'Title 1',
+        videoUrl: 'https://www.youtube.com/watch?v=abcD123xyZ0'
+      ).copyWith(currentPage: 9, completed: true);
+    final newItem = WorkEntry.create(
+        workId: '100', title: 'Translation 1',
+        sourceUrls: ['https://youtube.com/post/Ugkx1234567890'],
+        titleAliases: ['Other Translation'],
+      ).copyWith(currentPage: 3);
+    final merged = LibraryBackup.merge(
+      LibraryBackup(works: [old], collections: const []),
+      LibraryBackup(works: [newItem], collections: const []),
+    ).works.single;
+    expect(merged.completed, true);
+    expect(merged.currentPage, 9);
+    expect(merged.sourceUrls.length, 2);
+    expect(merged.titleAliases, contains('Other Translation'));
+    expect(merged.titleAliases, contains('Title 1'));
+    expect(merged.titleAliases, contains('Translation 1'));
+  });
+
   test('merge retains favorites and highest reading page', () {
     final base = WorkEntry.create(workId: '123456', videoId: 'abcdefghi12')
         .copyWith(currentPage: 33);
