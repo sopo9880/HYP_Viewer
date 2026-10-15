@@ -31,14 +31,6 @@ abstract final class WorkEditions {
     }
   }
 
-  static String? _knownConflict(String first, String second) {
-    if (first.trim().isNotEmpty && second.trim().isNotEmpty &&
-        first.trim().toLowerCase() != second.trim().toLowerCase()) {
-      return '작가/서클 정보 불일치';
-    }
-    return null;
-  }
-
   static EditionMatch compare(WorkEntry a, WorkEntry b) {
     if (a.workId == b.workId) return const EditionMatch(100, '동일 ID');
     final ca = WorkGrouping.episodeNumber(a);
