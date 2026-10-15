@@ -23,7 +23,10 @@ class YoutubeResults {
   final String title;
   final String description;
   final List<String> comments;
-  const YoutubeResults(this.title, this.description, this.comments);
+  /// True if more public comment pages appear available but were not loaded.
+  final bool mayBeIncomplete;
+  const YoutubeResults(this.title, this.description, this.comments,
+      {this.mayBeIncomplete = false});
 }
 
 class YoutubeClient {
