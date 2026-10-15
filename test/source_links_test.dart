@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -39,8 +41,9 @@ void main() {
   test('public metadata preview reads descriptions without a developer key', () async {
     final client = MockClient((request) async {
       expect(request.url.host, 'www.instagram.com');
-      return http.Response(
-          '<html><meta property="og:description" content="번호 3172801 &amp; extras"></html>',
+      // Response(String) defaults to Latin-1; real HTML bodies are UTF-8.
+      return http.Response.bytes(
+          utf8.encode('<html><meta property="og:description" content="번호 3172801 &amp; extras"></html>'),
           200);
     });
     final text = await PublicSourcePreview(client).fetch(
