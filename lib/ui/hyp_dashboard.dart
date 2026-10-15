@@ -2482,6 +2482,24 @@ class _HypDashboardState extends State<HypDashboard> {
           const SizedBox(height: 7),
           const HypText('언어를 바꾸면 메뉴와 버튼에 즉시 적용되고 다음 실행에도 유지돼.',
               style: TextStyle(fontSize: 12, color: HypColors.muted)),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            key: const Key('preferred-edition-language'),
+            initialValue: widget.readerSettings.preferredEditionLanguage,
+            decoration: InputDecoration(
+                labelText: HypI18n.t(context, '선호 작품 언어')),
+            items: const [
+              DropdownMenuItem(value: 'auto', child: HypText('자동 선택')),
+              DropdownMenuItem(value: 'korean', child: HypText('한국어')),
+              DropdownMenuItem(value: 'japanese', child: HypText('日本語')),
+              DropdownMenuItem(value: 'english', child: HypText('English')),
+              DropdownMenuItem(value: 'chinese', child: HypText('中文')),
+            ],
+            onChanged: (value) {
+              if (value != null) widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(preferredEditionLanguage: value));
+            },
+          ),
         ],
       )),
       const SizedBox(height: 10),
@@ -2969,6 +2987,15 @@ class _HypDashboardState extends State<HypDashboard> {
               key: const Key('app-version-label'),
               style: const TextStyle(color: HypColors.muted, fontSize: 12)),
           const SizedBox(height: 12),
+          SwitchListTile.adaptive(
+            key: const Key('startup-update-prompt-setting'),
+            contentPadding: EdgeInsets.zero,
+            title: const HypText('실행 시 업데이트 알림'),
+            subtitle: const HypText('새 버전이 나오면 실행 후 안내해. 버전별로 7일간 숨길 수 있어.'),
+            value: widget.readerSettings.startupUpdatePrompt,
+            onChanged: (enabled) => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(startupUpdatePrompt: enabled)),
+          ),
           OutlinedButton.icon(
             onPressed: widget.onCheckRelease,
             icon: const Icon(Icons.system_update_alt_rounded),
