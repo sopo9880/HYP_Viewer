@@ -123,7 +123,7 @@ class OnlineWorkSearch {
     if (advanced) return [('advanced', input)];
     final alternatives = input.split('|')
         .map((part) => part.trim()).where((part) => part.isNotEmpty)
-        .take(3).toList();
+        .take(5).toList();
     final planned = <(String, String)>[];
     void add(String field, String value) {
       if (value.isNotEmpty && value.length <= 150 &&
@@ -201,7 +201,20 @@ class OnlineWorkSearch {
       throw StateError('모든 검색 서버 요청이 실패했어: ' +
           warnings.take(2).join(' / '));
     }
-    return OnlineSearchResult(unique.values.toList(), unique.length, page,
+    final ordered = unique.values.toList();
+    const weights = {
+      'general': 12, 'advanced': 12, 'artist': 10, 'series': 8,
+      'group': 7, 'tag': 4, 'female': 4, 'male': 4,
+    };
+    int score(OnlineSearchWork work) =>
+        (matched[work.workId] ?? const <String>{}).fold<int>(
+            0, (sum, field) => sum + (weights[field] ?? 1));
+    ordered.sort((a, b) {
+      final relevance = score(b).compareTo(score(a));
+      if (relevance != 0) return relevance;
+      return a.workId.compareTo(b.workId);
+    });
+    return OnlineSearchResult(ordered, unique.length, page,
         fieldTotals: counts,
         matchedFields: matched.map((id, fields) =>
             MapEntry(id, fields.toList())),
