@@ -99,19 +99,22 @@ abstract final class WorkEditions {
         sameAuthor || sameCircle ? '원제 및 제작자 일치' : '원제 일치 · 확인 필요');
   }
 
-  /// The library shelf hides a chapter only when all of its editions have
-  /// been completed. Every edition remains individually available in search,
-  /// history and the chooser while any sibling is unfinished.
+  /// Hide a logical chapter on the shelf when any language edition is
+  /// completed. Search and each edition's underlying reading status remain
+  /// independent.
   static List<WorkEntry> visibleOnShelf(
       Iterable<WorkEntry> works, bool hideCompleted) {
     final all = works.toList();
     if (!hideCompleted) return all;
-    final unfinished = all.where((entry) =>
-        entry.editionGroupId.isNotEmpty && !entry.completed)
+    // The original v0.4.0 contract treats a logical chapter as finished as
+    // soon as ANY of its language editions is finished. Individual edition
+    // progress stays independent; search still uses the complete library.
+    final completedGroups = all.where((entry) =>
+        entry.editionGroupId.isNotEmpty && entry.completed)
         .map((entry) => entry.editionGroupId).toSet();
     return all.where((entry) =>
-        !entry.completed || entry.editionGroupId.isNotEmpty &&
-            unfinished.contains(entry.editionGroupId)).toList();
+        !entry.completed && !completedGroups.contains(entry.editionGroupId))
+        .toList();
   }
 
   /// Diversify a translated-title search without sending reading history.
