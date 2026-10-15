@@ -639,12 +639,24 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         sourceLanguage: result.language,
         sourceDate: result.date,
       );
-      return LibraryBackup(
+      return WorkEditionService.autoLink(LibraryBackup(
         works: [...latest.works, work],
         collections: latest.collections,
-      );
+      ), [result.workId]);
     });
     _status('작품 #' + result.workId + ' 서재에 추가했어.');
+  }
+
+  Future<void> _linkEdition(WorkEntry anchor, String targetId) async {
+    await _commitLibrary((latest) =>
+        WorkEditionService.link(latest, anchor.workId, targetId));
+    _status('같은 작품의 다른 언어판으로 묶었어.');
+  }
+
+  Future<void> _unlinkEdition(WorkEntry work) async {
+    await _commitLibrary((latest) =>
+        WorkEditionService.unlink(latest, work.workId));
+    _status('선택한 언어판만 묶음에서 분리했어.');
   }
 
   Future<void> _readOnlineSearchWork(OnlineSearchWork result) async {
@@ -681,7 +693,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final client = http.Client();
     WorkEntry? openAfterSave;
     try {
-      final videoId = ShortsLink.videoId(urlInput.text) ?? '';
+      final links = SourceLink.extract(urlInput.text);
       final works = <WorkEntry>[];
       var unknownTitles = 0;
       for (final code in codes) {
@@ -692,31 +704,45 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         if (title.isEmpty && verified?.exists == true) {
           title = verified!.title;
         }
-        if (title.isEmpty) {
-          try {
-            title = await HitomiGalleryProvider(client).fetchTitle(code);
-          } catch (_) {
-            // A missing or offline metadata server must not lose a saved ID.
+        GalleryInfo? info;
+        try {
+          info = await HitomiGalleryProvider(client).fetchInfo(code);
+          if (title.isEmpty) title = info.title;
+        } catch (_) {
+          // Offline metadata never blocks adding or preserving an ID.
+          if (title.isEmpty) {
+            try { title = await HitomiGalleryProvider(client).fetchTitle(code); }
+            catch (_) { /* Keep a placeholder title. */ }
           }
         }
         if (title.isEmpty) {
           title = '작품 $code';
           unknownTitles += 1;
         }
+        final mappedLink = SourceLink.parse(_candidateSourceUrls[code] ?? '') ??
+            (links.length == 1 ? links.single : null);
         works.add(WorkEntry.create(
           workId: code,
-          videoId: videoId,
-          videoUrl: videoId.isEmpty
-              ? '' : 'https://www.youtube.com/shorts/$videoId',
+          videoId: mappedLink?.videoId ?? '',
+          videoUrl: mappedLink?.url ?? '',
           title: title,
-          author: codes.length == 1 ? authorInput.text : '',
+          author: codes.length == 1 && authorInput.text.trim().isNotEmpty
+              ? authorInput.text.trim() : (info?.author ?? ''),
           originalComment: commentInput.text,
         ).copyWith(
           coverMode: readerSettings.autoCoverEnabled ? 'auto' : 'preset',
+          sourceLanguage: info?.language ?? '',
+          sourceGroup: info?.group ?? '',
+          sourceSeries: info?.series ?? '',
+          sourceType: info?.type ?? '',
+          sourceDate: info?.date ?? '',
+          totalPages: info?.pageCount ?? 0,
+          tags: info?.tags ?? const [],
         ));
       }
-      await _commitLibrary((latest) => LibraryBackup.merge(latest,
-          LibraryBackup(works: works, collections: const [])));
+      await _commitLibrary((latest) => WorkEditionService.autoLink(
+          LibraryBackup.merge(latest,
+            LibraryBackup(works: works, collections: const [])), codes));
       if (mounted) setState(() => libraryNavigationEpoch++);
       if (readerSettings.openAfterSave && works.length == 1) {
         openAfterSave = works.single;
@@ -2473,6 +2499,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     onSaveWork: _saveWork,
     onQuickAddNumber: _quickAddNumber,
     onSaveOnlineSearchWork: _saveOnlineSearchWork,
+    onLinkEdition: _linkEdition,
+    onUnlinkEdition: _unlinkEdition,
     onReadOnlineSearchWork: _readOnlineSearchWork,
     onSaveSelectedWorks: _saveSelectedWorks,
     onVerifyCandidateCodes: _verifyCandidateCodes,
