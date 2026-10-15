@@ -544,5 +544,15 @@
   "readingStatsDevice": "HYP Viewer・端末に保存された読書セッションに基づきます",
   "readingStatsCollect": "閲覧時間・日付・ページ番号はこの端末にのみ保存されます。",
   "readingStatsEraseHint": "本棚・読了状態・累計閲覧数は維持されます。",
-  "readingStatsEraseConfirm": "端末に保存された日付別読書セッションをすべて削除しますか？元に戻せません。"
+  "readingStatsEraseConfirm": "端末に保存された日付別読書セッションをすべて削除しますか？元に戻せません。",
+  "youtubeMoreVideos": "次の動画一覧を読み込む",
+  "youtubeMoreUnavailable": "追加動画を取得できません。表示中の動画から選ぶかURLを直接入力してください。",
+  "youtubeVideosLoaded": "公開動画 {count}件を取得",
+  "@youtubeVideosLoaded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
