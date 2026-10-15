@@ -326,5 +326,25 @@
   "legacyCompletionApply": "選択作品を読了にする",
   "legacyCompletionEmpty": "確認が必要な読了候補はありません。",
   "youtubeChooseVideos": "YouTubeリストから動画を選択",
-  "youtubeAnalyzeSelected": "選択動画を解析（最大5件）"
+  "youtubeAnalyzeSelected": "選択動画を解析（最大5件）",
+  "searchSeries": "シリーズ",
+  "searchTag": "一般タグ",
+  "searchAdvanced": "詳細クエリ",
+  "searchAllFields": "全項目",
+  "searchLocalCount": "本棚・{count}件",
+  "@searchLocalCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchResultMatches": "一致項目: {fields}",
+  "@searchResultMatches": {
+    "placeholders": {
+      "fields": {
+        "type": "String"
+      }
+    }
+  }
 }
