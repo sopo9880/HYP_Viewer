@@ -164,6 +164,7 @@ class OnlineWorkSearch {
   Future<OnlineSearchResult> searchUnified(String raw, {
     int page = 1,
     String language = '',
+    void Function(int completed, int total)? onProgress,
   }) async {
     final queries = planQueries(raw);
     final unique = <String, OnlineSearchWork>{};
@@ -172,6 +173,7 @@ class OnlineWorkSearch {
     final warnings = <String>[];
     var successes = 0;
     var hasMore = false;
+    var completed = 0;
     // Keep concurrent requests bounded so a partially down mirror never
     // floods either server when the user types a short common word.
     for (var i = 0; i < queries.length; i += 3) {
@@ -194,6 +196,9 @@ class OnlineWorkSearch {
           }
         } catch (e) {
           warnings.add(entry.$1 + ': ' + e.toString());
+        } finally {
+          completed++;
+          onProgress?.call(completed, queries.length);
         }
       }));
     }
