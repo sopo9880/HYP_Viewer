@@ -112,5 +112,205 @@
   "searchArtist": "Artist",
   "searchGroup": "Circle",
   "searchFemale": "Female Tags",
-  "searchMale": "Male Tags"
+  "searchMale": "Male Tags",
+  "insightProgressUnavailable": "Unavailable",
+  "insightProgressValue": "{percent}% (based on {count} works)",
+  "@insightProgressValue": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightOverview": "Unread {unread} · Offline {offline}% · Average progress {progress}",
+  "@insightOverview": {
+    "placeholders": {
+      "unread": {
+        "type": "int"
+      },
+      "offline": {
+        "type": "int"
+      },
+      "progress": {
+        "type": "String"
+      }
+    }
+  },
+  "insightCompletedRate": "Completion rate: {rate}%",
+  "@insightCompletedRate": {
+    "placeholders": {
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "insightReadingCount": "In progress: {count}",
+  "@insightReadingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightDatedCount": "Reading sessions with dates: {count}",
+  "@insightDatedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightActiveTime": "Estimated active reading time: {minutes} min",
+  "@insightActiveTime": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "insightMetadataCoverage": "Analyzable: {tagged} / {total} works",
+  "@insightMetadataCoverage": {
+    "placeholders": {
+      "tagged": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "insightTagRate": "{name} · {percent}% finished",
+  "@insightTagRate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "insightActivitySummary": "{count} sessions · about {minutes} active min in selected period",
+  "@insightActivitySummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "insightSeriesCount": "Managed series: {count}",
+  "@insightSeriesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightChaptersCount": "{completed}/{total} chapters finished",
+  "@insightChaptersCount": {
+    "placeholders": {
+      "completed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "insightTasteEmpty": "Not enough tag information. Add online metadata or manual tags to analyze.",
+  "insightTasteSummary": "Notable tags in your library: {tags}. Based on favorites and reads.",
+  "@insightTasteSummary": {
+    "placeholders": {
+      "tags": {
+        "type": "String"
+      }
+    }
+  },
+  "insightTagCoverage": "{tagged} out of {total} works have tags. Results are estimates.",
+  "@insightTagCoverage": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      },
+      "tagged": {
+        "type": "int"
+      }
+    }
+  },
+  "insightCalendarSessions": "Using dates from {count} recorded reading sessions.",
+  "@insightCalendarSessions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightMissingMetadata": "Works missing artist or tag details: {count}",
+  "@insightMissingMetadata": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightStaleWorks": "Unfinished works untouched for 90+ days: {count}",
+  "@insightStaleWorks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightSessionPeriod": "Selected period: {period}",
+  "@insightSessionPeriod": {
+    "placeholders": {
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "insightPeriodLastDays": "Last {days} days",
+  "@insightPeriodLastDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "insightStreak": "Last 91 days · {days}-day reading streak",
+  "@insightStreak": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "insightOpensRow": "Opened {count} times{completed} · #{id}",
+  "@insightOpensRow": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "completed": {
+        "type": "String"
+      },
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "insightCompletedBadge": " · Finished",
+  "insightNoGroup": "No grouped works yet.",
+  "insightTagRateExplain": "Tag completion rate is finished works divided by owned works with that tag.",
+  "insightRecHint": "Recommendations prioritize favorite tags, bookmarks, and unread works.",
+  "insightActivity14": "Reading sessions over last 14 days (since tracking began)",
+  "insightSessionsNoDates": "Legacy read counts have no dates, so daily history cannot be reconstructed.",
+  "insightNotEnough": "Not enough data yet.",
+  "insightNoMatchingWorks": "No matching works."
 }
