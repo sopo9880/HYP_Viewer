@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
 import '../core/i18n.dart';
+import '../l10n/app_localizations.dart';
 
 /// Reviewed selection for either a new group or an existing one.
 class AutoGroupReview {
@@ -188,8 +189,7 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
           ),
           if (members.isNotEmpty) ...[
             Align(alignment: Alignment.centerLeft,
-              child: HypText('기존 ' + members.length.toString() +
-                  '개 작품은 유지돼.',
+              child: Text(AppLocalizations.of(context)!.autoGroupExistingCount(members.length),
                   style: Theme.of(context).textTheme.bodySmall)),
             for (final work in members.take(6))
               Align(alignment: Alignment.centerLeft,
@@ -197,7 +197,7 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall)),
             if (members.length > 6)
-              HypText('그 외 ' + (members.length - 6).toString() + '개 작품',
+              Text(AppLocalizations.of(context)!.autoGroupOthers(members.length - 6),
                 style: Theme.of(context).textTheme.bodySmall),
             const Divider(height: 16),
           ],
