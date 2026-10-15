@@ -22,6 +22,8 @@ import 'reading_insights.dart';
 import 'candidate_editor.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
+import '../core/work_editions.dart';
+import 'work_edition_card.dart';
 import 'hero_banner.dart';
 import 'hyp_theme.dart';
 import 'shorts_finder_panel.dart';
@@ -83,10 +85,14 @@ class HypDashboard extends StatefulWidget {
   final int totalGalleryPages;
   final int downloadedGalleryBytes;
   final VoidCallback onAnalyze;
+  final VoidCallback onClearFinder;
+  final int finderClearEpoch;
   final Future<void> Function() onFetch;
   final Future<void> Function() onSaveWork;
   final Future<void> Function(String code) onQuickAddNumber;
   final Future<void> Function(OnlineSearchWork) onSaveOnlineSearchWork;
+  final Future<void> Function(WorkEntry anchor, String editionId) onLinkEdition;
+  final Future<void> Function(WorkEntry) onUnlinkEdition;
   final Future<void> Function(OnlineSearchWork) onReadOnlineSearchWork;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
   final CandidateBatchVerify onVerifyCandidateCodes;
@@ -165,10 +171,14 @@ class HypDashboard extends StatefulWidget {
     required this.totalGalleryPages,
     required this.downloadedGalleryBytes,
     required this.onAnalyze,
+    required this.onClearFinder,
+    required this.finderClearEpoch,
     required this.onFetch,
     required this.onSaveWork,
     required this.onQuickAddNumber,
     required this.onSaveOnlineSearchWork,
+    required this.onLinkEdition,
+    required this.onUnlinkEdition,
     required this.onReadOnlineSearchWork,
     required this.onSaveSelectedWorks,
     required this.onVerifyCandidateCodes,
@@ -678,8 +688,14 @@ class _HypDashboardState extends State<HypDashboard> {
 
   List<WorkEntry> get _favorites => _works.where((w) => w.favorite).toList();
 
-  List<WorkEntry> get _visibleLibraryWorks => widget.readerSettings.completedHidden
-      ? _works.where((work) => !work.completed).toList() : _works;
+  List<WorkEntry> get _visibleLibraryWorks {
+    if (!widget.readerSettings.completedHidden) return _works;
+    // One completed translation completes the logical title for shelf filtering.
+    final completedEditions = _works.where((work) => work.completed &&
+        work.editionGroupId.isNotEmpty).map((work) => work.editionGroupId).toSet();
+    return _works.where((work) => !work.completed &&
+        !completedEditions.contains(work.editionGroupId)).toList();
+  }
 
   List<WorkEntry> get _recent => widget.library.works
       .where((w) => w.lastOpenedAt != null)
@@ -1122,6 +1138,8 @@ class _HypDashboardState extends State<HypDashboard> {
         candidates: widget.candidates,
         busy: widget.busy,
         onAnalyze: widget.onAnalyze,
+        onClear: widget.onClearFinder,
+        clearEpoch: widget.finderClearEpoch,
         onFetch: widget.onFetch,
         onOpenYoutube: widget.onOpenShortsInput,
         onSave: widget.onSaveWork,
@@ -1174,7 +1192,136 @@ class _HypDashboardState extends State<HypDashboard> {
     ],
   );
 
-  /// One visual grid for both single works and stacked series covers.
+  LibrarySort get _currentSort => LibrarySort.values.firstWhere(
+    (mode) => mode.name == widget.readerSettings.librarySort,
+    orElse: () => LibrarySort.newest);
+
+  List<WorkEntry> _sortWithinGroup(Iterable<WorkEntry> works) =>
+      WorkSorting.sort(works, _currentSort,
+        descending: widget.readerSettings.librarySortDescending,
+        popularityRanks:
+            _popularity[widget.readerSettings.popularityPeriod] ?? const {});
+
+  Future<void> _openEditionStack(List<WorkEntry> editions) async {
+    final selected = await showModalBottomSheet<WorkEntry>(
+      context: context, isScrollControlled: true,
+      builder: (sheet) => SafeArea(child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const HypText('읽을 언어판 선택',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+          const SizedBox(height: 7),
+          Flexible(child: ListView(shrinkWrap: true, children: [
+            for (final work in [
+              WorkEditions.preferred(editions,
+                  widget.readerSettings.preferredEditionLanguage),
+              ...editions.where((entry) => entry.workId !=
+                  WorkEditions.preferred(editions,
+                      widget.readerSettings.preferredEditionLanguage).workId),
+            ]) ListTile(
+              key: Key('edition-choice-' + work.workId),
+              leading: const Icon(Icons.menu_book),
+              title: Text(WorkEditions.languageName(work.sourceLanguage) +
+                  ' · ' + work.title, maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              subtitle: Text('#' + work.workId + ' · ' +
+                  (work.completed ? '완독' : '읽는 중')),
+              onTap: () => Navigator.pop(sheet, work),
+              trailing: PopupMenuButton<String>(
+                onSelected: (action) {
+                  Navigator.pop(sheet);
+                  _workAction(action, work);
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(value: 'completed',
+                      child: Text(work.completed ? '완독 해제' : '완독 처리')),
+                  const PopupMenuItem(value: 'find_editions',
+                      child: Text('다른 언어판 찾기')),
+                  const PopupMenuItem(value: 'unlink_edition',
+                      child: Text('언어판 묶음에서 분리')),
+                ],
+              ),
+            ),
+          ])),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(sheet);
+              _findOtherEditions(editions.first);
+            },
+            icon: const Icon(Icons.language),
+            label: const Text('다른 언어판 찾기'),
+          ),
+        ]),
+      )),
+    );
+    if (selected == null || !mounted) return;
+    if (_offlineKeys.contains(selected.key)) widget.onOpenGallery(selected);
+    else widget.onReadOnline(selected);
+  }
+
+  Widget _editionTile(List<WorkEntry> members) {
+    if (members.length > 1) {
+      return HypWorkEditionCard(
+        editions: members,
+        coverImages: _coverImages,
+        onOpen: () => _openEditionStack(members),
+      );
+    }
+    final work = members.first;
+    return HypWorkCard(
+      work: work,
+      isOffline: _offlineKeys.contains(work.key),
+      totalPages: _pageCounts[work.key],
+      coverBytes: _coverImages[work.key],
+      onOpen: () {
+        if (_offlineKeys.contains(work.key)) widget.onOpenGallery(work);
+        else widget.onReadOnline(work);
+      },
+      onAction: (action) => _workAction(action, work),
+      selectionMode: _selectingWorks && _canSelectWorks,
+      selected: _selectedWorkIds.contains(work.workId),
+      onSelect: () => _toggleSelectedWork(work),
+      onLongPress: () => _startSelection(work),
+    );
+  }
+
+  List<List<WorkEntry>> _editionEntries(List<WorkEntry> works) {
+    final seen = <String>{};
+    final entries = <List<WorkEntry>>[];
+    for (final work in works) {
+      if (work.editionGroupId.isEmpty) {
+        entries.add([work]);
+      } else if (seen.add(work.editionGroupId)) {
+        entries.add(works.where((candidate) =>
+          candidate.editionGroupId == work.editionGroupId).toList());
+      }
+    }
+    return entries;
+  }
+
+  Widget _editionAwareGrid(List<WorkEntry> works) {
+    final entries = _editionEntries(works);
+    if (entries.isEmpty) return _gridOrEmpty(works,
+        emptyTitle: '묶음이 비어 있어',
+        emptyMessage: '다른 작품을 선택해서 추가해줘.');
+    return LayoutBuilder(builder: (context, size) => GridView.builder(
+      key: const Key('edition-aware-grid'),
+      itemCount: entries.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: _columnsForWidth(size.maxWidth),
+        crossAxisSpacing: 12, mainAxisSpacing: 12,
+        childAspectRatio: _columnsForWidth(size.maxWidth) == 1 ? 1.15 : 0.68),
+      itemBuilder: (_, i) => _editionTile(entries[i]),
+    ));
+  }
+
+  int _columnsForWidth(double width) =>
+      width >= 1100 ? 5 : width >= 850 ? 4 :
+      width >= 620 ? 3 : width >= 335 ? 2 : 1;
+
+  /// A series contains chapter cells, each cell may contain several editions.
   Widget _groupedLibraryGrid(List<WorkEntry> works) {
     if (works.isEmpty) {
       return _gridOrEmpty(works,
@@ -1190,12 +1337,7 @@ class _HypDashboardState extends State<HypDashboard> {
     if (_openedGroupId != null) {
       final selected = groups[_openedGroupId];
       if (selected != null) {
-        final ordered = [...selected]..sort((a, b) {
-          if (a.groupOrder != b.groupOrder) {
-            return a.groupOrder.compareTo(b.groupOrder);
-          }
-          return WorkGrouping.compareChapters(a, b);
-        });
+        final ordered = _sortWithinGroup(selected);
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(children: [
@@ -1209,7 +1351,7 @@ class _HypDashboardState extends State<HypDashboard> {
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleMedium)),
               PopupMenuButton<String>(
-                key: Key('work-group-menu-${_openedGroupId!}'),
+                key: Key('work-group-menu-' + _openedGroupId!),
                 tooltip: '묶음 관리',
                 onSelected: (action) => _groupAction(
                     action, _openedGroupId!, selected),
@@ -1220,72 +1362,150 @@ class _HypDashboardState extends State<HypDashboard> {
                 ]),
             ]),
             const SizedBox(height: 10),
-            _gridOrEmpty(ordered, emptyTitle: '묶음이 비어 있어',
-                emptyMessage: '다른 작품을 선택해서 추가해줘.'),
+            _editionAwareGrid(ordered),
           ]);
       }
       _openedGroupId = null;
     }
     final entries = <Object>[];
     final seenGroups = <String>{};
+    final seenEd = <String>{};
     for (final work in works) {
-      if (work.groupId.isEmpty) {
-        entries.add(work);
-      } else if (seenGroups.add(work.groupId)) {
-        entries.add(work.groupId);
+      if (work.groupId.isNotEmpty) {
+        if (seenGroups.add(work.groupId)) entries.add(work.groupId);
+      } else if (work.editionGroupId.isNotEmpty) {
+        if (seenEd.add(work.editionGroupId)) {
+          entries.add(works.where((v) => v.groupId.isEmpty &&
+              v.editionGroupId == work.editionGroupId).toList());
+        }
+      } else {
+        entries.add(<WorkEntry>[work]);
       }
     }
-    return LayoutBuilder(builder: (context, size) {
-      final w = size.maxWidth;
-      final columns = w >= 1100 ? 5 : w >= 850 ? 4 :
-          w >= 620 ? 3 : w >= 335 ? 2 : 1;
-      return GridView.builder(
-        key: const Key('library-mixed-grid'),
-        itemCount: entries.length,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: columns, crossAxisSpacing: 12, mainAxisSpacing: 12,
-          childAspectRatio: columns == 1 ? 1.15 : 0.68,
-        ),
-        itemBuilder: (context, index) {
-          final entry = entries[index];
-          if (entry is String) {
-            final members = groups[entry]!;
-            final ordered = [...members]
-              ..sort((a,b) => a.groupOrder.compareTo(b.groupOrder));
-            return HypWorkGroupCard(
-              key: Key('work-group-$entry'),
-              title: ordered.first.groupTitle.isEmpty
-                  ? '작품 묶음' : ordered.first.groupTitle,
-              members: ordered,
-              coverImages: _coverImages,
-              onOpen: () => setState(() => _openedGroupId = entry),
-              onAction: (action) => _groupAction(action, entry, members),
-            );
-          }
-          final work = entry as WorkEntry;
-          return HypWorkCard(
-            work: work,
-            isOffline: _offlineKeys.contains(work.key),
-            totalPages: _pageCounts[work.key],
-            coverBytes: _coverImages[work.key],
-            onOpen: () {
-              if (_offlineKeys.contains(work.key)) {
-                widget.onOpenGallery(work);
-              } else {
-                widget.onReadOnline(work);
-              }
-            },
-            onAction: (action) => _workAction(action, work),
-            selectionMode: _selectingWorks && _canSelectWorks,
-            selected: _selectedWorkIds.contains(work.workId),
-            onSelect: () => _toggleSelectedWork(work),
-            onLongPress: () => _startSelection(work),
+    return LayoutBuilder(builder: (context, size) => GridView.builder(
+      key: const Key('library-mixed-grid'),
+      itemCount: entries.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: _columnsForWidth(size.maxWidth),
+        crossAxisSpacing: 12, mainAxisSpacing: 12,
+        childAspectRatio: _columnsForWidth(size.maxWidth) == 1 ? 1.15 : 0.68),
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        if (entry is String) {
+          final members = groups[entry]!;
+          final ordered = _sortWithinGroup(members);
+          final seenChapters = <String>{};
+          final representatives = ordered.where((member) =>
+              member.editionGroupId.isEmpty ||
+              seenChapters.add(member.editionGroupId)).toList();
+          return HypWorkGroupCard(
+            key: Key('work-group-' + entry),
+            title: ordered.first.groupTitle.isEmpty
+                ? '작품 묶음' : ordered.first.groupTitle,
+            members: representatives,
+            coverImages: _coverImages,
+            onOpen: () => setState(() => _openedGroupId = entry),
+            onAction: (action) => _groupAction(action, entry, members),
           );
-        },
+        }
+        return _editionTile(entry as List<WorkEntry>);
+      },
+    ));
+  }
+
+  Future<void> _findOtherEditions(WorkEntry work) async {
+    final title = WorkEditions.originalTitle(work.title);
+    final input = TextEditingController(text: title);
+    String? query;
+    try {
+      query = await showDialog<String>(context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('다른 언어판 찾기'),
+          content: TextField(
+            controller: input,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: '원제 또는 검색어',
+              helperText: '원제를 수정해서 다른 번역 제목으로도 검색할 수 있어.'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx),
+                child: const Text('취소')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, input.text.trim()),
+                child: const Text('검색')),
+          ],
+        ),
       );
-    });
+    } finally {
+      input.dispose();
+    }
+    if (query == null || query.isEmpty || !mounted) return;
+    final local = widget.library.works.where((w) => w.workId != work.workId &&
+        [w.title, w.author, w.workId].join(' ').toLowerCase()
+            .contains(query!.toLowerCase())).toList();
+    final remote = <OnlineSearchWork>[];
+    String? error;
+    final client = http.Client();
+    try {
+      final result = await OnlineWorkSearch(client).search(query);
+      remote.addAll(result.works.where((w) => w.workId != work.workId &&
+          !local.any((l) => l.workId == w.workId)));
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      client.close();
+    }
+    if (!mounted) return;
+    final chosen = await showDialog<(String, OnlineSearchWork?)>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('같은 작품인지 확인하고 추가'),
+        content: SizedBox(width: 540, height: 390,
+          child: ListView(children: [
+            const Text('같은 시리즈라는 이유만으로 합치지 않아. '
+                '동일 회차의 다른 언어판인지 직접 확인해줘.'),
+            if (error != null) Text('온라인 검색 실패: ' + error,
+                style: const TextStyle(color: Colors.orangeAccent)),
+            for (final item in local) ListTile(
+              leading: const Icon(Icons.bookmark),
+              title: Text(item.title, maxLines: 1),
+              subtitle: Text('#' + item.workId + ' · ' +
+                  WorkEditions.languageName(item.sourceLanguage) + ' · 서재'),
+              onTap: () => Navigator.pop(dialog, (item.workId, null)),
+            ),
+            for (final item in remote.take(25)) ListTile(
+              leading: const Icon(Icons.cloud_outlined),
+              title: Text(item.title, maxLines: 1),
+              subtitle: Text('#' + item.workId + ' · ' +
+                  WorkEditions.languageName(item.language)),
+              onTap: () => Navigator.pop(dialog, (item.workId, item)),
+            ),
+            if (local.isEmpty && remote.isEmpty)
+              const Text('후보가 없어. 다른 검색어로 다시 시도해줘.'),
+          ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog),
+              child: const Text('취소')),
+        ],
+      ));
+    if (chosen == null || !mounted) return;
+    final confirmed = await showDialog<bool>(context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('언어판 묶기 확인'),
+        content: const Text('서로 다른 작품을 잘못 합치지 않도록 '
+            '정말 같은 회차의 다른 언어판인지 확인해줘.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('취소')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('같은 작품으로 묶기')),
+        ],
+      ));
+    if (confirmed != true || !mounted) return;
+    if (chosen.$2 != null) await widget.onSaveOnlineSearchWork(chosen.$2!);
+    await widget.onLinkEdition(work, chosen.$1);
   }
 
   Future<void> _groupSelectedWorks() async {
@@ -1650,6 +1870,7 @@ class _HypDashboardState extends State<HypDashboard> {
                 child: HypText('인기 (내 열람 횟수)')),
             DropdownMenuItem(value: 'title', child: HypText('이름순')),
             DropdownMenuItem(value: 'number', child: HypText('번호순')),
+            DropdownMenuItem(value: 'chapter', child: HypText('회차순 (수동 순서)')),
           ],
           onChanged: (value) {
             if (value != null) widget.onSaveReaderSettings(
@@ -1966,6 +2187,12 @@ class _HypDashboardState extends State<HypDashboard> {
       await _refreshOffline();
     } else if (action == 'favorite') {
       await widget.onUpdateWork(work.copyWith(favorite: !work.favorite));
+    } else if (action == 'completed') {
+      await widget.onUpdateWork(work.copyWith(completed: !work.completed));
+    } else if (action == 'find_editions') {
+      await _findOtherEditions(work);
+    } else if (action == 'unlink_edition') {
+      if (work.editionGroupId.isNotEmpty) await widget.onUnlinkEdition(work);
     } else if (action == 'original') {
       await widget.onOpenOriginal(work);
     }
