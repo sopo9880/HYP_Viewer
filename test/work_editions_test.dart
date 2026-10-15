@@ -33,13 +33,23 @@ void main() {
     expect(WorkEditions.compare(japanese, korean).autoLink, true);
   });
 
+  test('preferred recent edition uses actual reading history', () {
+    final japanese = work('111111','Story','japanese').copyWith(
+        lastOpenedAt: '2026-10-10T00:00:00Z');
+    final korean = work('222222','Story','korean').copyWith(
+        lastOpenedAt: '2026-10-12T00:00:00Z');
+    expect(WorkEditions.preferred([japanese,korean],'recent').workId,'222222');
+  });
+
   test('completion hiding retains unfinished language edition', () {
     final japanese = work('111111', 'Story', 'japanese')
         .copyWith(editionGroupId: 'edition_a', completed: true);
     final korean = work('222222', 'Story', 'korean')
         .copyWith(editionGroupId: 'edition_a', completed: false);
     final items = [japanese, korean];
-    expect(WorkEditions.visibleOnShelf(items, true).length, 2);
+    expect(WorkEditions.visibleOnShelf(items, true), isEmpty);
+    expect(WorkEditions.visibleOnShelf(
+      [japanese.copyWith(completed: false), korean], true).length, 2);
     expect(WorkEditions.visibleOnShelf(
       [japanese, korean.copyWith(completed: true)], true), isEmpty);
     expect(WorkEditions.visibleOnShelf(items, false).length, 2);
@@ -51,7 +61,7 @@ void main() {
     final queries = WorkEditions.searchQueries(entry, 'Original');
     expect(queries, contains('artist:Artist'));
     expect(queries, contains('group:Circle'));
-    expect(queries, contains('series:Franchise'));
+    expect(queries, contains('Franchise'));
   });
 
   test('manual complete/uncomplete does not lose progress or sibling editions', () {

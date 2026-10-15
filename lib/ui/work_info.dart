@@ -11,12 +11,14 @@ class WorkInfoDialog extends StatefulWidget {
   final Future<GalleryInfo> Function() fetchInfo;
   final Future<void> Function(GalleryInfo) onCacheInfo;
   final Future<void> Function() onEdit;
+  final Future<void> Function()? onFindOtherEditions;
   const WorkInfoDialog({
     super.key,
     required this.work,
     required this.fetchInfo,
     required this.onCacheInfo,
     required this.onEdit,
+    this.onFindOtherEditions,
   });
 
   @override
@@ -115,6 +117,15 @@ class _WorkInfoDialogState extends State<WorkInfoDialog> {
         )),
       ),
       actions: [
+        if (widget.onFindOtherEditions != null) TextButton.icon(
+          key: const Key('work-info-find-editions'),
+          icon: const Icon(Icons.language),
+          label: const HypText('다른 언어판 찾기'),
+          onPressed: () {
+            Navigator.of(context).pop();
+            widget.onFindOtherEditions!();
+          },
+        ),
         TextButton.icon(
           key: const Key('work-info-refresh'),
           onPressed: loading ? null : _refresh,

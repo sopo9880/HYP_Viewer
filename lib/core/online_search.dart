@@ -52,7 +52,12 @@ class OnlineSearchResult {
   final List<OnlineSearchWork> works;
   final int total;
   final int page;
-  const OnlineSearchResult(this.works, this.total, this.page);
+  final Map<String, int> fieldTotals;
+  final List<String> warnings;
+  final bool hasNextPage;
+  const OnlineSearchResult(this.works, this.total, this.page,
+      {this.fieldTotals = const {}, this.warnings = const [],
+       this.hasNextPage = false});
 }
 
 class OnlineWorkSearch {
@@ -75,9 +80,74 @@ class OnlineWorkSearch {
     // Preserve the query as one string for title phrases. Advanced terms,
     // e.g. artist:name, group:name, female:tag and language:korean, are
     // directly supported by Heliotrope's query parser.
-    queries.add(term.split('|').first.trim());
+    queries.add(term);
     if (language.isNotEmpty) queries.add('language:' + language);
     return queries;
+  }
+
+  /// Search a plain term across general, creator, circle, and supported
+  /// tag fields. Source count totals can overlap; only fetched unique IDs
+  /// are displayed as a true unique count.
+  Future<OnlineSearchResult> searchUnified(String raw, {
+    int page = 1,
+    String language = '',
+  }) async {
+    final query = raw.trim();
+    if (query.isEmpty || query.length > 150) {
+      throw const FormatException('검색어는 1~150자로 입력해줘.');
+    }
+    final advanced = RegExp(r'^[a-z][a-z_]*:', caseSensitive: false)
+        .hasMatch(query);
+    final terms = advanced ? [query] :
+        query.split('|').map((part) => part.trim())
+            .where((part) => part.isNotEmpty).take(3).toList();
+    final requests = <(String, String)>[];
+    void add(String kind, String term) {
+      if (term.length <= 150 &&
+          !requests.any((pair) => pair.$2 == term)) {
+        requests.add((kind, term));
+      }
+    }
+    for (final term in terms) {
+      add('general', term);
+      if (!advanced && term.length > 1) {
+        add('artist', 'artist:$term');
+        add('group', 'group:$term');
+        // series: is not universally supported by these providers.
+        add('female', 'female:$term');
+        add('male', 'male:$term');
+      }
+    }
+    final capped = requests.take(8).toList();
+    final unique = <String, OnlineSearchWork>{};
+    final totals = <String, int>{};
+    final warnings = <String>[];
+    var successes = 0;
+    var more = false;
+    for (var i = 0; i < capped.length; i += 2) {
+      final batch = capped.skip(i).take(2).toList();
+      await Future.wait(batch.map((entry) async {
+        try {
+          final result = await search(entry.$2, page: page,
+              language: language);
+          successes++;
+          totals[entry.$1] = (totals[entry.$1] ?? 0) + result.total;
+          more = more || result.works.isNotEmpty &&
+              (result.total > page * 25 || result.works.length >= 25);
+          for (final work in result.works) {
+            unique.putIfAbsent(work.workId, () => work);
+          }
+        } catch (error) {
+          warnings.add(entry.$1 + ': ' + error.toString());
+        }
+      }));
+    }
+    if (successes == 0) {
+      throw StateError('모든 검색 서버 요청이 실패했어: ' +
+          warnings.take(2).join(' / '));
+    }
+    return OnlineSearchResult(unique.values.toList(), unique.length, page,
+        fieldTotals: totals, warnings: warnings, hasNextPage: more);
   }
 
   Future<OnlineSearchResult> search(String raw, {

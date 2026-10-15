@@ -36,5 +36,295 @@
   "libraryWorks": "マイ本棚",
   "searchOnline": "オンライン作品",
   "editionSourceLocal": "本棚",
-  "editionSourceRemote": "オンライン"
+  "editionSourceRemote": "オンライン",
+  "settingsGeneral": "言語・一般",
+  "settingsHero": "ホームバナー",
+  "settingsViewer": "ビューアー・読み込み",
+  "settingsCover": "表紙の管理",
+  "settingsAndroid": "Androidの動作",
+  "settingsNotices": "お知らせ",
+  "settingsWeb": "標準Webリーダー",
+  "settingsSource": "追加画像ソース",
+  "settingsBackup": "本棚データ・バックアップ",
+  "settingsUpdates": "アップデート",
+  "insightsTitle": "読書記録",
+  "insightsSubtitle": "お気に入り・好み・読書統計を端末内で分析します。",
+  "insightsA": "A・読書の概要",
+  "insightsB": "B・タグの傾向",
+  "insightsC": "C・作品ランキング",
+  "insightsD": "D・作家とサークル",
+  "insightsE": "E・読書活動の推移",
+  "insightsF": "F・シリーズの進捗",
+  "insightsG": "G・好みのまとめ",
+  "insightsH": "H・次に読むおすすめ",
+  "insightsI": "I・読書カレンダー",
+  "insightsJ": "J・本棚整理アシスタント",
+  "insightsK": "K・月間・年間読書レポート",
+  "insightsL": "L・統計フィルターと履歴管理",
+  "metricOwned": "所持作品",
+  "metricFavorite": "お気に入り",
+  "metricCompleted": "読了",
+  "metricOpens": "累計閲覧",
+  "insightAllTime": "全期間",
+  "insightLast7": "過去7日",
+  "insightLast30": "過去30日",
+  "insightLastYear": "過去1年",
+  "insightAllWorks": "すべての作品",
+  "insightComplete": "読了作品",
+  "insightIncomplete": "未読了作品",
+  "insightTagInfo": "よく読んだタグ",
+  "insightFavoriteTags": "お気に入りに多いタグ",
+  "insightPairs": "よく組み合わせられるタグ",
+  "insightTop8": "累計閲覧トップ8",
+  "insightRecentlyRead": "最近読んだ作品",
+  "insightRereads": "再読が多い作品（2回以上）",
+  "insightCreatorReads": "作家別累計閲覧数",
+  "insightCircleReads": "サークル別累計閲覧数",
+  "insightMonthlyReport": "月間読書レポート",
+  "insightAnnualReport": "年間読書レポート",
+  "insightSavePng": "レポートをPNGで保存",
+  "insightCollectActivity": "新しい読書活動を記録",
+  "insightClearActivity": "日別読書活動の記録を削除",
+  "insightCopySummary": "統計の要約をコピー",
+  "editionReview": "同じ話数か確認してください",
+  "finderPartialBody": "投稿全文を取得できませんでした。公開プレビューのみで番号が欠けている場合があります。",
+  "searchFetchedUnique": "オンライン作品・重複のない結果 {count}件を取得",
+  "@searchFetchedUnique": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchFieldCount": "{field}: {count}件（重複の可能性あり）",
+  "@searchFieldCount": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchPartial": "一部の検索項目で失敗しました。取得できた結果のみ表示します。",
+  "searchGeneral": "一般・タイトル",
+  "searchArtist": "作家",
+  "searchGroup": "サークル",
+  "searchFemale": "女性タグ",
+  "searchMale": "男性タグ",
+  "insightProgressUnavailable": "計算不可",
+  "insightProgressValue": "{percent}%（{count}作品を基準）",
+  "@insightProgressValue": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightOverview": "未閲覧 {unread}件・オフライン保有 {offline}%・平均進捗 {progress}",
+  "@insightOverview": {
+    "placeholders": {
+      "unread": {
+        "type": "int"
+      },
+      "offline": {
+        "type": "int"
+      },
+      "progress": {
+        "type": "String"
+      }
+    }
+  },
+  "insightCompletedRate": "読了率: {rate}%",
+  "@insightCompletedRate": {
+    "placeholders": {
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "insightReadingCount": "読書中: {count}件",
+  "@insightReadingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightDatedCount": "日付付きの読書セッション: {count}回",
+  "@insightDatedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightActiveTime": "推定アクティブ読書時間: {minutes}分",
+  "@insightActiveTime": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "insightMetadataCoverage": "分析可能: {tagged} / {total}作品",
+  "@insightMetadataCoverage": {
+    "placeholders": {
+      "tagged": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "insightTagRate": "{name}・読了率 {percent}%",
+  "@insightTagRate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "insightActivitySummary": "選択期間の閲覧 {count}回・推定活動時間 {minutes}分",
+  "@insightActivitySummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "insightSeriesCount": "管理中のシリーズ: {count}件",
+  "@insightSeriesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightChaptersCount": "{completed}/{total}話を読了",
+  "@insightChaptersCount": {
+    "placeholders": {
+      "completed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "insightTasteEmpty": "タグ情報が不足しています。作品情報またはタグを追加してください。",
+  "insightTasteSummary": "本棚で目立つタグ: {tags}。お気に入りと累計閲覧数に基づきます。",
+  "@insightTasteSummary": {
+    "placeholders": {
+      "tags": {
+        "type": "String"
+      }
+    }
+  },
+  "insightTagCoverage": "全{total}作品中{tagged}作品にタグがあります。推定値です。",
+  "@insightTagCoverage": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      },
+      "tagged": {
+        "type": "int"
+      }
+    }
+  },
+  "insightCalendarSessions": "記録された{count}件の読書セッションの日付を使用します。",
+  "@insightCalendarSessions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightMissingMetadata": "作家またはタグ情報が不足している作品: {count}件",
+  "@insightMissingMetadata": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightStaleWorks": "90日以上開いていない未読了作品: {count}件",
+  "@insightStaleWorks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightSessionPeriod": "対象期間: {period}",
+  "@insightSessionPeriod": {
+    "placeholders": {
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "insightPeriodLastDays": "過去{days}日",
+  "@insightPeriodLastDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "insightStreak": "過去91日・連続読書{days}日",
+  "@insightStreak": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "insightOpensRow": "閲覧 {count}回{completed}・#{id}",
+  "@insightOpensRow": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "completed": {
+        "type": "String"
+      },
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "insightCompletedBadge": "・読了",
+  "insightNoGroup": "まだまとめられた作品はありません。",
+  "insightTagRateExplain": "タグ別読了率は、タグごとの読了作品数÷所持作品数です。",
+  "insightRecHint": "好みのタグ・お気に入り・未読作品を優先しておすすめします。",
+  "insightActivity14": "直近14日間の閲覧セッション（記録開始以降）",
+  "insightSessionsNoDates": "以前の累計閲覧数には日付がなく、過去の日別履歴は復元できません。",
+  "insightNotEnough": "集計できるデータがありません。",
+  "insightNoMatchingWorks": "条件に合う作品はありません。",
+  "editionCoverPercent": "表紙の類似度 {percent}%",
+  "@editionCoverPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "legacyCompletionReview": "読了候補を確認",
+  "legacyCompletionHint": "最終ページまで進んだ未読了作品です。確認して選択してください。",
+  "legacyCompletionApply": "選択作品を読了にする",
+  "legacyCompletionEmpty": "確認が必要な読了候補はありません。",
+  "youtubeChooseVideos": "YouTubeリストから動画を選択",
+  "youtubeAnalyzeSelected": "選択動画を解析（最大5件）"
 }

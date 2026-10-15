@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -30,6 +32,8 @@ jobs:
       - name: Generate Flutter Android host project
         run: flutter create --platforms=android --org com.sopo9880 --project-name hyp_viewer .
       - run: flutter pub get
+      - name: Generate typed app localizations
+        run: flutter gen-l10n
       - name: Check language packs and new UI strings
         run: python3 scripts/check_l10n.py
       - name: Enforce 0.x release policy
@@ -48,6 +52,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -55,6 +61,8 @@ jobs:
       - name: Generate Flutter Windows host project
         run: flutter create --platforms=windows --org com.sopo9880 --project-name hyp_viewer .
       - run: flutter pub get
+      - name: Generate typed app localizations
+        run: flutter gen-l10n
       - name: Check language packs and new UI strings
         run: python scripts/check_l10n.py
       - run: flutter build windows --release

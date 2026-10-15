@@ -36,5 +36,295 @@
   "libraryWorks": "My Library",
   "searchOnline": "Online Works",
   "editionSourceLocal": "Library",
-  "editionSourceRemote": "Online"
+  "editionSourceRemote": "Online",
+  "settingsGeneral": "Language & General",
+  "settingsHero": "Home Banner",
+  "settingsViewer": "Viewer & Loading",
+  "settingsCover": "Cover Management",
+  "settingsAndroid": "Android Behavior",
+  "settingsNotices": "Announcements",
+  "settingsWeb": "Default Web Reader",
+  "settingsSource": "Additional Image Sources",
+  "settingsBackup": "Library Data & Backup",
+  "settingsUpdates": "Updates",
+  "insightsTitle": "My Reading",
+  "insightsSubtitle": "Analyze your favorites, interests, and reading stats on this device.",
+  "insightsA": "A · Reading Overview",
+  "insightsB": "B · Tag Preferences",
+  "insightsC": "C · Work Rankings",
+  "insightsD": "D · Artists & Circles",
+  "insightsE": "E · Reading Activity Trends",
+  "insightsF": "F · Series Progress",
+  "insightsG": "G · Taste Summary",
+  "insightsH": "H · What to Read Next",
+  "insightsI": "I · Reading Calendar",
+  "insightsJ": "J · Library Cleanup",
+  "insightsK": "K · Monthly & Annual Reports",
+  "insightsL": "L · Filters & Reading History",
+  "metricOwned": "Works Owned",
+  "metricFavorite": "Favorites",
+  "metricCompleted": "Finished",
+  "metricOpens": "Total Opens",
+  "insightAllTime": "All Time",
+  "insightLast7": "Last 7 Days",
+  "insightLast30": "Last 30 Days",
+  "insightLastYear": "Last Year",
+  "insightAllWorks": "All Works",
+  "insightComplete": "Finished Works",
+  "insightIncomplete": "Unfinished Works",
+  "insightTagInfo": "Most Read Tags",
+  "insightFavoriteTags": "Tags Among Favorites",
+  "insightPairs": "Common Tag Combinations",
+  "insightTop8": "Top 8 Most Read",
+  "insightRecentlyRead": "Recently Read Works",
+  "insightRereads": "Most Revisited (2+ Opens)",
+  "insightCreatorReads": "Reads by Artist",
+  "insightCircleReads": "Reads by Circle",
+  "insightMonthlyReport": "Monthly Reading Report",
+  "insightAnnualReport": "Annual Reading Report",
+  "insightSavePng": "Save Report as PNG",
+  "insightCollectActivity": "Collect New Reading Activity",
+  "insightClearActivity": "Clear Dated Reading Activity",
+  "insightCopySummary": "Copy Statistics Summary",
+  "editionReview": "Confirm Same Chapter",
+  "finderPartialBody": "Could not read the complete post. Only a public preview was available; some IDs may be missing.",
+  "searchFetchedUnique": "Online Works · {count} Unique Results Loaded",
+  "@searchFetchedUnique": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchFieldCount": "{field}: {count} results (overlap possible)",
+  "@searchFieldCount": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchPartial": "Some search categories failed. Showing available results.",
+  "searchGeneral": "General & Title",
+  "searchArtist": "Artist",
+  "searchGroup": "Circle",
+  "searchFemale": "Female Tags",
+  "searchMale": "Male Tags",
+  "insightProgressUnavailable": "Unavailable",
+  "insightProgressValue": "{percent}% (based on {count} works)",
+  "@insightProgressValue": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightOverview": "Unread {unread} · Offline {offline}% · Average progress {progress}",
+  "@insightOverview": {
+    "placeholders": {
+      "unread": {
+        "type": "int"
+      },
+      "offline": {
+        "type": "int"
+      },
+      "progress": {
+        "type": "String"
+      }
+    }
+  },
+  "insightCompletedRate": "Completion rate: {rate}%",
+  "@insightCompletedRate": {
+    "placeholders": {
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "insightReadingCount": "In progress: {count}",
+  "@insightReadingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightDatedCount": "Reading sessions with dates: {count}",
+  "@insightDatedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightActiveTime": "Estimated active reading time: {minutes} min",
+  "@insightActiveTime": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "insightMetadataCoverage": "Analyzable: {tagged} / {total} works",
+  "@insightMetadataCoverage": {
+    "placeholders": {
+      "tagged": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "insightTagRate": "{name} · {percent}% finished",
+  "@insightTagRate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "insightActivitySummary": "{count} sessions · about {minutes} active min in selected period",
+  "@insightActivitySummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "insightSeriesCount": "Managed series: {count}",
+  "@insightSeriesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightChaptersCount": "{completed}/{total} chapters finished",
+  "@insightChaptersCount": {
+    "placeholders": {
+      "completed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "insightTasteEmpty": "Not enough tag information. Add online metadata or manual tags to analyze.",
+  "insightTasteSummary": "Notable tags in your library: {tags}. Based on favorites and reads.",
+  "@insightTasteSummary": {
+    "placeholders": {
+      "tags": {
+        "type": "String"
+      }
+    }
+  },
+  "insightTagCoverage": "{tagged} out of {total} works have tags. Results are estimates.",
+  "@insightTagCoverage": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      },
+      "tagged": {
+        "type": "int"
+      }
+    }
+  },
+  "insightCalendarSessions": "Using dates from {count} recorded reading sessions.",
+  "@insightCalendarSessions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightMissingMetadata": "Works missing artist or tag details: {count}",
+  "@insightMissingMetadata": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightStaleWorks": "Unfinished works untouched for 90+ days: {count}",
+  "@insightStaleWorks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightSessionPeriod": "Selected period: {period}",
+  "@insightSessionPeriod": {
+    "placeholders": {
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "insightPeriodLastDays": "Last {days} days",
+  "@insightPeriodLastDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "insightStreak": "Last 91 days · {days}-day reading streak",
+  "@insightStreak": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "insightOpensRow": "Opened {count} times{completed} · #{id}",
+  "@insightOpensRow": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "completed": {
+        "type": "String"
+      },
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "insightCompletedBadge": " · Finished",
+  "insightNoGroup": "No grouped works yet.",
+  "insightTagRateExplain": "Tag completion rate is finished works divided by owned works with that tag.",
+  "insightRecHint": "Recommendations prioritize favorite tags, bookmarks, and unread works.",
+  "insightActivity14": "Reading sessions over last 14 days (since tracking began)",
+  "insightSessionsNoDates": "Legacy read counts have no dates, so daily history cannot be reconstructed.",
+  "insightNotEnough": "Not enough data yet.",
+  "insightNoMatchingWorks": "No matching works.",
+  "editionCoverPercent": "Cover similarity {percent}%",
+  "@editionCoverPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "legacyCompletionReview": "Review Possible Finished Works",
+  "legacyCompletionHint": "These works reached their last page but are not marked finished. Review before changing them.",
+  "legacyCompletionApply": "Mark Selected as Finished",
+  "legacyCompletionEmpty": "No works need completion review.",
+  "youtubeChooseVideos": "Choose Videos from YouTube Collection",
+  "youtubeAnalyzeSelected": "Analyze Selected (up to 5 Videos)"
 }

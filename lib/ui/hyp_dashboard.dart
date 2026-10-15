@@ -24,6 +24,7 @@ import 'candidate_editor.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
 import '../core/work_editions.dart';
+import '../core/cover_similarity.dart';
 import 'work_edition_card.dart';
 import 'hero_banner.dart';
 import 'hyp_theme.dart';
@@ -58,6 +59,8 @@ extension HypPageInfo on HypPage {
 /// YouTube, CBZ and updater services instead of imitating them with mock data.
 class HypDashboard extends StatefulWidget {
   final LibraryBackup library;
+  final String? editionLookupId;
+  final int editionLookupEpoch;
   final List<ReadingSession> readingSessions;
   final Future<void> Function() onClearReadingHistory;
   final GalleryStore galleryStore;
@@ -145,6 +148,8 @@ class HypDashboard extends StatefulWidget {
   const HypDashboard({
     super.key,
     required this.library,
+    this.editionLookupId,
+    this.editionLookupEpoch = 0,
     required this.readingSessions,
     required this.onClearReadingHistory,
     required this.galleryStore,
@@ -245,6 +250,9 @@ class _HypDashboardState extends State<HypDashboard> {
   List<OnlineSearchWork> _remoteResults = [];
   int _remoteTotal = 0;
   int _remotePage = 0;
+  bool _remoteHasMore = false;
+  Map<String, int> _remoteFieldTotals = const {};
+  List<String> _remoteWarnings = const [];
   final Map<String, (DateTime, OnlineSearchResult)> _remoteCache = {};
   final FocusNode _searchFocus = FocusNode();
   HypPage _page = HypPage.home;
@@ -398,6 +406,16 @@ class _HypDashboardState extends State<HypDashboard> {
       _page = HypPage.library;
       _search.clear();
     }
+    if (oldWidget.editionLookupEpoch != widget.editionLookupEpoch &&
+        widget.editionLookupId != null) {
+      final id = widget.editionLookupId!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final match = widget.library.works
+            .where((entry) => entry.workId == id).firstOrNull;
+        if (match != null) _findOtherEditions(match);
+      });
+    }
     _selectedWorkIds.removeWhere((id) =>
         !widget.library.works.any((w) => w.workId == id));
     if (oldWidget.library.works.length != widget.library.works.length ||
@@ -445,6 +463,9 @@ class _HypDashboardState extends State<HypDashboard> {
     _remoteError = null;
     _remotePage = 0;
     _remoteTotal = 0;
+    _remoteHasMore = false;
+    _remoteFieldTotals = const {};
+    _remoteWarnings = const [];
     _remoteBusy = false;
     if (mounted) setState(() {});
     if (_search.text.trim().isNotEmpty && _searchScope != 'local') {
@@ -472,7 +493,7 @@ class _HypDashboardState extends State<HypDashboard> {
     final client = http.Client();
     try {
       final service = OnlineWorkSearch(client);
-      final result = await service.search(term, page: page,
+      final result = await service.searchUnified(term, page: page,
           language: _searchLanguage);
       if (!mounted || epoch != _searchEpoch) return;
       _remoteCache[key] = (DateTime.now(), result);
@@ -493,10 +514,13 @@ class _HypDashboardState extends State<HypDashboard> {
     if (!mounted || epoch != _searchEpoch) return;
     setState(() {
       _remotePage = result.page;
-      _remoteTotal = result.total;
+      _remoteHasMore = result.hasNextPage;
+      _remoteFieldTotals = result.fieldTotals;
+      _remoteWarnings = result.warnings;
       final seen = <String>{};
       _remoteResults = [...next ? _remoteResults : <OnlineSearchWork>[],
         ...result.works].where((work) => seen.add(work.workId)).toList();
+      _remoteTotal = _remoteResults.length;
     });
   }
 
@@ -706,6 +730,15 @@ class _HypDashboardState extends State<HypDashboard> {
     final term = _search.text.trim().toLowerCase();
     if (term.isEmpty) return _works;
     return _works.where((w) {
+      final code = w.sourceLanguage.toLowerCase().trim();
+      final allowed = switch (_searchLanguage) {
+        'korean' => const {'korean', 'ko'},
+        'japanese' => const {'japanese', 'ja'},
+        'english' => const {'english', 'en'},
+        'chinese' => const {'chinese', 'zh', 'zh-cn', 'zh-tw'},
+        _ => <String>{},
+      };
+      if (_searchLanguage.isNotEmpty && !allowed.contains(code)) return false;
       return [
         w.title, w.author, w.workId, w.sourceGroup, w.sourceSeries,
         w.sourceType, w.sourceLanguage, ...w.tags, ...w.collections,
@@ -1199,6 +1232,75 @@ class _HypDashboardState extends State<HypDashboard> {
         popularityRanks:
             _popularity[widget.readerSettings.popularityPeriod] ?? const {});
 
+  Future<void> _reviewLegacyCompletion() async {
+    // A last-page bookmark does not prove the page actually rendered. Never
+    // silently mark historical records complete; the reader stays in control.
+    final review = _works.where((work) =>
+        !work.completed && work.totalPages > 0 &&
+        work.currentPage >= work.totalPages).take(100).toList();
+    final language = AppLocalizations.of(context)!;
+    if (review.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(language.legacyCompletionEmpty)));
+      return;
+    }
+    final selection = <String>{};
+    final confirmed = await showDialog<List<String>>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (context, refresh) {
+          final words = AppLocalizations.of(context)!;
+          return AlertDialog(
+            title: Text(words.legacyCompletionReview),
+            content: SizedBox(width: 550, height: 420,
+              child: Column(children: [
+                Text(words.legacyCompletionHint),
+                const SizedBox(height: 9),
+                Expanded(child: ListView.builder(
+                  itemCount: review.length,
+                  itemBuilder: (_, index) {
+                    final work = review[index];
+                    return CheckboxListTile(
+                      dense: true,
+                      value: selection.contains(work.workId),
+                      title: Text(work.title, maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                      subtitle: Text(work.workId + ' · ' +
+                          work.currentPage.toString() + '/' +
+                          work.totalPages.toString()),
+                      onChanged: (checked) => refresh(() {
+                        if (checked == true) {
+                          selection.add(work.workId);
+                        } else {
+                          selection.remove(work.workId);
+                        }
+                      }),
+                    );
+                  },
+                )),
+              ]),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog),
+                  child: Text(words.cancel)),
+              FilledButton(
+                onPressed: selection.isEmpty ? null : () =>
+                    Navigator.pop(dialog, selection.toList()),
+                child: Text(words.legacyCompletionApply),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (confirmed == null || !mounted) return;
+    for (final work in review) {
+      if (confirmed.contains(work.workId)) {
+        await widget.onSetCompleted(work, true);
+      }
+    }
+  }
+
   Future<void> _openEditionStack(List<WorkEntry> editions) async {
     final selected = await showModalBottomSheet<WorkEntry>(
       context: context, isScrollControlled: true,
@@ -1453,17 +1555,33 @@ class _HypDashboardState extends State<HypDashboard> {
     final client = http.Client();
     final queries = WorkEditions.searchQueries(work, query);
     try {
-      final batches = await Future.wait(queries.map((term) async {
-        try {
-          return await OnlineWorkSearch(client).search(term);
-        } catch (error) {
-          errors.add('$term: $error');
-          return null;
-        }
-      }));
+      final batches = <OnlineSearchResult>[];
+      final searcher = OnlineWorkSearch(client);
+      // Bounded parallelism: two alias/creator queries at a time.
+      // Load an additional page if the provider reports more candidates.
+      for (var start = 0; start < queries.length; start += 2) {
+        final pair = queries.skip(start).take(2);
+        final found = await Future.wait(pair.map((term) async {
+          final pages = <OnlineSearchResult>[];
+          try {
+            final first = await searcher.search(term);
+            pages.add(first);
+            if (first.works.isNotEmpty && first.total > first.works.length) {
+              try {
+                pages.add(await searcher.search(term, page: 2));
+              } catch (error) {
+                errors.add(term + ' page 2: ' + error.toString());
+              }
+            }
+          } catch (error) {
+            errors.add(term + ': ' + error.toString());
+          }
+          return pages;
+        }));
+        for (final group in found) { batches.addAll(group); }
+      }
       final seen = <String>{};
       for (final batch in batches) {
-        if (batch == null) continue;
         for (final result in batch.works) {
           if (result.workId != work.workId &&
               seen.add(result.workId) &&
@@ -1512,8 +1630,46 @@ class _HypDashboardState extends State<HypDashboard> {
           language: entry.language, inLibrary: false, remote: entry,
           match: WorkEditions.compare(work, candidate)));
     }
+    // Only compare covers after metadata/chapters have narrowed candidates.
+    // Missing images are neutral; never use visual similarity to auto-link.
+    final coverScores = <String, double>{};
+    final knownCover = _coverImages[work.key];
+    if (knownCover != null) {
+      final compareClient = http.Client();
+      try {
+        var remoteChecks = 0;
+        for (final candidate in items.take(24)) {
+          Uint8List? other;
+          if (candidate.inLibrary) {
+            final record = local.where((entry) =>
+                entry.workId == candidate.id).firstOrNull;
+            if (record != null) other = _coverImages[record.key];
+          } else if (candidate.match.score >= 45 && remoteChecks < 3) {
+            remoteChecks++;
+            try {
+              final gallery = await HitomiGalleryProvider(compareClient)
+                  .load(candidate.id, dataSaver: true);
+              if (gallery.pageCount > 0) {
+                other = await gallery.loadPage(0);
+              }
+            } catch (_) {
+              // The remote image is optional, not a reason to hide a match.
+            }
+          }
+          if (other != null) {
+            final similarity = await CoverSimilarity.compare(knownCover, other);
+            if (similarity != null) coverScores[candidate.id] = similarity;
+          }
+        }
+      } finally {
+        compareClient.close();
+      }
+    }
     items.sort((a, b) {
-      final score = b.match.score.compareTo(a.match.score);
+      final coverA = coverScores[a.id] ?? 0;
+      final coverB = coverScores[b.id] ?? 0;
+      final score = (b.match.score + coverB * 8).compareTo(
+          a.match.score + coverA * 8);
       if (score != 0) return score;
       return a.inLibrary == b.inLibrary ? a.id.compareTo(b.id) :
           a.inLibrary ? -1 : 1;
@@ -1542,7 +1698,12 @@ class _HypDashboardState extends State<HypDashboard> {
                 subtitle: Text('#' + item.id + ' · ' +
                     WorkEditions.languageName(item.language) + ' · ' +
                     (item.match.autoLink ? labels.editionLikelyMatch :
-                        labels.editionManualReview)),
+                        labels.editionManualReview) +
+                    ' · ' + item.match.score.toString() + '/100' +
+                    ' · ' + item.match.reason +
+                    (coverScores[item.id] == null ? '' :
+                        ' · ' + labels.editionCoverPercent(
+                            (coverScores[item.id]! * 100).round()))),
                 onTap: () => Navigator.pop(dialog,
                     (id: item.id, remote: item.remote)),
               ),
@@ -2037,6 +2198,13 @@ class _HypDashboardState extends State<HypDashboard> {
               ? '완독 표시' : '완독 숨기기'),
         )),
       ]),
+      if (_works.any((work) => !work.completed &&
+          work.totalPages > 0 && work.currentPage >= work.totalPages))
+        Align(alignment: Alignment.centerRight, child: TextButton.icon(
+          onPressed: _reviewLegacyCompletion,
+          icon: const Icon(Icons.fact_check_outlined),
+          label: Text(AppLocalizations.of(context)!.legacyCompletionReview),
+        )),
       _selectionControls(_visibleLibraryWorks),
       const SizedBox(height: 8),
       if (widget.readerSettings.completedHidden &&
@@ -2065,8 +2233,9 @@ class _HypDashboardState extends State<HypDashboard> {
     final showLocal = _searchScope != 'online';
     final showOnline = _searchScope != 'local';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const HypSectionTitle(icon: Icons.search_rounded,
-          title: '통합 작품 검색', subtitle: '내 서재와 온라인 작품을 함께 찾아봐.'),
+      HypSectionTitle(icon: Icons.search_rounded,
+          title: HypI18n.t(context, '통합 작품 검색'),
+          subtitle: HypI18n.t(context, '내 서재와 온라인 작품을 함께 찾아봐.')),
       const SizedBox(height: 10),
       Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center,
         children: [
@@ -2083,14 +2252,15 @@ class _HypDashboardState extends State<HypDashboard> {
           PopupMenuButton<String>(
             tooltip: '검색 언어 필터',
             onSelected: (value) {
-              _searchLanguage = value;
+              setState(() => _searchLanguage = value);
               _changedSearch();
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: '', child: HypText('모든 언어')),
               PopupMenuItem(value: 'korean', child: HypText('한국어')),
               PopupMenuItem(value: 'japanese', child: HypText('일본어')),
-              PopupMenuItem(value: 'english', child: HypText('영어')),
+              PopupMenuItem(value: 'english', child: HypText('English')),
+              PopupMenuItem(value: 'chinese', child: HypText('中文')),
             ],
             child: Chip(label: HypText(_searchLanguage.isEmpty
                 ? '언어 전체 ▾' : '언어: ' + _searchLanguage + ' ▾')),
@@ -2113,8 +2283,23 @@ class _HypDashboardState extends State<HypDashboard> {
       ],
       if (showOnline) ...[
         const SizedBox(height: 18),
-        HypText('온라인 작품 · ' + _remoteTotal.toString() + '개 결과',
+        HypText('온라인 작품 · ' + _remoteTotal.toString() + '개 고유 결과 수집',
             style: Theme.of(context).textTheme.titleMedium),
+        if (_remoteFieldTotals.isNotEmpty)
+          Wrap(spacing: 6, runSpacing: 3, children: [
+            for (final entry in _remoteFieldTotals.entries)
+              Chip(label: HypText(
+                switch (entry.key) {
+                  'general' => '일반·제목',
+                  'artist' => '작가',
+                  'group' => '서클',
+                  'female' => '여성 태그',
+                  'male' => '남성 태그',
+                  _ => entry.key,
+                } + ': ' + entry.value.toString() + '건 (중복 가능)')),
+          ]),
+        if (_remoteWarnings.isNotEmpty)
+          const HypText('일부 분야 검색이 실패했어. 조회된 결과만 표시해.'),
         const SizedBox(height: 8),
         if (_remoteBusy) const LinearProgressIndicator(),
         if (_remoteError != null) ...[
@@ -2144,8 +2329,7 @@ class _HypDashboardState extends State<HypDashboard> {
             onTap: () => _showOnlineWork(work),
           ),
         ),
-        if (!_remoteBusy && _remoteResults.length < _remoteTotal &&
-            _remoteResults.isNotEmpty)
+        if (!_remoteBusy && _remoteHasMore && _remoteResults.isNotEmpty)
           OutlinedButton.icon(
             onPressed: () => _fetchOnlineSearch(
                 epoch: _searchEpoch, next: true),
@@ -2527,7 +2711,7 @@ class _HypDashboardState extends State<HypDashboard> {
         subtitle: '뷰어 조작, 기본 표지, 추가 다운로드 소스와 앱 데이터를 관리해.',
       ),
       const SizedBox(height: 14),
-      _settingsPanel('general', '언어·일반', Column(
+      _settingsPanel('general', AppLocalizations.of(context)!.settingsGeneral, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('언어', style: Theme.of(context).textTheme.titleMedium),
@@ -2541,9 +2725,9 @@ class _HypDashboardState extends State<HypDashboard> {
             // Native names are deliberately NOT translated by the selected
             // language: the chooser always reads 한국어 / English / 日本語.
             items: const [
-              DropdownMenuItem(value: 'ko', child: HypText('한국어')),
-              DropdownMenuItem(value: 'en', child: HypText('English')),
-              DropdownMenuItem(value: 'ja', child: HypText('日本語')),
+              DropdownMenuItem(value: 'ko', child: Text('한국어')),
+              DropdownMenuItem(value: 'en', child: Text('English')),
+              DropdownMenuItem(value: 'ja', child: Text('日本語')),
             ],
             onChanged: (language) {
               if (language != null) {
@@ -2563,10 +2747,11 @@ class _HypDashboardState extends State<HypDashboard> {
                 labelText: HypI18n.t(context, '선호 작품 언어')),
             items: const [
               DropdownMenuItem(value: 'auto', child: HypText('자동 선택')),
-              DropdownMenuItem(value: 'korean', child: HypText('한국어')),
-              DropdownMenuItem(value: 'japanese', child: HypText('日本語')),
-              DropdownMenuItem(value: 'english', child: HypText('English')),
-              DropdownMenuItem(value: 'chinese', child: HypText('中文')),
+              DropdownMenuItem(value: 'recent', child: HypText('마지막 열람 언어판')),
+              DropdownMenuItem(value: 'korean', child: Text('한국어')),
+              DropdownMenuItem(value: 'japanese', child: Text('日本語')),
+              DropdownMenuItem(value: 'english', child: Text('English')),
+              DropdownMenuItem(value: 'chinese', child: Text('中文')),
             ],
             onChanged: (value) {
               if (value != null) widget.onSaveReaderSettings(
@@ -2576,7 +2761,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 10),
-      _settingsPanel('hero', '홈 배너', Column(
+      _settingsPanel('hero', AppLocalizations.of(context)!.settingsHero, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('홈 배너 일러스트',
@@ -2662,7 +2847,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 10),
-      _settingsPanel('viewer', '뷰어·로딩 설정', Column(
+      _settingsPanel('viewer', AppLocalizations.of(context)!.settingsViewer, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('이미지 뷰어 설정', style: Theme.of(context).textTheme.titleMedium),
@@ -2867,7 +3052,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 10),
-      _settingsPanel('cover', '표지 관리', Column(
+      _settingsPanel('cover', AppLocalizations.of(context)!.settingsCover, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('표지 자동 설정 및 편집', style: Theme.of(context).textTheme.titleMedium),
@@ -2898,7 +3083,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      _settingsPanel('android', 'Android 동작', Column(
+      _settingsPanel('android', AppLocalizations.of(context)!.settingsAndroid, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('Android 뷰어 동작', style: Theme.of(context).textTheme.titleMedium),
@@ -2929,7 +3114,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      _settingsPanel('notices', '공지', Column(
+      _settingsPanel('notices', AppLocalizations.of(context)!.settingsNotices, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('관리자 공지', style: Theme.of(context).textTheme.titleMedium),
@@ -2961,7 +3146,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      _settingsPanel('web', '기본 웹 리더', Column(
+      _settingsPanel('web', AppLocalizations.of(context)!.settingsWeb, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('기본 웹 리더 (주소 고정)',
@@ -2984,7 +3169,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      _settingsPanel('source', '추가 이미지 소스', Column(
+      _settingsPanel('source', AppLocalizations.of(context)!.settingsSource, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('추가 JSON 이미지 소스 (선택)', style: Theme.of(context).textTheme.titleMedium),
@@ -3013,7 +3198,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      _settingsPanel('backup', '서재 데이터·백업', Column(
+      _settingsPanel('backup', AppLocalizations.of(context)!.settingsBackup, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('서재 데이터', style: Theme.of(context).textTheme.titleMedium),
@@ -3048,7 +3233,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      _settingsPanel('updates', '업데이트', Column(
+      _settingsPanel('updates', AppLocalizations.of(context)!.settingsUpdates, Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HypText('업데이트', style: Theme.of(context).textTheme.titleMedium),

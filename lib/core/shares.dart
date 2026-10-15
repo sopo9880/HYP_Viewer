@@ -7,7 +7,7 @@ class SharedShorts {
   static const MethodChannel _channel = MethodChannel('hyp_viewer/share');
 
   static String? findVideoUrl(String raw) {
-    for (final match in RegExp(r'https://[^\s<>"\x27]+').allMatches(raw)) {
+    for (final match in RegExp(r'https?://[^\s<>"\x27]+').allMatches(raw)) {
       final url = match.group(0)!.replaceFirst(RegExp(r'[)\].,!?]+$'), '');
       final id = ShortsLink.videoId(url);
       if (id != null) return 'https://www.youtube.com/shorts/$id';

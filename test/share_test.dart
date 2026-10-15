@@ -10,6 +10,11 @@ void main() {
     expect(SharedShorts.findVideoUrl('제목\nhttps://youtube.com/shorts/LJxTpjO7IE4?feature=share\n친구에게 전송'),
       'https://www.youtube.com/shorts/LJxTpjO7IE4');
   });
+  test('HTTP YouTube community share is safely upgraded', () {
+    expect(SharedShorts.findSourceUrl(
+        '게시물 http://youtube.com/post/Ugkxlt1Ces0kwMJyLR-sN8iBws3CSAVjbgmv?si=x'),
+        'https://youtube.com/post/Ugkxlt1Ces0kwMJyLR-sN8iBws3CSAVjbgmv?si=x');
+  });
   test('shared reels and community posts retain their source', () {
     expect(SharedShorts.findSourceUrl('공유 https://www.instagram.com/reel/ABC12345/'),
         'https://www.instagram.com/reel/ABC12345/');

@@ -66,7 +66,13 @@ abstract final class WorkEditions {
     final hasPages = a.totalPages > 0 && b.totalPages > 0;
     final pageDifference = hasPages
         ? (a.totalPages - b.totalPages).abs() : 9999;
-    final sameTitle = titleA == titleB;
+    // Titles can contain multiple original/translated aliases separated by
+    // '|'. Any independently matching alias counts as shared title evidence.
+    Set<String> aliases(String title) => title.split('|')
+        .map((name) => WorkGrouping.normalizedSeries(name))
+        .where((name) => name.length >= 4).toSet();
+    final sameTitle = titleA == titleB ||
+        aliases(a.title).intersection(aliases(b.title)).isNotEmpty;
     if (!sameTitle) {
       // Different translations can have entirely different titles.
       // Auto-link only with independent creator, series, chapter and
@@ -99,19 +105,22 @@ abstract final class WorkEditions {
         sameAuthor || sameCircle ? '원제 및 제작자 일치' : '원제 일치 · 확인 필요');
   }
 
-  /// The library shelf hides a chapter only when all of its editions have
-  /// been completed. Every edition remains individually available in search,
-  /// history and the chooser while any sibling is unfinished.
+  /// Hide a logical chapter on the shelf when any language edition is
+  /// completed. Search and each edition's underlying reading status remain
+  /// independent.
   static List<WorkEntry> visibleOnShelf(
       Iterable<WorkEntry> works, bool hideCompleted) {
     final all = works.toList();
     if (!hideCompleted) return all;
-    final unfinished = all.where((entry) =>
-        entry.editionGroupId.isNotEmpty && !entry.completed)
+    // The original v0.4.0 contract treats a logical chapter as finished as
+    // soon as ANY of its language editions is finished. Individual edition
+    // progress stays independent; search still uses the complete library.
+    final completedGroups = all.where((entry) =>
+        entry.editionGroupId.isNotEmpty && entry.completed)
         .map((entry) => entry.editionGroupId).toSet();
     return all.where((entry) =>
-        !entry.completed || entry.editionGroupId.isNotEmpty &&
-            unfinished.contains(entry.editionGroupId)).toList();
+        !entry.completed && !completedGroups.contains(entry.editionGroupId))
+        .toList();
   }
 
   /// Diversify a translated-title search without sending reading history.
@@ -124,14 +133,21 @@ abstract final class WorkEditions {
           !result.contains(cleaned)) result.add(cleaned);
     }
     add(entered);
+    // Retain both sides of "original | translated": a plain search can
+    // otherwise miss a differently localized title.
+    for (final title in work.title.split('|')) {
+      add(title);
+    }
     final creator = work.author.split(',').first.trim();
     if (creator.isNotEmpty) add('artist:' + creator);
     final circle = work.sourceGroup.split(',').first.trim();
     if (circle.isNotEmpty) add('group:' + circle);
+    // series: is not consistently understood by provider APIs. A plain
+    // keyword query is safe even on mirrors without that operator.
     if (work.sourceSeries.trim().isNotEmpty) {
-      add('series:' + work.sourceSeries.trim());
+      add(work.sourceSeries.trim());
     }
-    return result.take(4).toList();
+    return result.take(7).toList();
   }
 
   static String groupKey(WorkEntry work) =>
@@ -145,6 +161,12 @@ abstract final class WorkEditions {
 
   static WorkEntry preferred(List<WorkEntry> editions, String language) {
     if (editions.isEmpty) throw ArgumentError('No editions');
+    if (language == 'recent') {
+      final recent = [...editions]
+        ..sort((a, b) => (b.lastOpenedAt ?? '')
+            .compareTo(a.lastOpenedAt ?? ''));
+      return recent.first;
+    }
     if (language == 'auto') return editions.first;
     for (final work in editions) {
       if (work.sourceLanguage.toLowerCase() == language) return work;

@@ -116,6 +116,17 @@ abstract final class HypExtraTranslations {
     "화면 좌우 터치로 페이지 넘기기 (기본 켜짐)": ["Tap Screen Edges to Turn Pages (On by Default)", "画面端タップでページ送り（初期設定オン）"],
     "저장 중…": ["Saving…", "保存中…"],
     "선택한 작품을 서재에 저장": ["Save Selected to Library", "選択した作品を本棚に保存"],
+    "통합 작품 검색": ["Unified Work Search","統合作品検索"],
+    "내 서재와 온라인 작품을 함께 찾아봐.": ["Search your library and online works together.","本棚とオンライン作品をまとめて検索します。"],
+    "마지막 열람 언어판": ["Last-Read Edition","最後に読んだ言語版"],
+    "일부 분야 검색이 실패했어. 조회된 결과만 표시해.": ["Some search categories failed. Showing available results.","一部の検索項目で失敗しました。取得できた結果のみ表示します。"],
+    "작품 정보": ["Work Information","作品情報"],
+    "작품 정보 확인": ["View Work Information","作品情報を見る"],
+    "언어 전체 ▾": ["All Languages ▾","すべての言語 ▾"],
+    "검색 언어 필터": ["Search Language Filter","検索言語フィルター"],
+    "완독 후보 검토": ["Review Possible Finished Works","読了候補を確認"],
+    "온라인 작품 · ": ["Online Works · ","オンライン作品・"],
+    "페이지 저장 실패: ": ["Page Save Failed: ","ページ保存失敗: "],
     "실제 존재하는 번호라도 댓글의 의도와 다를 수 있어. 사용자가 선택한 번호만 서재에 저장돼.": ["An existing gallery ID may be unrelated to a comment. Only chosen IDs are saved.", "存在する作品番号でもコメントの意図と違う場合があります。選択した番号のみ保存します。"],
   };
     // Existing user data (titles, comments, URLs) is not translated.

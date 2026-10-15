@@ -45,6 +45,7 @@ import 'core/reading_history.dart';
 import 'core/youtube.dart';
 import 'core/youtube_public.dart';
 import 'core/source_links.dart';
+import 'core/youtube_collection.dart';
 import 'core/work_edition_service.dart';
 import 'core/update_prompt.dart';
 
@@ -544,6 +545,51 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     });
   }
 
+  Future<List<YoutubeCollectionItem>?> _chooseYoutubeCollection(
+      List<YoutubeCollectionItem> items) async {
+    if (items.isEmpty || !mounted) return null;
+    final selected = <String>{};
+    return showDialog<List<YoutubeCollectionItem>>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (context, refresh) => AlertDialog(
+          title: Text(AppLocalizations.of(context)!.youtubeChooseVideos),
+          content: SizedBox(width: 550, height: 420,
+            child: ListView.builder(
+              itemCount: items.length,
+              itemBuilder: (_, index) {
+                final item = items[index];
+                return CheckboxListTile(
+                  dense: true,
+                  value: selected.contains(item.videoId),
+                  title: Text(item.title, maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  subtitle: Text(item.videoId),
+                  onChanged: (value) => refresh(() {
+                    if (value == true && selected.length < 5) {
+                      selected.add(item.videoId);
+                    } else if (value != true) {
+                      selected.remove(item.videoId);
+                    }
+                  }),
+                );
+              },
+            )),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog),
+                child: const HypText('취소')),
+            FilledButton(
+              onPressed: selected.isEmpty ? null : () => Navigator.pop(
+                dialog, items.where((item) =>
+                    selected.contains(item.videoId)).toList()),
+              child: Text(AppLocalizations.of(context)!.youtubeAnalyzeSelected),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _fetch() async {
     final raw = urlInput.text.trim();
     if (RegExp(r'^\d{1,12}$').hasMatch(raw)) {
@@ -567,6 +613,30 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         try {
           if (link.kind == SourceKind.hitomiWork) {
             content = link.url;
+          } else if (link.kind == SourceKind.youtubeCollection) {
+            final entries = await YoutubeCollectionReader(client).list(link);
+            if (entries.isEmpty) {
+              errors.add('YouTube 영상 목록을 읽지 못했어. 직접 영상 주소를 공유해줘.');
+            } else {
+              final selected = await _chooseYoutubeCollection(entries);
+              for (final video in selected ?? <YoutubeCollectionItem>[]) {
+                try {
+                  final result = key.isEmpty
+                      ? await YoutubePublicClient(client).fetch(video.videoId)
+                      : await YoutubeClient(client).fetch(video.videoId, key);
+                  final text = [result.title, result.description,
+                      ...result.comments].where((part) =>
+                          part.trim().isNotEmpty).join('\n\n');
+                  blocks.add(text);
+                  for (final candidate in NumberExtractor.extract(
+                      text, source: video.url)) {
+                    mapped.putIfAbsent(candidate.code, () => video.url);
+                  }
+                } catch (error) {
+                  errors.add(video.videoId + ': ' + error.toString());
+                }
+              }
+            }
           } else if (link.kind == SourceKind.youtubeVideo) {
             final result = key.isEmpty
                 ? await YoutubePublicClient(client).fetch(link.videoId)
@@ -574,7 +644,12 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             content = [result.description, ...result.comments]
                 .where((value) => value.trim().isNotEmpty).join('\n\n');
           } else if (link.canPreview) {
-            content = await PublicSourcePreview(client).fetch(link);
+            final preview = await PublicSourcePreview(client).fetchDetailed(link);
+            content = preview.text;
+            if (link.kind == SourceKind.youtubePost && !preview.fullBody) {
+              errors.add('YouTube 게시물 전체 본문에 접근하지 못해 미리보기만 읽었어. '
+                  '원문을 직접 붙여넣으면 누락된 번호를 확인할 수 있어.');
+            }
           } else {
             errors.add('원문 자동 분석 미지원: ' + link.uri.host);
           }
@@ -588,7 +663,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           mapped.putIfAbsent(candidate.code, () => link.url);
         }
       }
-      final shared = raw.replaceAll(RegExp(r'https://\S+'), '').trim();
+      final shared = raw.replaceAll(RegExp(r'https?://\S+'), '').trim();
       if (shared.isNotEmpty) blocks.add(shared);
       commentInput.text = blocks.join('\n\n');
       _candidateSourceUrls
@@ -878,6 +953,13 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           ));
         },
         onEdit: () => _editWorkDetails(work),
+        onFindOtherEditions: () async {
+          if (!mounted) return;
+          setState(() {
+            _requestedEditionId = work.workId;
+            _editionRequestEpoch++;
+          });
+        },
       ),
     );
   }
@@ -2447,6 +2529,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  String? _requestedEditionId;
+  int _editionRequestEpoch = 0;
+
   @override
   Widget build(BuildContext context) => HypDashboard(
     library: library,
@@ -2469,6 +2554,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     message: message,
     navigationEpoch: navigationEpoch,
     libraryNavigationEpoch: libraryNavigationEpoch,
+    editionLookupId: _requestedEditionId,
+    editionLookupEpoch: _editionRequestEpoch,
     appVersion: appVersion,
     downloadingUpdate: downloadingUpdate,
     updateProgress: updateProgress,
