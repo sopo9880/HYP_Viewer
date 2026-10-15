@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/hitomi_gallery.dart';
 import '../core/i18n.dart';
@@ -92,7 +93,19 @@ class _WorkInfoDialogState extends State<WorkInfoDialog> {
                     style: Theme.of(context).textTheme.titleSmall),
                 for (final url in work.sourceUrls)
                   Padding(padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: SelectableText(url, maxLines: 3)),
+                    child: Row(children: [
+                      Expanded(child: SelectableText(url, maxLines: 3)),
+                      IconButton(
+                        tooltip: l.workSourceOpen,
+                        icon: const Icon(Icons.open_in_new, size: 18),
+                        onPressed: () {
+                          final uri = Uri.tryParse(url);
+                          if (uri != null && uri.scheme == 'https') {
+                            launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
+                        },
+                      ),
+                    ])),
               ],
               _infoLine(l.workInfoTitle, info?.title.isNotEmpty == true
                   ? info!.title : work.title),
