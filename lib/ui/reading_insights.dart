@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import '../core/i18n.dart';
+import '../l10n/app_localizations.dart';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
@@ -276,6 +277,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
 
   @override
   Widget build(BuildContext context) {
+    final language = AppLocalizations.of(context)!;
     final works = _works;
     final sessions = _sessions;
     final completed = works.where((w) => w.completed).length;
@@ -316,11 +318,11 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
     final periodTotals = _sessionPeriods(_report == 'month');
     final summaryTags = rankedInterest.isNotEmpty ? rankedInterest : tags;
     final activeMinutes = (ReadingInsights.activeSeconds(sessions) / 60).round();
-    final reportTitle = _report == 'month' ? '월간 독서 리포트' : '연간 독서 리포트';
+    final reportTitle = _report == 'month' ? language.insightMonthlyReport : language.insightAnnualReport;
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const HypSectionTitle(icon: Icons.query_stats_rounded,
-        title: '내 독서', subtitle: '즐겨찾기 · 취향 · 독서 통계를 내 기기에서 분석해요.'),
+      HypSectionTitle(icon: Icons.query_stats_rounded,
+        title: language.insightsTitle, subtitle: language.insightsSubtitle),
       const SizedBox(height: 14),
       Wrap(spacing: 8, runSpacing: 8, children: [
         DropdownButton<String>(
@@ -354,10 +356,10 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         crossAxisSpacing: 8, mainAxisSpacing: 8,
         childAspectRatio: constraints.maxWidth < 450 ? 1.65 : 1.75,
         children: [
-          _metric('보유 작품', works.length.toString(), Icons.library_books),
-          _metric('즐겨찾기', favorites.toString(), Icons.favorite),
-          _metric('완독', completed.toString(), Icons.check_circle),
-          _metric('누적 열람', totalOpens.toString(), Icons.visibility),
+          _metric(language.metricOwned, works.length.toString(), Icons.library_books),
+          _metric(language.metricFavorite, favorites.toString(), Icons.favorite),
+          _metric(language.metricCompleted, completed.toString(), Icons.check_circle),
+          _metric(language.metricOpens, totalOpens.toString(), Icons.visibility),
         ],
       )),
       const SizedBox(height: 8),
@@ -366,7 +368,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
           (progress == null ? '계산 불가' :
           (progress * 100).round().toString() + '% (' + known.length.toString() + '개 기준)')),
       const SizedBox(height: 13),
-      _section('A · 독서 현황', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(language.insightsA, Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         HypText('완독률: ' + (works.isEmpty ? '0' :
             (completed * 100 / works.length).round().toString()) + '%'),
         HypText('읽는 중: ' + (works.where((w) =>
@@ -374,7 +376,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         HypText('날짜별 기록이 있는 열람 세션: ' + sessions.length.toString() + '회'),
         HypText('활성 독서 시간(추정): ' + activeMinutes.toString() + '분'),
       ]), icon: Icons.donut_small),
-      _section('B · 태그 취향', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(language.insightsB, Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         HypText('분석 가능: ' + recognizedTags.toString() + ' / ' +
             works.length.toString() + '개 작품'),
         const SizedBox(height: 8),
@@ -390,7 +392,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
             (t.works == 0 ? '0' :
             (t.completed * 100 / t.works).round().toString()) + '%')),
       ]), icon: Icons.sell),
-      _section('C · 작품 랭킹', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(language.insightsC, Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const HypText('누적 열람 TOP 8'),
         _ranking(sorted.where((w) => w.openCount > 0).toList()),
         const SizedBox(height: 8),
@@ -400,14 +402,14 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         const HypText('재열람이 많은 작품 (누적 2회 이상)'),
         _ranking(sorted.where((w) => w.openCount >= 2).toList(), max: 5),
       ]), icon: Icons.emoji_events),
-      _section('D · 작가와 서클', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(language.insightsD, Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const HypText('작가별 누적 열람'),
         _bars(ReadingInsights.topCreators(works)),
         const SizedBox(height: 8),
         const HypText('서클별 누적 열람'),
         _bars(ReadingInsights.topCreators(works, circle: true)),
       ]), icon: Icons.people),
-      _section('E · 독서 활동 추이', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(language.insightsE, Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _activityBars(),
         const SizedBox(height: 12),
         HypText('선택 기간 열람 ' + sessions.length.toString() +
@@ -415,7 +417,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         const HypText('기존 누적 열람 횟수에는 날짜가 없어 과거 일별 그래프는 복원하지 않아.',
           style: TextStyle(fontSize: 11, color: HypColors.muted)),
       ]), icon: Icons.bar_chart),
-      _section('F · 시리즈 진행 상황', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(language.insightsF, Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         HypText('관리 중인 시리즈: ' + series.length.toString() + '개'),
         if (seriesProgress.isEmpty) const HypText('아직 묶은 작품이 없어.'),
         for (final entry in seriesProgress.take(12)) Builder(builder: (context) {
@@ -435,7 +437,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
           );
         }),
       ]), icon: Icons.layers),
-      _section('G · 내 취향 요약', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(language.insightsG, Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         HypText(summaryTags.isEmpty
             ? '태그 정보가 부족해. 온라인 작품 정보 또는 수동 태그를 채우면 분석할 수 있어.'
             : '내 서재에서는 ' + summaryTags.take(3)
@@ -445,16 +447,16 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         HypText('총 ' + works.length.toString() + '개 작품 중 ' +
             recognizedTags.toString() + '개에 태그가 있어. 추정 결과로 봐줘.'),
       ]), icon: Icons.psychology),
-      _section('H · 다음 읽을 작품 추천', Column(children: [
+      _section(language.insightsH, Column(children: [
         const HypText('좋아하는 태그·즐겨찾기·아직 읽지 않은 작품을 우선 추천해.'),
         _ranking(recommendations, max: 5),
       ]), icon: Icons.auto_awesome),
-      _section('I · 독서 캘린더', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(language.insightsI, Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _heatmap(),
         const SizedBox(height: 10),
         HypText('수집된 ' + sessions.length.toString() + '개 세션의 날짜를 사용해.'),
       ]), icon: Icons.calendar_month),
-      _section('J · 서재 정리 도우미', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(language.insightsJ, Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         HypText('작가 또는 태그 정보가 부족한 작품: ' +
             noMetadata.length.toString() + '개'),
         _ranking(noMetadata, max: 5),
@@ -463,7 +465,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         const HypText('중복 번호는 서재 저장 시 차단돼. 다운로드 용량 분석은 실제 파일 크기를 확인할 때만 제공할 수 있어.',
           style: TextStyle(fontSize: 11, color: HypColors.muted)),
       ]), icon: Icons.inventory_2),
-      _section('K · 월간·연간 독서 리포트', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(language.insightsK, Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         SegmentedButton<String>(
           segments: const [
             ButtonSegment(value: 'month', label: HypText('월간')),
@@ -493,7 +495,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
           label: const HypText('리포트 PNG로 저장'),
         ),
       ]), icon: Icons.summarize),
-      _section('L · 통계 필터 및 내 기록 관리', Column(
+      _section(language.insightsL, Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
