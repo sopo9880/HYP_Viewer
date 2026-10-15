@@ -29,6 +29,7 @@ class GalleryReader extends StatefulWidget {
   final void Function(int page, Uint8List bytes)? onPageLoaded;
   final Future<void> Function(int page, Uint8List bytes)? onChooseCover;
   final ValueChanged<bool>? onVerticalScrollingChanged;
+  final ValueChanged<bool>? onTwoPageSpreadChanged;
   final ValueChanged<int>? onFinishedReading;
 
   const GalleryReader({
@@ -44,6 +45,7 @@ class GalleryReader extends StatefulWidget {
     this.onPageLoaded,
     this.onChooseCover,
     this.onVerticalScrollingChanged,
+    this.onTwoPageSpreadChanged,
     this.onFinishedReading,
   });
 
@@ -57,6 +59,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   bool _vertical = false;
   bool get _verticalReading => _vertical || widget.settings.webtoonMode;
   bool _controlsVisible = true;
+  bool _twoPageSpread = false;
   bool _completionReported = false;
   bool _lastPageRendered = false;
   final TransformationController _webtoonTransform = TransformationController();
@@ -109,14 +112,16 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   final ItemPositionsListener _webtoonPositions = ItemPositionsListener.create();
 
   int get _step => widget.settings.webtoonMode ? 1 :
-      widget.settings.twoPageSpread ? 2 : 1;
+      _twoPageSpread ? 2 : 1;
   int get _units => (widget.archive.pageCount + _step - 1) ~/ _step;
   int get _currentPage => _currentUnit * _step + 1;
 
   @override
   void initState() {
     super.initState();
-    _vertical = widget.settings.verticalScrolling;
+    _twoPageSpread = widget.settings.twoPageSpread;
+    _vertical = _twoPageSpread ? false : widget.settings.verticalScrolling;
+    _controlsVisible = !widget.settings.hideReaderUiOnOpen;
     // ALL visible and background requests share this same bounded queue.
     // Data saver uses one request at a time, regardless of preload setting.
     _diskCache = GalleryDiskCache(widget.archive,
@@ -165,17 +170,19 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       if (oldDisk != null) unawaited(oldDisk.dispose());
     }
     if (oldWidget.settings.webtoonMode != widget.settings.webtoonMode ||
-        oldWidget.settings.twoPageSpread != widget.settings.twoPageSpread) {
-      final page = _currentUnit *
-          (oldWidget.settings.twoPageSpread ? 2 : 1) + 1;
+        (oldWidget.settings.twoPageSpread != widget.settings.twoPageSpread &&
+            _twoPageSpread != widget.settings.twoPageSpread)) {
+      final page = _currentPage;
       final previous = _controller;
+      _twoPageSpread = widget.settings.twoPageSpread;
+      _vertical = _twoPageSpread ? false : widget.settings.verticalScrolling;
       _currentUnit = (page - 1) ~/ _step;
       _controller = PageController(initialPage: _currentUnit);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         previous.dispose();
         if (mounted) _prefetchAround(_currentUnit);
       });
-    } else if (oldWidget.settings.verticalScrolling !=
+    } else if (!_twoPageSpread && oldWidget.settings.verticalScrolling !=
         widget.settings.verticalScrolling) {
       final previous = _controller;
       _vertical = widget.settings.verticalScrolling;
@@ -208,7 +215,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     unawaited(AndroidReaderControls.activate(
       volumeNavigation: widget.settings.volumeKeyNavigation,
       forceLandscape: !widget.settings.webtoonMode &&
-          widget.settings.twoPageSpread &&
+          _twoPageSpread &&
           widget.settings.forceLandscapeForSpreads,
       onTurn: (next) { if (mounted) _turn(next ? 1 : -1); },
     ));
@@ -427,6 +434,27 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     }
   }
 
+  void _toggleTwoPageSpread() {
+    if (widget.settings.webtoonMode) return;
+    final page = _currentPage;
+    final previous = _controller;
+    setState(() {
+      _twoPageSpread = !_twoPageSpread;
+      _vertical = _twoPageSpread ? false : widget.settings.verticalScrolling;
+      _currentUnit = (page - 1) ~/ _step;
+      _controller = PageController(initialPage: _currentUnit);
+      _scrubTarget = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      previous.dispose();
+      if (mounted) {
+        _syncAndroidControls();
+        _prefetchAround(_currentUnit);
+      }
+    });
+    widget.onTwoPageSpreadChanged?.call(_twoPageSpread);
+  }
+
   void _toggleVertical() {
     final previous = _controller;
     setState(() {
@@ -611,12 +639,15 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 onPressed: _useAsCover,
                 icon: const Icon(Icons.photo_library_outlined),
               ),
-            if (widget.settings.showPageControlsAction) IconButton(
-              tooltip: _controlsVisible ? AppLocalizations.of(context)!.readerTooltipHideTools : AppLocalizations.of(context)!.readerTooltipShowTools,
-              onPressed: () => setState(
-                () => _controlsVisible = !_controlsVisible),
-              icon: Icon(_controlsVisible
-                  ? Icons.visibility_off : Icons.visibility),
+            if (widget.settings.showPageControlsAction &&
+                !widget.settings.webtoonMode) IconButton(
+              key: const Key('reader-toggle-spread'),
+              tooltip: _twoPageSpread
+                  ? AppLocalizations.of(context)!.readerTooltipSinglePage
+                  : AppLocalizations.of(context)!.readerTooltipTwoPage,
+              onPressed: _toggleTwoPageSpread,
+              icon: Icon(_twoPageSpread
+                  ? Icons.crop_portrait : Icons.menu_book_outlined),
             ),
             if (widget.onOpenInBrowser != null)
               IconButton(
@@ -625,7 +656,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 icon: const Icon(Icons.open_in_browser),
               ),
             if (widget.settings.showOrientationAction &&
-                !widget.settings.twoPageSpread &&
+                !_twoPageSpread &&
                 !widget.settings.webtoonMode)
               IconButton(
                 tooltip: _vertical ? AppLocalizations.of(context)!.readerTooltipHorizontal : AppLocalizations.of(context)!.readerTooltipVertical,
@@ -639,7 +670,11 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
               behavior: HitTestBehavior.translucent,
               onTapUp: (event) {
                 final width = MediaQuery.sizeOf(context).width;
-                if (_webtoonZoomed || !widget.settings.tapNavigation) return;
+                if (_webtoonZoomed) return;
+                if (!widget.settings.tapNavigation) {
+                  _toggleChrome();
+                  return;
+                }
                 final delta = readerTapDelta(
                   pointX: event.localPosition.dx,
                   pointY: event.localPosition.dy,
@@ -682,9 +717,12 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
           : LayoutBuilder(builder: (context, constraints) => GestureDetector(
               key: const Key('reader-tap-zones'),
               behavior: HitTestBehavior.translucent,
-              onTapUp: widget.settings.tapNavigation
-                  ? (event) {
+              onTapUp: (event) {
                       if (_zoomed) return;
+                      if (!widget.settings.tapNavigation) {
+                        _toggleChrome();
+                        return;
+                      }
                       final delta = readerTapDelta(
                         pointX: event.localPosition.dx,
                         pointY: event.localPosition.dy,
@@ -695,13 +733,12 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                       );
                       if (delta == 0) _toggleChrome();
                       else _turn(delta);
-                    }
-                  : null,
+                    },
               child: PageView.builder(
                 key: ValueKey(_vertical.toString() + '-' +
                   widget.settings.reverse.toString() + '-' +
                   _reloadGeneration.toString() + '-' +
-                  widget.settings.twoPageSpread.toString()),
+                  _twoPageSpread.toString()),
                 controller: _controller,
                 reverse: !_verticalReading && widget.settings.reverse,
                 scrollDirection: _vertical ? Axis.vertical : Axis.horizontal,
