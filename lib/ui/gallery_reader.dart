@@ -11,6 +11,7 @@ import '../core/gallery.dart';
 import '../core/android_controls.dart';
 import '../core/reader_settings.dart';
 import '../core/reader_disk_cache.dart';
+import '../l10n/app_localizations.dart';
 import '../core/reader_tap_zones.dart';
 import '../core/work.dart';
 
@@ -284,7 +285,11 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     _imageCache.removeWhere((index, _) => index < first || index >= last);
   }
 
-  void _retryPage(int index) {
+  Future<void> _retryPage(int index) async {
+    // A corrupted image may have been successfully downloaded and cached.
+    // Delete ONLY this page before fetching it again, not the whole book.
+    await _diskCache?.invalidate(index);
+    if (!mounted) return;
     setState(() {
       _imageCache.remove(index);
       _reloadGeneration++;
@@ -434,9 +439,9 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
 
   Widget _failedImage(int index, Object error) {
     final raw = error.toString();
+    final l = AppLocalizations.of(context)!;
     final reason = RegExp(r'\b(429|502|503|504)\b').hasMatch(raw)
-        ? '이미지 서버가 일시적으로 응답하지 않았어. '
-          '앱이 요청 속도를 제한하고 재시도했지만 아직 실패했어.'
+        ? l.readerFailureHttp
         : raw.length <= 280 ? raw : raw.substring(0, 280) + '…';
     return Center(child: Padding(
       padding: const EdgeInsets.all(14),
@@ -448,7 +453,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
             const Icon(Icons.broken_image_outlined,
                 color: Colors.white70, size: 42),
             const SizedBox(height: 10),
-            HypText((index + 1).toString() + '페이지를 불러오지 못했어.',
+            Text(l.readerFailedPage(index + 1),
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white,
                     fontWeight: FontWeight.bold)),
