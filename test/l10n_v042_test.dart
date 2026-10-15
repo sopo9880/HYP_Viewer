@@ -20,6 +20,8 @@ void main() {
     expect(en.searchFieldCount('Artist', 10), contains('Artist'));
     expect(ja.searchLanguageChip('日本語'), contains('日本語'));
     expect(en.searchResultMatches('Artist, Series'), contains('Series'));
+    expect(en.coverCropHelp, contains('Drag'));
+    expect(ja.coverCropImageFailed, contains('画像'));
     expect(en.androidSecurityNotice, contains('SHA-256'));
     expect(ja.androidSecurityNotice, contains('SHA-256'));
   });
