@@ -1071,6 +1071,7 @@ class _HypDashboardState extends State<HypDashboard> {
       HypReadingInsights(
         works: _works,
         sessions: widget.readingSessions,
+        offlineCount: _offlineKeys.length,
         settings: widget.readerSettings,
         onSaveSettings: widget.onSaveReaderSettings,
         onClearHistory: widget.onClearReadingHistory,
@@ -1744,7 +1745,22 @@ class _HypDashboardState extends State<HypDashboard> {
       ]),
       _selectionControls(_visibleLibraryWorks),
       const SizedBox(height: 8),
-      _groupedLibraryGrid(_visibleLibraryWorks),
+      if (widget.readerSettings.completedHidden &&
+          _visibleLibraryWorks.isEmpty && widget.library.works.isNotEmpty)
+        Padding(padding: const EdgeInsets.all(12),
+          child: Column(children: [
+            const Text('모든 작품이 완독으로 분류돼 숨겨져 있어.'),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(completedHidden: false)),
+              icon: const Icon(Icons.visibility),
+              label: const Text('완독 작품 다시 표시'),
+            ),
+          ]),
+        )
+      else
+        _groupedLibraryGrid(_visibleLibraryWorks),
     ],
   );
 

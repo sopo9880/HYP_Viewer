@@ -17,6 +17,7 @@ import 'hyp_theme.dart';
 class HypReadingInsights extends StatefulWidget {
   final List<WorkEntry> works;
   final List<ReadingSession> sessions;
+  final int offlineCount;
   final ReaderSettings settings;
   final Future<void> Function(ReaderSettings) onSaveSettings;
   final Future<void> Function() onClearHistory;
@@ -26,6 +27,7 @@ class HypReadingInsights extends StatefulWidget {
     super.key,
     required this.works,
     required this.sessions,
+    required this.offlineCount,
     required this.settings,
     required this.onSaveSettings,
     required this.onClearHistory,
@@ -278,6 +280,8 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
     final completed = works.where((w) => w.completed).length;
     final unread = works.where((w) => w.openCount == 0).length;
     final favorites = works.where((w) => w.favorite).length;
+    final offlinePercent = widget.works.isEmpty ? 0 :
+      (widget.offlineCount * 100 / widget.works.length).round();
     final totalOpens = works.fold<int>(0, (n,w) => n + w.openCount);
     final known = works.where((w) => w.totalPages > 0).toList();
     final progress = known.isEmpty ? null : known.fold<double>(0,
@@ -356,8 +360,9 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         ],
       )),
       const SizedBox(height: 8),
-      Text('미열람 ' + unread.toString() + '개 · 오프라인 보유율은 다운로드 화면에서 확인 · '
-          '평균 진행률 ' + (progress == null ? '계산 불가' :
+      Text('미열람 ' + unread.toString() + '개 · 오프라인 보유 ' +
+          offlinePercent.toString() + '% · 평균 진행률 ' +
+          (progress == null ? '계산 불가' :
           (progress * 100).round().toString() + '% (' + known.length.toString() + '개 기준)')),
       const SizedBox(height: 13),
       _section('A · 독서 현황', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

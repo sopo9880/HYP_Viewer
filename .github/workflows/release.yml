@@ -199,10 +199,10 @@ jobs:
           - Similar series titles can match across different Shorts, even
             without numbered chapters. Existing groups can receive new
             chapters without resetting previous order, history or covers.
-          - Physical left 30% of reader goes to previous page; physical right
-            30% goes to next page. The center toggles chrome, independent of
-            right-to-left reading or slide animation. Webtoon supports the
-            same zones while retaining continuous scrolling.
+          - Reader tap zones were first introduced in v0.2.2; v0.3.0
+            corrects their physical left/right behavior to respect the
+            selected reading direction. Webtoon retains scrolling and a
+            separate center tap to toggle reader controls.
           - Tap navigation defaults to ON for new installations, while
             existing explicit user settings are preserved.
           - Gallery IDs are gathered from all contiguous digit windows on
