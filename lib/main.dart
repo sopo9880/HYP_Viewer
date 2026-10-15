@@ -2376,20 +2376,14 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
   }
 
+  /// One GitHub update check on every fresh launch; not a background poll.
+  /// Per-version 7-day snoozes are enforced by _checkRelease.
   Future<void> _automaticUpdateCheck() async {
     try {
       await _settingsLoad;
-      final root = await getApplicationSupportDirectory();
-      final file = File(root.path + Platform.pathSeparator + 'update_check_at.txt');
-      final now = DateTime.now().toUtc();
-      if (await file.exists()) {
-        final last = DateTime.tryParse(await file.readAsString());
-        if (last != null && now.difference(last).inHours < 24) return;
-      }
-      await file.writeAsString(now.toIso8601String());
       if (mounted) await _checkRelease(silent: true);
     } catch (_) {
-      // Offline usage, including widget tests, must work without update checks.
+      // An offline session must never be blocked by the updater.
     }
   }
 

@@ -57,6 +57,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   bool get _verticalReading => _vertical || widget.settings.webtoonMode;
   bool _controlsVisible = true;
   bool _completionReported = false;
+  bool _lastPageRendered = false;
   final TransformationController _webtoonTransform = TransformationController();
   bool _webtoonZoomed = false;
   bool _controlHeld = false;
@@ -78,12 +79,21 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     }
   }
   void _reportLastFrame(int index) {
-    if (_completionReported || index != widget.archive.pageCount - 1 ||
+    if (index != widget.archive.pageCount - 1) return;
+    _lastPageRendered = true;
+    _completeWhenVisible();
+  }
+
+  void _completeWhenVisible() {
+    if (_completionReported || !_lastPageRendered ||
         _currentUnit != _units - 1) return;
     _completionReported = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _currentUnit == _units - 1) {
+      if (!mounted) return;
+      if (_currentUnit == _units - 1) {
         widget.onFinishedReading?.call(widget.archive.pageCount);
+      } else {
+        _completionReported = false;
       }
     });
   }
@@ -135,6 +145,10 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _syncAndroidControls();
       });
+    }
+    if (oldWidget.archive != widget.archive) {
+      _lastPageRendered = false;
+      _completionReported = false;
     }
     if (oldWidget.archive != widget.archive ||
         oldWidget.settings.dataSaverMode != widget.settings.dataSaverMode ||
@@ -301,6 +315,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     _resetZoom();
     setState(() => _currentUnit = target);
     widget.onPageChanged(_currentPage);
+    _completeWhenVisible();
     _prefetchAround(target);
     if (widget.settings.webtoonMode) {
       _pendingWebtoonJump = target;
@@ -338,6 +353,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       if (!mounted || !widget.settings.webtoonMode ||
           index == _currentUnit) return;
       setState(() => _currentUnit = index);
+      _completeWhenVisible();
       widget.onPageChanged(index + 1);
       _prefetchAround(index);
     });
@@ -688,6 +704,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 onPageChanged: (unit) {
                   _resetZoom();
                   setState(() => _currentUnit = unit);
+                  _completeWhenVisible();
                   widget.onPageChanged(_currentPage);
                   _prefetchAround(unit);
                 },

@@ -157,7 +157,38 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.3.0:
+          Changes in v0.4.0:
+          - Fixed page-edge tapping to use physical left=previous and
+            right=next by default, with the reverse setting mirrored; verified
+            keyboard and two-page navigation expectations.
+          - Fixed final-page completion detection for pre-rendered webtoon
+            pages, added manual complete/uncomplete actions and coherent
+            completed hiding in language-edition stacks.
+          - Library sorting now applies inside series, with optional
+            explicit chapter ordering and edition cover stacks inside series.
+          - Added conservative multilingual-edition matching by original
+            title, creator/circle and chapter. User-confirmed alternate
+            titles may be linked or unlinked without losing each edition's
+            independent work ID, reading progress or offline files.
+          - Expanded source detection to YouTube videos, live links and
+            community posts; Instagram posts/reels/stories, Hitomi URLs,
+            and arbitrary HTTPS links. Supported public metadata previews
+            never require third-party login; inaccessible or private
+            content is handled with an explicit paste-text fallback.
+          - Added link-finder Clear, reliable collapse even with candidates,
+            native Android URL share support and original source-link retention.
+          - Extended live Korean/English/Japanese UI translations, including
+            reader settings, reading insights, series and edition dialogs.
+          - Startup update prompts can be disabled or snoozed per version
+            for seven days; a newer release may prompt immediately, and
+            manual update checks always remain available.
+          - Existing 0.3 data, CBZ downloads, progress, covers, JSON backups,
+            notification behavior and safe signed updates are preserved.
+          - Note: public remote searches, Instagram metadata, and community
+            posts can be unavailable; a link is always recognisable even
+            when its comments cannot be fetched without permission.
+
+          Previous v0.3.0 changes retained:
           - Reader side taps now follow the physical left/right direction
             of the chosen reading mode, including two-page spreads.
           - Auto grouping compares original multilingual titles independently

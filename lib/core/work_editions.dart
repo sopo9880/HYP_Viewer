@@ -7,7 +7,7 @@ class EditionMatch {
   final int score;
   final String reason;
   const EditionMatch(this.score, this.reason);
-  bool get autoLink => score >= 85;
+  bool get autoLink => score >= 80;
   bool get isCandidate => score >= 45;
 }
 
@@ -89,7 +89,7 @@ abstract final class WorkEditions {
       if (diff > 25) score -= 30;
     }
     // Never automatically link on a bare title alone.
-    if (!sameAuthor && !sameCircle) score = score.clamp(0, 75);
+    if (!sameAuthor && !sameCircle) score = score.clamp(0, 75).toInt();
     return EditionMatch(score.clamp(0, 100).toInt(),
         sameAuthor || sameCircle ? '원제 및 제작자 일치' : '원제 일치 · 확인 필요');
   }
