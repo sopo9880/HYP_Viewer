@@ -47,6 +47,13 @@ def check():
         "searchLanguageChip", "settingsTapZonesNote", "settingsHeroUploadNote",
         "workInfoHeader", "workInfoProgress", "workInfoLanguage",
         "androidSecurityNotice", "tooltipSearchLanguage",
+        "editionAliasTitles", "editionAliasHelp",
+        "workSourceHistory", "workSourcesHelp", "workSourceInvalid",
+        "workSourceCount", "onlineLinkedShelf", "searchProgress",
+        "youtubeMoreVideos", "youtubeCommentsPartial",
+        "readerFailedPage", "readerTooltipPrevious", "readerTooltipNext",
+        "readingStatsSummary", "readingActivityDay",
+        "readingSaveReportFailed",
     }
     if required - reference:
         raise ValueError(f"Missing core UI localization keys: {sorted(required - reference)}")
