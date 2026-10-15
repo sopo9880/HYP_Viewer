@@ -218,6 +218,11 @@ class _HypDashboardState extends State<HypDashboard> {
   bool _openBackupSectionRequested = false;
   final Set<String> _offlineKeys = <String>{};
   bool _selectingWorks = false;
+  bool _bannerHovered = false;
+  bool _notificationHovered = false;
+  bool _notificationShown = true;
+  Timer? _notificationTimer;
+  Timer? _notificationExitTimer;
   String? _openedGroupId;
   final Set<String> _selectedWorkIds = <String>{};
   bool get _canSelectWorks => _page == HypPage.library ||
@@ -322,10 +327,11 @@ class _HypDashboardState extends State<HypDashboard> {
     _preloadInput = TextEditingController(
       text: widget.readerSettings.preloadPages.toString());
     _search.addListener(_changedSearch);
+    _scheduleNotificationTimer();
     _syncSortLookup();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshOffline());
     _bannerTimer = Timer.periodic(const Duration(seconds: 8), (_) {
-      if (mounted && _page == HypPage.home &&
+      if (mounted && _page == HypPage.home && !_bannerHovered &&
           widget.readerSettings.heroArtworkSource == 'random' &&
           _coverImages.isNotEmpty) {
         _shuffleBannerCover();
@@ -336,6 +342,10 @@ class _HypDashboardState extends State<HypDashboard> {
   @override
   void didUpdateWidget(covariant HypDashboard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.message != widget.message) {
+      _notificationShown = true;
+      _scheduleNotificationTimer();
+    }
     if (oldWidget.readerSettings.librarySort != widget.readerSettings.librarySort ||
         oldWidget.readerSettings.popularityPeriod !=
             widget.readerSettings.popularityPeriod) _syncSortLookup();
@@ -363,11 +373,31 @@ class _HypDashboardState extends State<HypDashboard> {
   @override
   void dispose() {
     _bannerTimer?.cancel();
+    _notificationTimer?.cancel();
+    _notificationExitTimer?.cancel();
     _preloadInput.dispose();
     _search.removeListener(_changedSearch);
     _search.dispose();
     _searchFocus.dispose();
     super.dispose();
+  }
+
+  void _scheduleNotificationTimer() {
+    _notificationTimer?.cancel();
+    _notificationExitTimer?.cancel();
+    if (widget.message.isEmpty || _notificationHovered) return;
+    final captured = widget.message;
+    final isFailure = RegExp(r'실패|오류|HTTP\s*[45]\d\d|에러',
+        caseSensitive: false).hasMatch(captured);
+    _notificationTimer = Timer(
+        Duration(seconds: isFailure ? 10 : 5), () {
+      if (!mounted || widget.message != captured || _notificationHovered) return;
+      setState(() => _notificationShown = false);
+      _notificationExitTimer = Timer(const Duration(milliseconds: 300), () {
+        if (mounted && widget.message == captured &&
+            !_notificationHovered) widget.onDismissMessage();
+      });
+    });
   }
 
   void _changedSearch() {
@@ -565,6 +595,9 @@ class _HypDashboardState extends State<HypDashboard> {
 
   List<WorkEntry> get _favorites => _works.where((w) => w.favorite).toList();
 
+  List<WorkEntry> get _visibleLibraryWorks => widget.readerSettings.completedHidden
+      ? _works.where((work) => !work.completed).toList() : _works;
+
   List<WorkEntry> get _recent => widget.library.works
       .where((w) => w.lastOpenedAt != null)
       .toList()
@@ -670,7 +703,21 @@ class _HypDashboardState extends State<HypDashboard> {
                 if (widget.message.isNotEmpty)
                   Positioned(
                     top: 8, left: 12, right: 12,
-                    child: Semantics(
+                    child: MouseRegion(
+                      onEnter: (_) {
+                        _notificationHovered = true;
+                        _notificationTimer?.cancel();
+                        _notificationExitTimer?.cancel();
+                        if (!_notificationShown) setState(() => _notificationShown = true);
+                      },
+                      onExit: (_) {
+                        _notificationHovered = false;
+                        _scheduleNotificationTimer();
+                      },
+                      child: AnimatedOpacity(
+                        opacity: _notificationShown ? 1 : 0,
+                        duration: const Duration(milliseconds: 300),
+                        child: Semantics(
                       liveRegion: true,
                       child: Material(
                         key: const Key('viewport-notification'),
@@ -695,6 +742,8 @@ class _HypDashboardState extends State<HypDashboard> {
                           ]),
                         ),
                       ),
+                    ),
+                    ),
                     ),
                   ),
               ]),
@@ -934,6 +983,16 @@ class _HypDashboardState extends State<HypDashboard> {
         rotatingArtworks: widget.readerSettings.heroArtworkSource == 'random'
             ? _rotatingCoverKeys.map((key) => _coverImages[key]).toList()
             : null,
+        rotatingArtworkKeys: widget.readerSettings.heroArtworkSource == 'random'
+            ? List<String?>.from(_rotatingCoverKeys) : null,
+        onHoverChanged: (hovered) => _bannerHovered = hovered,
+        onOpenArtwork: (key) {
+          final matching = widget.library.works.where((work) => work.key == key);
+          if (matching.isEmpty) return;
+          final work = matching.first;
+          if (_offlineKeys.contains(work.key)) widget.onOpenGallery(work);
+          else widget.onReadOnline(work);
+        },
         onOpenLibrary: () => _navigate(HypPage.library),
         onOpenDownloads: () => _navigate(HypPage.downloads),
       ),
@@ -1456,32 +1515,47 @@ class _HypDashboardState extends State<HypDashboard> {
           child: Text(_sortLoadError!,
             style: const TextStyle(color: Colors.orangeAccent, fontSize: 12))),
       const SizedBox(height: 10),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        OutlinedButton.icon(
+      Row(children: [
+        Expanded(child: OutlinedButton.icon(
           key: const Key('library-select-mode'),
           onPressed: _toggleSelectionMode,
           icon: Icon(_selectingWorks
               ? Icons.close : Icons.checklist_outlined),
           label: HypText(_selectingWorks ? '선택 종료' : '선택'),
-        ),
-        OutlinedButton.icon(
+        )),
+        const SizedBox(width: 8),
+        Expanded(child: OutlinedButton.icon(
           key: const Key('library-group-auto'),
           onPressed: widget.library.works.length < 2
               ? null : _showAutoGroupWizard,
           icon: const Icon(Icons.auto_fix_high_outlined),
           label: const HypText('Auto 묶기'),
-        ),
-        OutlinedButton.icon(
+        )),
+      ]),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(child: OutlinedButton.icon(
           key: const Key('library-download-all'),
           onPressed: widget.library.works.isEmpty
               ? null : widget.onDownloadAll,
           icon: const Icon(Icons.download_for_offline_outlined),
           label: const HypText('전체 다운로드'),
-        ),
+        )),
+        const SizedBox(width: 8),
+        Expanded(child: OutlinedButton.icon(
+          key: const Key('library-completed-toggle'),
+          onPressed: () => widget.onSaveReaderSettings(
+            widget.readerSettings.copyWith(
+                completedHidden: !widget.readerSettings.completedHidden)),
+          icon: Icon(widget.readerSettings.completedHidden
+              ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+          label: HypText(widget.readerSettings.completedHidden
+              ? '완독 표시' : '완독 숨기기'),
+        )),
       ]),
-      _selectionControls(_works),
+      _selectionControls(_visibleLibraryWorks),
       const SizedBox(height: 8),
-      _groupedLibraryGrid(_works),
+      _groupedLibraryGrid(_visibleLibraryWorks),
     ],
   );
 

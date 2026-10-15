@@ -23,6 +23,7 @@ class ReaderSettings {
   final String popularityPeriod; // today, week, month, year
   final bool librarySortDescending;
   final bool recentCollapsed;
+  final bool completedHidden;
   final List<String> expandedSettings;
   final bool autoCoverEnabled;
   final bool volumeKeyNavigation;
@@ -50,6 +51,7 @@ class ReaderSettings {
     this.popularityPeriod = 'month',
     this.librarySortDescending = false,
     this.recentCollapsed = false,
+    this.completedHidden = false,
     this.expandedSettings = const [],
     this.autoCoverEnabled = false,
     this.volumeKeyNavigation = false,
@@ -80,6 +82,7 @@ class ReaderSettings {
     String? popularityPeriod,
     bool? librarySortDescending,
     bool? recentCollapsed,
+    bool? completedHidden,
     List<String>? expandedSettings,
     bool? autoCoverEnabled,
     bool? volumeKeyNavigation,
@@ -106,6 +109,7 @@ class ReaderSettings {
     popularityPeriod: popularityPeriod ?? this.popularityPeriod,
     librarySortDescending: librarySortDescending ?? this.librarySortDescending,
     recentCollapsed: recentCollapsed ?? this.recentCollapsed,
+    completedHidden: completedHidden ?? this.completedHidden,
     expandedSettings: expandedSettings ?? this.expandedSettings,
     autoCoverEnabled: autoCoverEnabled ?? this.autoCoverEnabled,
     volumeKeyNavigation: volumeKeyNavigation ?? this.volumeKeyNavigation,
@@ -134,6 +138,7 @@ class ReaderSettings {
     'popularityPeriod': popularityPeriod,
     'librarySortDescending': librarySortDescending,
     'recentCollapsed': recentCollapsed,
+    'completedHidden': completedHidden,
     'expandedSettings': expandedSettings,
     'autoCoverEnabled': autoCoverEnabled,
     'volumeKeyNavigation': volumeKeyNavigation,
@@ -174,6 +179,7 @@ class ReaderSettings {
             ? data['librarySort'] as String : 'newest',
         librarySortDescending: data['librarySortDescending'] == true,
         recentCollapsed: data['recentCollapsed'] == true,
+        completedHidden: data['completedHidden'] == true,
         expandedSettings: data['expandedSettings'] is List
             ? (data['expandedSettings'] as List).whereType<String>()
                 .take(25).toSet().toList() : const [],
