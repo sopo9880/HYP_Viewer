@@ -157,6 +157,13 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
+          Changes in v0.4.3.1:
+          - Run approved downloads with Android background notification
+            or Windows tray, and recover persisted unfinished pages on restart.
+          - Preserve existing CBZ and library records during retries.
+          - User force-stop and OS power policies may interrupt downloads;
+            resume after reopening the app.
+
           Changes in v0.4.3:
           - Store verified multilingual title aliases and multiple HTTPS
             discovery URLs per work. Preserve original titles, read positions,
