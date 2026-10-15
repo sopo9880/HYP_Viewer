@@ -3,6 +3,7 @@ import '../core/i18n.dart';
 import 'package:flutter/material.dart';
 import '../core/work.dart';
 import '../core/work_editions.dart';
+import '../l10n/app_localizations.dart';
 import 'hyp_theme.dart';
 
 /// One visual card for several translations of the same chapter.
@@ -57,7 +58,7 @@ class HypWorkEditionCard extends StatelessWidget {
                     decoration: BoxDecoration(color: HypColors.background,
                         borderRadius: BorderRadius.circular(12)),
                     child: Padding(padding: const EdgeInsets.all(5),
-                      child: HypText(editions.length.toString() + '개 언어판',
+                      child: Text(AppLocalizations.of(context)!.editionCount(editions.length),
                         style: const TextStyle(fontSize: 11))))),
               ])),
               Padding(padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
@@ -74,8 +75,8 @@ class HypWorkEditionCard extends StatelessWidget {
                         style: const TextStyle(fontSize: 11,
                             color: HypColors.muted)),
                     const SizedBox(height: 5),
-                    const HypText('읽을 언어판 선택',
-                        style: TextStyle(fontSize: 10)),
+                    Text(AppLocalizations.of(context)!.editionChoose,
+                        style: const TextStyle(fontSize: 10)),
                   ])),
             ]),
         ),
