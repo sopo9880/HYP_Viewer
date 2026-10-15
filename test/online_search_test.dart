@@ -78,9 +78,11 @@ void main() {
     final seen = <String>[];
     final client = MockClient((request) async {
       seen.add(request.url.host);
-      return http.Response(jsonEncode({'results': [
+      return http.Response.bytes(utf8.encode(jsonEncode({'results': [
         {'id': 123456, 'title': '日本語', 'language': 'japanese'}
-      ], 'count': 1}), 200);
+      ], 'count': 1})), 200, headers: {
+        'content-type': 'application/json; charset=utf-8',
+      });
     });
     final search = OnlineWorkSearch(client);
     final r = await search.search('日本語', language: 'japanese');
