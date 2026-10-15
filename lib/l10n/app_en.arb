@@ -417,5 +417,64 @@
   "workInfoAddedToLibrary": "Added to Library",
   "androidSecurityNotice": "Samsung Galaxy's security auto-blocker may prevent certain APK installations. It protects your device.\n\nThe app cannot disable these protections. If installation fails, verify the APK publisher, GitHub Release URL, and SHA-256 checksum first. Review device security settings yourself. Disabling protections is not recommended.",
   "coverCropHelp": "Drag the photo or pinch to zoom, then save the area inside the rectangle as your cover.",
-  "coverCropImageFailed": "Unable to open the image."
+  "coverCropImageFailed": "Unable to open the image.",
+  "groupCardVolumes": "{count} Volumes",
+  "@groupCardVolumes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "groupCardWorks": "Series · {count} Works",
+  "@groupCardWorks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "candidateChecking": "Checking Works: {checked} / {total}",
+  "@candidateChecking": {
+    "placeholders": {
+      "checked": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "candidateSave": "Save {count} Selected Works",
+  "@candidateSave": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "autoGroupExistingCount": "{count} existing works are retained.",
+  "@autoGroupExistingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "autoGroupOthers": "{count} More Works",
+  "@autoGroupOthers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shortsCandidateCount": "Found Candidate IDs: {count}",
+  "@shortsCandidateCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
