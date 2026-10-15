@@ -41,6 +41,24 @@ void main() {
     expect(WorkEditions.preferred([japanese,korean],'recent').workId,'222222');
   });
 
+  test('cover evidence never auto-links metadata-only nonmatches', () {
+    const manual = EditionMatch(75, '메타데이터 일부 일치');
+    final close = WorkEditions.withCoverEvidence(manual, .99);
+    expect(close.score, lessThan(80));
+    expect(close.autoLink, false);
+    expect(close.reason, contains('표지'));
+    expect(WorkEditions.withCoverEvidence(
+        const EditionMatch(0, '서로 다른 회차'), 1).score, 0);
+  });
+
+  test('strong metadata match with contrasting covers requires review', () {
+    const strong = EditionMatch(95, '원제 및 제작자 일치');
+    final review = WorkEditions.withCoverEvidence(strong, .1);
+    expect(review.isCandidate, true);
+    expect(review.autoLink, false);
+    expect(WorkEditions.withCoverEvidence(strong, null).autoLink, true);
+  });
+
   test('completion hiding retains unfinished language edition', () {
     final japanese = work('111111', 'Story', 'japanese')
         .copyWith(editionGroupId: 'edition_a', completed: true);
