@@ -144,6 +144,8 @@ class WorkEntry {
   String get key => 'work:$workId';
 
   WorkEntry copyWith({
+    String? videoId,
+    String? videoUrl,
     String? workId,
     String? title,
     String? author,
@@ -173,8 +175,8 @@ class WorkEntry {
     int? coverPage,
   }) {
     return WorkEntry(
-      videoId: videoId,
-      videoUrl: videoUrl,
+      videoId: videoId ?? this.videoId,
+      videoUrl: videoUrl ?? this.videoUrl,
       sourceUrls: sourceUrls == null ? this.sourceUrls :
           _cleanSourceUrls(sourceUrls),
       titleAliases: titleAliases == null ? this.titleAliases :
