@@ -112,5 +112,205 @@
   "searchArtist": "작가",
   "searchGroup": "서클",
   "searchFemale": "여성 태그",
-  "searchMale": "남성 태그"
+  "searchMale": "남성 태그",
+  "insightProgressUnavailable": "계산 불가",
+  "insightProgressValue": "{percent}% ({count}개 기준)",
+  "@insightProgressValue": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightOverview": "미열람 {unread}개 · 오프라인 보유 {offline}% · 평균 진행률 {progress}",
+  "@insightOverview": {
+    "placeholders": {
+      "unread": {
+        "type": "int"
+      },
+      "offline": {
+        "type": "int"
+      },
+      "progress": {
+        "type": "String"
+      }
+    }
+  },
+  "insightCompletedRate": "완독률: {rate}%",
+  "@insightCompletedRate": {
+    "placeholders": {
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "insightReadingCount": "읽는 중: {count}개",
+  "@insightReadingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightDatedCount": "날짜별 기록이 있는 열람 세션: {count}회",
+  "@insightDatedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightActiveTime": "활성 독서 시간(추정): {minutes}분",
+  "@insightActiveTime": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "insightMetadataCoverage": "분석 가능: {tagged} / {total}개 작품",
+  "@insightMetadataCoverage": {
+    "placeholders": {
+      "tagged": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "insightTagRate": "{name} · 완독률 {percent}%",
+  "@insightTagRate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "insightActivitySummary": "선택 기간 열람 {count}회 · 활성 시간 약 {minutes}분",
+  "@insightActivitySummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "insightSeriesCount": "관리 중인 시리즈: {count}개",
+  "@insightSeriesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightChaptersCount": "{completed}/{total}편 완독",
+  "@insightChaptersCount": {
+    "placeholders": {
+      "completed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "insightTasteEmpty": "태그 정보가 부족해. 온라인 작품 정보 또는 수동 태그를 채우면 분석할 수 있어.",
+  "insightTasteSummary": "내 서재에서는 {tags} 태그가 눈에 띄어. 즐겨찾기와 누적 열람 기록을 기반으로 한 요약이야.",
+  "@insightTasteSummary": {
+    "placeholders": {
+      "tags": {
+        "type": "String"
+      }
+    }
+  },
+  "insightTagCoverage": "총 {total}개 작품 중 {tagged}개에 태그가 있어. 추정 결과로 봐줘.",
+  "@insightTagCoverage": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      },
+      "tagged": {
+        "type": "int"
+      }
+    }
+  },
+  "insightCalendarSessions": "수집된 {count}개 세션의 날짜를 사용해.",
+  "@insightCalendarSessions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightMissingMetadata": "작가 또는 태그 정보가 부족한 작품: {count}개",
+  "@insightMissingMetadata": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightStaleWorks": "90일 이상 열지 않은 미완독 작품: {count}개",
+  "@insightStaleWorks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insightSessionPeriod": "선택 기간: {period}",
+  "@insightSessionPeriod": {
+    "placeholders": {
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "insightPeriodLastDays": "최근 {days}일",
+  "@insightPeriodLastDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "insightStreak": "최근 91일 · 연속 독서 {days}일",
+  "@insightStreak": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "insightOpensRow": "열람 {count}회{completed} · #{id}",
+  "@insightOpensRow": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "completed": {
+        "type": "String"
+      },
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "insightCompletedBadge": " · 완독",
+  "insightNoGroup": "아직 묶은 작품이 없어.",
+  "insightTagRateExplain": "태그 완독률은 각 태그의 완독 작품 수 / 보유 작품 수로 계산해.",
+  "insightRecHint": "좋아하는 태그·즐겨찾기·아직 읽지 않은 작품을 우선 추천해.",
+  "insightActivity14": "최근 14일 열람 세션 (수집 시작 이후)",
+  "insightSessionsNoDates": "기존 누적 열람 횟수에는 날짜가 없어 과거 일별 그래프는 복원하지 않아.",
+  "insightNotEnough": "집계 가능한 정보가 아직 없어.",
+  "insightNoMatchingWorks": "조건에 맞는 작품이 없어."
 }
