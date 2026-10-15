@@ -28,10 +28,10 @@ import '../core/work_editions.dart';
 import '../core/title_alias_index.dart';
 import '../core/local_search.dart';
 import 'reader_navigation_focus.dart';
-import '../core/cover_similarity.dart';
 import 'work_edition_card.dart';
 import 'hero_banner.dart';
 import 'hyp_theme.dart';
+import 'edition_finder_dialog.dart';
 import 'shorts_finder_panel.dart';
 import 'work_cards.dart';
 import 'auto_group_wizard.dart';
@@ -100,6 +100,8 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function(String code) onQuickAddNumber;
   final Future<void> Function(OnlineSearchWork) onSaveOnlineSearchWork;
   final Future<void> Function(WorkEntry anchor, String editionId) onLinkEdition;
+  final Future<void> Function(WorkEntry anchor, List<String> localIds,
+      List<OnlineSearchWork> remoteWorks)? onLinkEditions;
   final Future<void> Function(WorkEntry) onUnlinkEdition;
   final Future<void> Function(OnlineSearchWork) onReadOnlineSearchWork;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
@@ -189,6 +191,7 @@ class HypDashboard extends StatefulWidget {
     required this.onQuickAddNumber,
     required this.onSaveOnlineSearchWork,
     required this.onLinkEdition,
+    this.onLinkEditions,
     required this.onUnlinkEdition,
     required this.onReadOnlineSearchWork,
     required this.onSaveSelectedWorks,
@@ -1563,239 +1566,22 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   Future<void> _findOtherEditions(WorkEntry work) async {
-    final input = TextEditingController(
-        text: WorkEditions.originalTitle(work.title));
-    String? query;
-    try {
-      query = await showDialog<String>(context: context,
-        builder: (ctx) {
-          final labels = AppLocalizations.of(ctx)!;
-          return AlertDialog(
-            title: Text(labels.findOtherEditions),
-            content: TextField(
-              controller: input,
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: labels.editionSearchLabel,
-                helperText: labels.editionSearchHint),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx),
-                  child: Text(labels.cancel)),
-              FilledButton(
-                  onPressed: () => Navigator.pop(ctx, input.text.trim()),
-                  child: Text(labels.search)),
-            ],
-          );
-        },
-      );
-    } finally {
-      input.dispose();
-    }
-    if (query == null || query.isEmpty || !mounted) return;
-
-    // Offline library candidates are always available. Creator/series
-    // searches can locate translated titles that share no title keywords.
-    final local = widget.library.works
-        .where((entry) => entry.workId != work.workId).toList();
-    final remote = <OnlineSearchWork>[];
-    final errors = <String>[];
-    final client = http.Client();
-    final queries = TitleAliasIndex.fromLibrary(widget.library.works)
-        .queriesFor(work, entered: query, limit: 14);
-    try {
-      final batches = <OnlineSearchResult>[];
-      final searcher = OnlineWorkSearch(client);
-      // Bounded parallelism: two alias/creator queries at a time.
-      // Load an additional page if the provider reports more candidates.
-      for (var start = 0; start < queries.length; start += 2) {
-        final pair = queries.skip(start).take(2);
-        final found = await Future.wait(pair.map((term) async {
-          final pages = <OnlineSearchResult>[];
-          try {
-            final first = await searcher.search(term);
-            pages.add(first);
-            // Up to three pages per query, with a shared capped remote
-            // request budget. Full scans would exhaust community mirrors.
-            if (first.works.isNotEmpty && first.total > first.works.length) {
-              for (var nextPage = 2; nextPage <= 3; nextPage++) {
-                try {
-                  final next = await searcher.search(term, page: nextPage);
-                  if (next.works.isEmpty) break;
-                  pages.add(next);
-                  if (next.works.length < 25) break;
-                } catch (error) {
-                  errors.add('$term page $nextPage: $error');
-                  break;
-                }
-              }
-            }
-          } catch (error) {
-            errors.add(term + ': ' + error.toString());
-          }
-          return pages;
-        }));
-        for (final group in found) { batches.addAll(group); }
-      }
-      final seen = <String>{};
-      for (final batch in batches) {
-        for (final result in batch.works) {
-          if (result.workId != work.workId &&
-              seen.add(result.workId) &&
-              !local.any((entry) => entry.workId == result.workId)) {
-            remote.add(result);
-          }
-        }
-      }
-    } finally {
-      client.close();
-    }
     if (!mounted) return;
-    final items = <({
-      String id, String title, String language, bool inLibrary,
-      OnlineSearchWork? remote, EditionMatch match
-    })>[];
-    for (final entry in local) {
-      final match = WorkEditions.compare(work, entry);
-      final left = WorkGrouping.episodeNumber(work);
-      final right = WorkGrouping.episodeNumber(entry);
-      if (left != null && right != null && left != right) continue;
-      if (entry.sourceLanguage.isNotEmpty &&
-          WorkEditions.canonicalLanguage(entry.sourceLanguage) ==
-              WorkEditions.canonicalLanguage(work.sourceLanguage)) continue;
-      if (match.score < 45 &&
-          !entry.title.toLowerCase().contains(query.toLowerCase())) continue;
-      items.add((id: entry.workId, title: entry.title,
-          language: entry.sourceLanguage, inLibrary: true, remote: null,
-          match: match));
-    }
-    for (final entry in remote) {
-      final candidate = WorkEntry.create(
-          workId: entry.workId, title: entry.title,
-          author: entry.artists.join(', '),
-          titleAliases: entry.titleAliases,
-        ).copyWith(
-            sourceLanguage: entry.language,
-            sourceSeries: entry.series.join(', '),
-            sourceGroup: entry.groups.join(', '),
-            sourceDate: entry.date);
-      final left = WorkGrouping.episodeNumber(work);
-      final right = WorkGrouping.episodeNumber(candidate);
-      if (left != null && right != null && left != right) continue;
-      if (candidate.sourceLanguage.isNotEmpty &&
-          WorkEditions.canonicalLanguage(candidate.sourceLanguage) ==
-              WorkEditions.canonicalLanguage(work.sourceLanguage)) continue;
-      items.add((id: entry.workId, title: entry.title,
-          language: entry.language, inLibrary: false, remote: entry,
-          match: WorkEditions.compare(work, candidate)));
-    }
-    // Only compare covers after metadata/chapters have narrowed candidates.
-    // Missing images are neutral; never use visual similarity to auto-link.
-    final coverScores = <String, double>{};
-    final knownCover = _coverImages[work.key];
-    if (knownCover != null) {
-      final compareClient = http.Client();
-      try {
-        var remoteChecks = 0;
-        for (final candidate in items.take(24)) {
-          Uint8List? other;
-          if (candidate.inLibrary) {
-            final record = local.where((entry) =>
-                entry.workId == candidate.id).firstOrNull;
-            if (record != null) other = _coverImages[record.key];
-          } else if (candidate.match.score >= 45 && remoteChecks < 3) {
-            remoteChecks++;
-            try {
-              final gallery = await HitomiGalleryProvider(compareClient)
-                  .load(candidate.id, dataSaver: true);
-              if (gallery.pageCount > 0) {
-                other = await gallery.loadPage(0);
-              }
-            } catch (_) {
-              // The remote image is optional, not a reason to hide a match.
-            }
-          }
-          if (other != null) {
-            final similarity = await CoverSimilarity.compare(knownCover, other);
-            if (similarity != null) coverScores[candidate.id] = similarity;
-          }
-        }
-      } finally {
-        compareClient.close();
-      }
-    }
-    EditionMatch evaluated(EditionMatch match, String id) =>
-        WorkEditions.withCoverEvidence(match, coverScores[id]);
-    items.sort((a, b) {
-      final score = evaluated(b.match, b.id).score.compareTo(
-          evaluated(a.match, a.id).score);
-      if (score != 0) return score;
-      return a.inLibrary == b.inLibrary ? a.id.compareTo(b.id) :
-          a.inLibrary ? -1 : 1;
-    });
-
-    final chosen = await showDialog<
-        ({String id, OnlineSearchWork? remote})>(
+    await showDialog<void>(
       context: context,
-      builder: (dialog) {
-        final labels = AppLocalizations.of(dialog)!;
-        return AlertDialog(
-          title: Text(labels.editionConfirmSelection),
-          content: SizedBox(width: 540, height: 390,
-            child: ListView(children: [
-              Text(labels.editionConfirmWarning),
-              if (errors.isNotEmpty) Padding(
-                padding: const EdgeInsets.only(top: 7),
-                child: Text(labels.editionSearchPartial,
-                    style: const TextStyle(color: Colors.orangeAccent)),
-              ),
-              for (final item in items.take(60)) ListTile(
-                leading: Icon(item.inLibrary ? Icons.bookmark :
-                    Icons.cloud_outlined),
-                title: Text(item.title, maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
-                subtitle: Text('#' + item.id + ' · ' +
-                    WorkEditions.languageName(item.language) + ' · ' +
-                    (evaluated(item.match, item.id).autoLink
-                        ? labels.editionLikelyMatch : labels.editionManualReview) +
-                    ' · ' + evaluated(item.match, item.id).score.toString() + '/100' +
-                    ' · ' + evaluated(item.match, item.id).reason +
-                    (coverScores[item.id] == null ? '' :
-                        ' · ' + labels.editionCoverPercent(
-                            (coverScores[item.id]! * 100).round()))),
-                onTap: () => Navigator.pop(dialog,
-                    (id: item.id, remote: item.remote)),
-              ),
-              if (items.isEmpty) Text(labels.editionNoCandidates),
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialog),
-                child: Text(labels.cancel)),
-          ],
-        );
-      },
+      builder: (_) => EditionFinderDialog(
+        anchor: work,
+        library: widget.library.works,
+        coverImages: _coverImages,
+        onLinkSelected: (localIds, remoteWorks) async {
+          final batch = widget.onLinkEditions;
+          if (batch == null) {
+            throw StateError('언어판 일괄 묶기 기능이 연결되지 않았어.');
+          }
+          await batch(work, localIds, remoteWorks);
+        },
+      ),
     );
-    if (chosen == null || !mounted) return;
-    final confirmed = await showDialog<bool>(context: context,
-      builder: (ctx) {
-        final labels = AppLocalizations.of(ctx)!;
-        return AlertDialog(
-          title: Text(labels.editionLinkConfirmTitle),
-          content: Text(labels.editionConfirmWarning),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false),
-                child: Text(labels.cancel)),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true),
-                child: Text(labels.editionLinkAction)),
-          ],
-        );
-      });
-    if (confirmed != true || !mounted) return;
-    if (chosen.remote != null) {
-      await widget.onSaveOnlineSearchWork(chosen.remote!);
-    }
-    await widget.onLinkEdition(work, chosen.id);
   }
 
   Future<void> _groupSelectedWorks() async {

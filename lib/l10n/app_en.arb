@@ -612,5 +612,13 @@
         "type": "String"
       }
     }
-  }
+  },
+  "editionFinderLoading": "Searching for other editions…",
+  "editionFinderProgress": "Searching {completed}/{total}",
+  "@editionFinderProgress": {"placeholders":{"completed":{"type":"int"},"total":{"type":"int"}}},
+  "editionFinderRetry": "Search again",
+  "editionFinderLinkSelected": "Link {count} selected editions",
+  "@editionFinderLinkSelected": {"placeholders":{"count":{"type":"int"}}},
+  "editionFinderSaveError": "Failed to link editions: {error}",
+  "@editionFinderSaveError": {"placeholders":{"error":{"type":"String"}}}
 }

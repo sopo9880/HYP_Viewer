@@ -612,5 +612,13 @@
         "type": "String"
       }
     }
-  }
+  },
+  "editionFinderLoading": "다른 언어판 검색 중…",
+  "editionFinderProgress": "검색 중 {completed}/{total}",
+  "@editionFinderProgress": {"placeholders":{"completed":{"type":"int"},"total":{"type":"int"}}},
+  "editionFinderRetry": "다시 검색",
+  "editionFinderLinkSelected": "선택한 {count}개 언어판 묶기",
+  "@editionFinderLinkSelected": {"placeholders":{"count":{"type":"int"}}},
+  "editionFinderSaveError": "언어판 묶기 실패: {error}",
+  "@editionFinderSaveError": {"placeholders":{"error":{"type":"String"}}}
 }

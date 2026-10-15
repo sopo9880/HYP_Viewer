@@ -612,5 +612,13 @@
         "type": "String"
       }
     }
-  }
+  },
+  "editionFinderLoading": "他の言語版を検索中…",
+  "editionFinderProgress": "検索中 {completed}/{total}",
+  "@editionFinderProgress": {"placeholders":{"completed":{"type":"int"},"total":{"type":"int"}}},
+  "editionFinderRetry": "再検索",
+  "editionFinderLinkSelected": "選択した{count}件の言語版をまとめる",
+  "@editionFinderLinkSelected": {"placeholders":{"count":{"type":"int"}}},
+  "editionFinderSaveError": "言語版の紐付け失敗: {error}",
+  "@editionFinderSaveError": {"placeholders":{"error":{"type":"String"}}}
 }

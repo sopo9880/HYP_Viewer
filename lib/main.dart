@@ -842,6 +842,16 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
   }
 
+  /// One library commit for all approved editions; a failed guard rolls back
+  /// the entire selection, including any newly discovered remote records.
+  Future<void> _linkEditionBatch(WorkEntry anchor,
+      List<String> localIds, List<OnlineSearchWork> remoteWorks) async {
+    await _commitLibrary((latest) => WorkEditionService.linkMany(
+        latest, anchor.workId, localIds, remoteWorks));
+    _status('언어판 ' + (localIds.length + remoteWorks.length).toString() +
+        '개를 같은 작품으로 묶었어.');
+  }
+
   Future<void> _unlinkEdition(WorkEntry work) async {
     await _commitLibrary((latest) =>
         WorkEditionService.unlink(latest, work.workId));
@@ -2775,6 +2785,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     onQuickAddNumber: _quickAddNumber,
     onSaveOnlineSearchWork: _saveOnlineSearchWork,
     onLinkEdition: _linkEdition,
+    onLinkEditions: _linkEditionBatch,
     onUnlinkEdition: _unlinkEdition,
     onReadOnlineSearchWork: _readOnlineSearchWork,
     onSaveSelectedWorks: _saveSelectedWorks,
