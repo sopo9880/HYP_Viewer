@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import '../core/i18n.dart';
 import 'package:flutter/material.dart';
 import '../core/work.dart';
 import '../core/work_editions.dart';
@@ -56,17 +57,17 @@ class HypWorkEditionCard extends StatelessWidget {
                     decoration: BoxDecoration(color: HypColors.background,
                         borderRadius: BorderRadius.circular(12)),
                     child: Padding(padding: const EdgeInsets.all(5),
-                      child: Text(editions.length.toString() + '개 언어판',
+                      child: HypText(editions.length.toString() + '개 언어판',
                         style: const TextStyle(fontSize: 11)))),
               ])),
               Padding(padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title.isEmpty ? editions.first.workId : title,
+                    HypText(title.isEmpty ? editions.first.workId : title,
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 5),
-                    Text(editions.map((work) =>
+                    HypText(editions.map((work) =>
                         WorkEditions.languageName(work.sourceLanguage))
                           .toSet().join(' · '),
                         maxLines: 1, overflow: TextOverflow.ellipsis,

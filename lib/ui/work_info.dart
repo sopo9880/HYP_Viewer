@@ -56,7 +56,7 @@ class _WorkInfoDialogState extends State<WorkInfoDialog> {
   Widget _infoLine(String label, String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 5),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SizedBox(width: 116, child: Text(label, style:
+      SizedBox(width: 116, child: HypText(label, style:
           TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
       Expanded(child: SelectableText(value.isEmpty ? '확인 불가' : value)),
     ]),
@@ -104,7 +104,7 @@ class _WorkInfoDialogState extends State<WorkInfoDialog> {
               _infoLine('서재 추가일', work.addedAt),
               if (error != null) ...[
                 const SizedBox(height: 8),
-                Text('메타데이터 조회 실패: ' + error!,
+                HypText('메타데이터 조회 실패: ' + error!,
                     style: const TextStyle(color: Colors.orangeAccent)),
               ],
               if (loading) const LinearProgressIndicator(),
