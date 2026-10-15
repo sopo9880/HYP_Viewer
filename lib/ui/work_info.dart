@@ -84,6 +84,16 @@ class _WorkInfoDialogState extends State<WorkInfoDialog> {
               _infoLine(l.workInfoOriginalId, work.workId),
               if (work.videoUrl.isNotEmpty)
                 _infoLine(l.workInfoSourceLink, work.videoUrl),
+              if (work.titleAliases.isNotEmpty)
+                _infoLine(l.editionAliasTitles,
+                    work.titleAliases.join(' · ')),
+              if (work.sourceUrls.isNotEmpty) ...[
+                Text(l.workSourceCount(work.sourceUrls.length),
+                    style: Theme.of(context).textTheme.titleSmall),
+                for (final url in work.sourceUrls)
+                  Padding(padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: SelectableText(url, maxLines: 3)),
+              ],
               _infoLine(l.workInfoTitle, info?.title.isNotEmpty == true
                   ? info!.title : work.title),
               _infoLine(l.workInfoAuthor, info?.author.isNotEmpty == true
