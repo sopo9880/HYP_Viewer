@@ -324,5 +324,7 @@
   "legacyCompletionReview": "Review Possible Finished Works",
   "legacyCompletionHint": "These works reached their last page but are not marked finished. Review before changing them.",
   "legacyCompletionApply": "Mark Selected as Finished",
-  "legacyCompletionEmpty": "No works need completion review."
+  "legacyCompletionEmpty": "No works need completion review.",
+  "youtubeChooseVideos": "Choose Videos from YouTube Collection",
+  "youtubeAnalyzeSelected": "Analyze Selected (up to 5 Videos)"
 }
