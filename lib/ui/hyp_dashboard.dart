@@ -25,6 +25,7 @@ import 'candidate_editor.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
 import '../core/work_editions.dart';
+import '../core/title_alias_index.dart';
 import '../core/local_search.dart';
 import 'reader_navigation_focus.dart';
 import '../core/cover_similarity.dart';
@@ -1563,7 +1564,8 @@ class _HypDashboardState extends State<HypDashboard> {
     final remote = <OnlineSearchWork>[];
     final errors = <String>[];
     final client = http.Client();
-    final queries = WorkEditions.searchQueries(work, query);
+    final queries = TitleAliasIndex.fromLibrary(widget.library.works)
+        .queriesFor(work, entered: query, limit: 14);
     try {
       final batches = <OnlineSearchResult>[];
       final searcher = OnlineWorkSearch(client);
@@ -1576,11 +1578,19 @@ class _HypDashboardState extends State<HypDashboard> {
           try {
             final first = await searcher.search(term);
             pages.add(first);
+            // Up to three pages per query, with a shared capped remote
+            // request budget. Full scans would exhaust community mirrors.
             if (first.works.isNotEmpty && first.total > first.works.length) {
-              try {
-                pages.add(await searcher.search(term, page: 2));
-              } catch (error) {
-                errors.add(term + ' page 2: ' + error.toString());
+              for (var nextPage = 2; nextPage <= 3; nextPage++) {
+                try {
+                  final next = await searcher.search(term, page: nextPage);
+                  if (next.works.isEmpty) break;
+                  pages.add(next);
+                  if (next.works.length < 25) break;
+                } catch (error) {
+                  errors.add('$term page $nextPage: $error');
+                  break;
+                }
               }
             }
           } catch (error) {
@@ -1625,7 +1635,9 @@ class _HypDashboardState extends State<HypDashboard> {
     for (final entry in remote) {
       final candidate = WorkEntry.create(
           workId: entry.workId, title: entry.title,
-          author: entry.artists.join(', ')).copyWith(
+          author: entry.artists.join(', ''),
+          titleAliases: entry.titleAliases,
+        ).copyWith(
             sourceLanguage: entry.language,
             sourceSeries: entry.series.join(', '),
             sourceGroup: entry.groups.join(', '),
