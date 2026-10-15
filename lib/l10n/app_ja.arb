@@ -414,5 +414,6 @@
   "workInfoLastOpen": "最後に閲覧",
   "workInfoOpenCount": "閲覧回数",
   "workInfoProgressLabel": "読書進捗",
-  "workInfoAddedToLibrary": "本棚に追加した日"
+  "workInfoAddedToLibrary": "本棚に追加した日",
+  "androidSecurityNotice": "Samsung Galaxyのセキュリティ自動ブロック機能により、一部のAPKをインストールできない場合があります。これは端末を保護する重要な機能です。\n\nアプリから保護機能を自動解除することはできません。インストールできない場合、APKの発行元・GitHubリリースURL・SHA-256を先に確認し、端末の設定をご自身で確認してください。保護機能の無効化は推奨しません。"
 }
