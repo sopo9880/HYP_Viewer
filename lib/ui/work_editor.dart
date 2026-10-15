@@ -135,6 +135,18 @@ class _WorkEditorDialogState extends State<WorkEditorDialog> {
       );
       if (acknowledged != true || !mounted) return;
     }
+    final sources = sourcesInput.text.split('\n')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty).toList();
+    if (sources.length > 32 || sources.any((value) {
+      final uri = Uri.tryParse(value);
+      return uri == null || uri.scheme != 'https' || uri.host.isEmpty ||
+          uri.userInfo.isNotEmpty || uri.hasPort || value.length > 2048;
+    })) {
+      setState(() =>
+          error = AppLocalizations.of(context)!.workSourceInvalid);
+      return;
+    }
     Navigator.of(context).pop(WorkEditDraft(
       workId: code,
       title: titleInput.text.trim(),
@@ -142,8 +154,7 @@ class _WorkEditorDialogState extends State<WorkEditorDialog> {
       originalComment: commentInput.text,
       titleAliases: aliasInput.text.split('\n')
           .map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
-      sourceUrls: sourcesInput.text.split('\n')
-          .map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
+      sourceUrls: sources,
     ));
   }
 
