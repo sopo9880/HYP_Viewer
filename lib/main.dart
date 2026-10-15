@@ -863,7 +863,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             ...?_candidateSourceEvidence[code],
             if (mappedLink != null) mappedLink.url,
           ],
-          titleAliases: title.split('|').skip(1).toList(),
+          titleAliases: [
+            ...title.split('|').skip(1),
+            ...?info?.titleAliases,
+          ],
           title: title,
           author: codes.length == 1 && authorInput.text.trim().isNotEmpty
               ? authorInput.text.trim() : (info?.author ?? ''),
@@ -1008,7 +1011,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                 sourceSeries: info.series,
                 sourceGroup: info.group,
                 sourceDate: info.date,
-              );
+              ).withEvidence(aliases: info.titleAliases);
             }).toList(),
             collections: latest.collections,
           ));
