@@ -15,6 +15,7 @@ import '../core/gallery.dart';
 import '../core/cover_store.dart';
 import '../core/reader_settings.dart';
 import '../core/i18n.dart';
+import '../l10n/app_localizations.dart';
 import '../core/number_extractor.dart';
 import '../core/online_search.dart';
 import '../core/reading_history.dart';
@@ -690,14 +691,8 @@ class _HypDashboardState extends State<HypDashboard> {
 
   List<WorkEntry> get _favorites => _works.where((w) => w.favorite).toList();
 
-  List<WorkEntry> get _visibleLibraryWorks {
-    if (!widget.readerSettings.completedHidden) return _works;
-    // One completed translation completes the logical title for shelf filtering.
-    final completedEditions = _works.where((work) => work.completed &&
-        work.editionGroupId.isNotEmpty).map((work) => work.editionGroupId).toSet();
-    return _works.where((work) => !work.completed &&
-        !completedEditions.contains(work.editionGroupId)).toList();
-  }
+  List<WorkEntry> get _visibleLibraryWorks =>
+      WorkEditions.visibleOnShelf(_works, widget.readerSettings.completedHidden);
 
   List<WorkEntry> get _recent => widget.library.works
       .where((w) => w.lastOpenedAt != null)
@@ -1418,96 +1413,169 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   Future<void> _findOtherEditions(WorkEntry work) async {
-    final title = WorkEditions.originalTitle(work.title);
-    final input = TextEditingController(text: title);
+    final input = TextEditingController(
+        text: WorkEditions.originalTitle(work.title));
     String? query;
     try {
       query = await showDialog<String>(context: context,
-        builder: (ctx) => AlertDialog(
-          title: const HypText('다른 언어판 찾기'),
-          content: TextField(
-            controller: input,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: '원제 또는 검색어',
-              helperText: '원제를 수정해서 다른 번역 제목으로도 검색할 수 있어.'),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx),
-                child: const HypText('취소')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, input.text.trim()),
-                child: const HypText('검색')),
-          ],
-        ),
+        builder: (ctx) {
+          final labels = AppLocalizations.of(ctx)!;
+          return AlertDialog(
+            title: Text(labels.findOtherEditions),
+            content: TextField(
+              controller: input,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: labels.editionSearchLabel,
+                helperText: labels.editionSearchHint),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx),
+                  child: Text(labels.cancel)),
+              FilledButton(
+                  onPressed: () => Navigator.pop(ctx, input.text.trim()),
+                  child: Text(labels.search)),
+            ],
+          );
+        },
       );
     } finally {
       input.dispose();
     }
     if (query == null || query.isEmpty || !mounted) return;
-    final local = widget.library.works.where((w) => w.workId != work.workId &&
-        [w.title, w.author, w.workId].join(' ').toLowerCase()
-            .contains(query!.toLowerCase())).toList();
+
+    // Offline library candidates are always available. Creator/series
+    // searches can locate translated titles that share no title keywords.
+    final local = widget.library.works
+        .where((entry) => entry.workId != work.workId).toList();
     final remote = <OnlineSearchWork>[];
-    String? error;
+    final errors = <String>[];
     final client = http.Client();
+    final queries = WorkEditions.searchQueries(work, query);
     try {
-      final result = await OnlineWorkSearch(client).search(query);
-      remote.addAll(result.works.where((w) => w.workId != work.workId &&
-          !local.any((l) => l.workId == w.workId)));
-    } catch (e) {
-      error = e.toString();
+      final batches = await Future.wait(queries.map((term) async {
+        try {
+          return await OnlineWorkSearch(client).search(term);
+        } catch (error) {
+          errors.add('$term: $error');
+          return null;
+        }
+      }));
+      final seen = <String>{};
+      for (final batch in batches) {
+        if (batch == null) continue;
+        for (final result in batch.works) {
+          if (result.workId != work.workId &&
+              seen.add(result.workId) &&
+              !local.any((entry) => entry.workId == result.workId)) {
+            remote.add(result);
+          }
+        }
+      }
     } finally {
       client.close();
     }
     if (!mounted) return;
-    final chosen = await showDialog<(String, OnlineSearchWork?)>(
+    final items = <({
+      String id, String title, String language, bool inLibrary,
+      OnlineSearchWork? remote, EditionMatch match
+    })>[];
+    for (final entry in local) {
+      final match = WorkEditions.compare(work, entry);
+      final left = WorkGrouping.episodeNumber(work);
+      final right = WorkGrouping.episodeNumber(entry);
+      if (left != null && right != null && left != right) continue;
+      if (entry.sourceLanguage.isNotEmpty &&
+          entry.sourceLanguage.toLowerCase() ==
+              work.sourceLanguage.toLowerCase()) continue;
+      if (match.score < 45 &&
+          !entry.title.toLowerCase().contains(query.toLowerCase())) continue;
+      items.add((id: entry.workId, title: entry.title,
+          language: entry.sourceLanguage, inLibrary: true, remote: null,
+          match: match));
+    }
+    for (final entry in remote) {
+      final candidate = WorkEntry.create(
+          workId: entry.workId, title: entry.title,
+          author: entry.artists.join(', ')).copyWith(
+            sourceLanguage: entry.language,
+            sourceSeries: entry.series.join(', '),
+            sourceGroup: entry.groups.join(', '),
+            sourceDate: entry.date);
+      final left = WorkGrouping.episodeNumber(work);
+      final right = WorkGrouping.episodeNumber(candidate);
+      if (left != null && right != null && left != right) continue;
+      if (candidate.sourceLanguage.isNotEmpty &&
+          candidate.sourceLanguage.toLowerCase() ==
+              work.sourceLanguage.toLowerCase()) continue;
+      items.add((id: entry.workId, title: entry.title,
+          language: entry.language, inLibrary: false, remote: entry,
+          match: WorkEditions.compare(work, candidate)));
+    }
+    items.sort((a, b) {
+      final score = b.match.score.compareTo(a.match.score);
+      if (score != 0) return score;
+      return a.inLibrary == b.inLibrary ? a.id.compareTo(b.id) :
+          a.inLibrary ? -1 : 1;
+    });
+
+    final chosen = await showDialog<
+        ({String id, OnlineSearchWork? remote})>(
       context: context,
-      builder: (dialog) => AlertDialog(
-        title: const HypText('같은 작품인지 확인하고 추가'),
-        content: SizedBox(width: 540, height: 390,
-          child: ListView(children: [
-            const HypText('같은 시리즈라는 이유만으로 합치지 않아. '
-                '동일 회차의 다른 언어판인지 직접 확인해줘.'),
-            if (error != null) HypText('온라인 검색 실패: ' + error,
-                style: const TextStyle(color: Colors.orangeAccent)),
-            for (final item in local) ListTile(
-              leading: const Icon(Icons.bookmark),
-              title: HypText(item.title, maxLines: 1),
-              subtitle: HypText('#' + item.workId + ' · ' +
-                  WorkEditions.languageName(item.sourceLanguage) + ' · 서재'),
-              onTap: () => Navigator.pop(dialog, (item.workId, null)),
-            ),
-            for (final item in remote.take(25)) ListTile(
-              leading: const Icon(Icons.cloud_outlined),
-              title: HypText(item.title, maxLines: 1),
-              subtitle: HypText('#' + item.workId + ' · ' +
-                  WorkEditions.languageName(item.language)),
-              onTap: () => Navigator.pop(dialog, (item.workId, item)),
-            ),
-            if (local.isEmpty && remote.isEmpty)
-              const HypText('후보가 없어. 다른 검색어로 다시 시도해줘.'),
-          ])),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialog),
-              child: const HypText('취소')),
-        ],
-      ));
+      builder: (dialog) {
+        final labels = AppLocalizations.of(dialog)!;
+        return AlertDialog(
+          title: Text(labels.editionConfirmSelection),
+          content: SizedBox(width: 540, height: 390,
+            child: ListView(children: [
+              Text(labels.editionConfirmWarning),
+              if (errors.isNotEmpty) Padding(
+                padding: const EdgeInsets.only(top: 7),
+                child: Text(labels.editionSearchPartial,
+                    style: const TextStyle(color: Colors.orangeAccent)),
+              ),
+              for (final item in items.take(60)) ListTile(
+                leading: Icon(item.inLibrary ? Icons.bookmark :
+                    Icons.cloud_outlined),
+                title: Text(item.title, maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+                subtitle: Text('#' + item.id + ' · ' +
+                    WorkEditions.languageName(item.language) + ' · ' +
+                    (item.match.autoLink ? labels.editionLikelyMatch :
+                        labels.editionManualReview)),
+                onTap: () => Navigator.pop(dialog,
+                    (id: item.id, remote: item.remote)),
+              ),
+              if (items.isEmpty) Text(labels.editionNoCandidates),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog),
+                child: Text(labels.cancel)),
+          ],
+        );
+      },
+    );
     if (chosen == null || !mounted) return;
     final confirmed = await showDialog<bool>(context: context,
-      builder: (ctx) => AlertDialog(
-        title: const HypText('언어판 묶기 확인'),
-        content: const HypText('서로 다른 작품을 잘못 합치지 않도록 '
-            '정말 같은 회차의 다른 언어판인지 확인해줘.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false),
-              child: const HypText('취소')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true),
-              child: const HypText('같은 작품으로 묶기')),
-        ],
-      ));
+      builder: (ctx) {
+        final labels = AppLocalizations.of(ctx)!;
+        return AlertDialog(
+          title: Text(labels.editionLinkConfirmTitle),
+          content: Text(labels.editionConfirmWarning),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+                child: Text(labels.cancel)),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true),
+                child: Text(labels.editionLinkAction)),
+          ],
+        );
+      });
     if (confirmed != true || !mounted) return;
-    if (chosen.$2 != null) await widget.onSaveOnlineSearchWork(chosen.$2!);
-    await widget.onLinkEdition(work, chosen.$1);
+    if (chosen.remote != null) {
+      await widget.onSaveOnlineSearchWork(chosen.remote!);
+    }
+    await widget.onLinkEdition(work, chosen.id);
   }
 
   Future<void> _groupSelectedWorks() async {
