@@ -374,5 +374,45 @@
     }
   },
   "settingsGeneralTitle": "설정",
-  "settingsGeneralSubtitle": "뷰어 조작, 기본 표지, 추가 다운로드 소스와 앱 데이터를 관리해."
+  "settingsGeneralSubtitle": "뷰어 조작, 기본 표지, 추가 다운로드 소스와 앱 데이터를 관리해.",
+  "workInfoUnavailable": "확인 불가",
+  "workInfoNotProvided": "원본 메타데이터에서 제공되지 않음",
+  "workInfoNoHistory": "기록 없음",
+  "workInfoFromPage": "{page}페이지부터",
+  "@workInfoFromPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "workInfoProgress": "{page}페이지부터 · {percent}%",
+  "@workInfoProgress": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "workInfoHeader": "작품 정보",
+  "workInfoOriginalId": "작품 번호",
+  "workInfoSourceLink": "원본 링크",
+  "workInfoTitle": "제목",
+  "workInfoAuthor": "작가",
+  "workInfoCircle": "그룹 / 서클",
+  "workInfoSeries": "원작 / 시리즈",
+  "workInfoLanguage": "언어",
+  "workInfoType": "유형",
+  "workInfoAdded": "등록 날짜",
+  "workInfoTags": "태그",
+  "workInfoCharacters": "등장인물",
+  "workInfoPages": "페이지 수",
+  "workInfoViews": "조회수",
+  "workInfoLastOpen": "마지막 열람",
+  "workInfoOpenCount": "열람 횟수",
+  "workInfoProgressLabel": "읽기 진행도",
+  "workInfoAddedToLibrary": "서재 추가일"
 }
