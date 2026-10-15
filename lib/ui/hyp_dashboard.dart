@@ -1218,6 +1218,75 @@ class _HypDashboardState extends State<HypDashboard> {
         popularityRanks:
             _popularity[widget.readerSettings.popularityPeriod] ?? const {});
 
+  Future<void> _reviewLegacyCompletion() async {
+    // A last-page bookmark does not prove the page actually rendered. Never
+    // silently mark historical records complete; the reader stays in control.
+    final review = _works.where((work) =>
+        !work.completed && work.totalPages > 0 &&
+        work.currentPage >= work.totalPages).take(100).toList();
+    final language = AppLocalizations.of(context)!;
+    if (review.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(language.legacyCompletionEmpty)));
+      return;
+    }
+    final selection = <String>{};
+    final confirmed = await showDialog<List<String>>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (context, refresh) {
+          final words = AppLocalizations.of(context)!;
+          return AlertDialog(
+            title: Text(words.legacyCompletionReview),
+            content: SizedBox(width: 550, height: 420,
+              child: Column(children: [
+                Text(words.legacyCompletionHint),
+                const SizedBox(height: 9),
+                Expanded(child: ListView.builder(
+                  itemCount: review.length,
+                  itemBuilder: (_, index) {
+                    final work = review[index];
+                    return CheckboxListTile(
+                      dense: true,
+                      value: selection.contains(work.workId),
+                      title: Text(work.title, maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                      subtitle: Text(work.workId + ' · ' +
+                          work.currentPage.toString() + '/' +
+                          work.totalPages.toString()),
+                      onChanged: (checked) => refresh(() {
+                        if (checked == true) {
+                          selection.add(work.workId);
+                        } else {
+                          selection.remove(work.workId);
+                        }
+                      }),
+                    );
+                  },
+                )),
+              ]),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog),
+                  child: Text(words.cancel)),
+              FilledButton(
+                onPressed: selection.isEmpty ? null : () =>
+                    Navigator.pop(dialog, selection.toList()),
+                child: Text(words.legacyCompletionApply),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (confirmed == null || !mounted) return;
+    for (final work in review) {
+      if (confirmed.contains(work.workId)) {
+        await widget.onSetCompleted(work, true);
+      }
+    }
+  }
+
   Future<void> _openEditionStack(List<WorkEntry> editions) async {
     final selected = await showModalBottomSheet<WorkEntry>(
       context: context, isScrollControlled: true,
@@ -2115,6 +2184,13 @@ class _HypDashboardState extends State<HypDashboard> {
               ? '완독 표시' : '완독 숨기기'),
         )),
       ]),
+      if (_works.any((work) => !work.completed &&
+          work.totalPages > 0 && work.currentPage >= work.totalPages))
+        Align(alignment: Alignment.centerRight, child: TextButton.icon(
+          onPressed: _reviewLegacyCompletion,
+          icon: const Icon(Icons.fact_check_outlined),
+          label: Text(AppLocalizations.of(context)!.legacyCompletionReview),
+        )),
       _selectionControls(_visibleLibraryWorks),
       const SizedBox(height: 8),
       if (widget.readerSettings.completedHidden &&
