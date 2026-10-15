@@ -60,7 +60,9 @@ class YoutubeClient {
       final body = item['snippet']?['topLevelComment']?['snippet']?['textDisplay'];
       if (body is String) comments.add(body);
     }
+    final nextToken = commentData['nextPageToken'];
     return YoutubeResults(metadata['title'] as String? ?? '',
-        metadata['description'] as String? ?? '', comments);
+        metadata['description'] as String? ?? '', comments,
+        mayBeIncomplete: nextToken is String && nextToken.isNotEmpty);
   }
 }
