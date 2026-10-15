@@ -33,6 +33,20 @@ def check():
             raise ValueError(f"{language}: missing={sorted(missing)} extra={sorted(extra)}")
     if not reference:
         raise ValueError("No translations found")
+    # These sections used to silently remain Korean even when ARB passed.
+    # Treat them as required, not merely optional strings.
+    required = {
+        *(f"settings{part}" for part in (
+            "General", "Hero", "Viewer", "Cover", "Android",
+            "Notices", "Web", "Source", "Backup", "Updates")),
+        *(f"insights{letter}" for letter in "ABCDEFGHIJKL"),
+        "insightsTitle", "insightsSubtitle",
+        "editionCoverPercent", "legacyCompletionReview",
+        "youtubeChooseVideos", "searchFetchedUnique",
+    }
+    if required - reference:
+        raise ValueError(f"Missing core UI localization keys: {sorted(required - reference)}")
+
     placeholder = re.compile(r"(?<!\{)\{([A-Za-z_]\w*)\}(?!\})")
     for key in reference:
         translations = [messages[lang][key] for lang in LANGUAGES]
@@ -62,9 +76,14 @@ def check():
             path = line[6:]
         if not line.startswith("+") or line.startswith("+++"):
             continue
-        if (path.endswith(".dart") and
-            raw.search(line[1:]) and not path.startswith("lib/l10n/")):
-            errors.append(f"{path}: {line[1:].strip()}")
+        if path.endswith(".dart") and not path.startswith("lib/l10n/"):
+            # Language names must remain in their native script regardless
+            # of the currently selected locale.
+            native = ("Text('한국어')", 'Text("한국어")')
+            if any(part in line for part in native):
+                continue
+            if raw.search(line[1:]):
+                errors.append(f"{path}: {line[1:].strip()}")
     if errors:
         raise ValueError("Unlocalized new UI strings:\n" + "\n".join(errors))
     print(f"All {len(reference)} keys match across ko/en/ja.")
