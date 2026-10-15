@@ -312,5 +312,13 @@
   "insightActivity14": "최근 14일 열람 세션 (수집 시작 이후)",
   "insightSessionsNoDates": "기존 누적 열람 횟수에는 날짜가 없어 과거 일별 그래프는 복원하지 않아.",
   "insightNotEnough": "집계 가능한 정보가 아직 없어.",
-  "insightNoMatchingWorks": "조건에 맞는 작품이 없어."
+  "insightNoMatchingWorks": "조건에 맞는 작품이 없어.",
+  "editionCoverPercent": "표지 유사도 {percent}%",
+  "@editionCoverPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  }
 }
