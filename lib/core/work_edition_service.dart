@@ -1,4 +1,5 @@
 import 'work.dart';
+import 'online_search.dart';
 import 'work_editions.dart';
 import 'work_grouping.dart';
 
@@ -180,6 +181,53 @@ abstract final class WorkEditionService {
         return w.copyWith(groupOrder: position);
       }).toList(),
       collections: original.collections);
+  }
+
+
+  /// Link a user-confirmed batch atomically. If a chapter/series guard rejects
+  /// any member, the caller commits none of the intermediate changes.
+  static LibraryBackup linkMany(LibraryBackup original, String anchorId,
+      Iterable<String> localIds, Iterable<OnlineSearchWork> remoteWorks) {
+    final targets = <String>{...localIds};
+    final entries = original.works.toList();
+    for (final remote in remoteWorks) {
+      if (!RegExp(r'^\d{1,12}
+    return LibraryBackup(
+      works: original.works.map((work) => work.workId == editionId
+        ? work.copyWith(editionGroupId: '') : work).toList(),
+      collections: original.collections);
+  }
+}
+).hasMatch(remote.workId)) {
+        throw StateError('잘못된 언어판 작품 번호야.');
+      }
+      targets.add(remote.workId);
+      final currentIndex = entries.indexWhere(
+          (entry) => entry.workId == remote.workId);
+      if (currentIndex >= 0) {
+        // Keep user edits, reading history, saved files and cover choices.
+        entries[currentIndex] = entries[currentIndex].withEvidence(
+            aliases: [remote.title, ...remote.titleAliases]);
+      } else {
+        entries.add(WorkEntry.create(workId: remote.workId,
+          title: remote.title, author: remote.artists.join(', '),
+          titleAliases: remote.titleAliases,
+        ).copyWith(
+          sourceLanguage: remote.language, sourceSeries: remote.series.join(', '),
+          sourceGroup: remote.groups.join(', '), tags: remote.tags,
+          sourceType: remote.type, sourceDate: remote.date,
+        ));
+      }
+    }
+    if (targets.isEmpty || targets.contains(anchorId)) {
+      throw StateError('서로 다른 언어판을 한 개 이상 선택해줘.');
+    }
+    var draft = LibraryBackup(works: entries,
+        collections: original.collections);
+    for (final id in targets) {
+      draft = link(draft, anchorId, id);
+    }
+    return draft;
   }
 
   static LibraryBackup unlink(LibraryBackup original, String editionId) {
