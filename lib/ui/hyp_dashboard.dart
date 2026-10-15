@@ -255,6 +255,8 @@ class _HypDashboardState extends State<HypDashboard> {
   int _remoteTotal = 0;
   int _remotePage = 0;
   bool _remoteHasMore = false;
+  int _remoteProgressDone = 0;
+  int _remoteProgressTotal = 0;
   Map<String, int> _remoteFieldTotals = const {};
   Map<String, List<String>> _remoteFieldMatches = const {};
   String _remoteFieldFilter = '';
@@ -472,6 +474,8 @@ class _HypDashboardState extends State<HypDashboard> {
     _remotePage = 0;
     _remoteTotal = 0;
     _remoteHasMore = false;
+    _remoteProgressDone = 0;
+    _remoteProgressTotal = 0;
     _remoteFieldTotals = const {};
     _remoteFieldMatches = const {};
     _remoteFieldFilter = '';
@@ -517,13 +521,23 @@ class _HypDashboardState extends State<HypDashboard> {
     }
     setState(() {
       _remoteBusy = true;
+      _remoteProgressDone = 0;
+      _remoteProgressTotal = 0;
       _remoteError = null;
     });
     final client = http.Client();
     try {
       final service = OnlineWorkSearch(client);
       final result = await service.searchUnified(expanded, page: page,
-          language: _searchLanguage);
+          language: _searchLanguage,
+          onProgress: (done, total) {
+            if (mounted && epoch == _searchEpoch) {
+              setState(() {
+                _remoteProgressDone = done;
+                _remoteProgressTotal = total;
+              });
+            }
+          });
       if (!mounted || epoch != _searchEpoch) return;
       _remoteCache[key] = (DateTime.now(), result);
       if (_remoteCache.length > 60) _remoteCache.clear();
@@ -541,9 +555,9 @@ class _HypDashboardState extends State<HypDashboard> {
   void _useOnlineResults(OnlineSearchResult result, int epoch,
       {required bool next}) {
     if (!mounted || epoch != _searchEpoch) return;
+    final previousCount = _remoteResults.length;
     setState(() {
       _remotePage = result.page;
-      _remoteHasMore = result.hasNextPage;
       _remoteFieldTotals = result.fieldTotals;
       _remoteFieldMatches = <String, List<String>>{
         if (next) ..._remoteFieldMatches,
@@ -559,6 +573,10 @@ class _HypDashboardState extends State<HypDashboard> {
       _remoteResults = [...next ? _remoteResults : <OnlineSearchWork>[],
         ...result.works].where((work) => seen.add(work.workId)).toList();
       _remoteTotal = _remoteResults.length;
+      // Avoid an endless Load More button when a mirror repeats the same
+      // result page or a page contains only already collected IDs.
+      _remoteHasMore = result.hasNextPage &&
+          (!next || _remoteTotal > previousCount) && result.page < 100;
     });
   }
 
@@ -2391,9 +2409,20 @@ class _HypDashboardState extends State<HypDashboard> {
               ),
           ]),
         if (_remoteWarnings.isNotEmpty)
-          const HypText('일부 분야 검색이 실패했어. 조회된 결과만 표시해.'),
+          ExpansionTile(
+            title: Text(AppLocalizations.of(context)!.searchPartialSources),
+            children: [
+              for (final warning in _remoteWarnings.take(10))
+                ListTile(dense: true, title: SelectableText(warning)),
+            ],
+          ),
         const SizedBox(height: 8),
-        if (_remoteBusy) const LinearProgressIndicator(),
+        if (_remoteBusy) ...[
+          const LinearProgressIndicator(),
+          if (_remoteProgressTotal > 0)
+            Text(AppLocalizations.of(context)!.searchProgress(
+                _remoteProgressDone, _remoteProgressTotal)),
+        ],
         if (_remoteError != null) ...[
           HypText('온라인 검색에 실패했어. 내 서재 검색은 정상 동작해.\n' +
               _remoteError!, style: const TextStyle(color: Colors.orangeAccent)),
