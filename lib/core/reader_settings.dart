@@ -33,6 +33,10 @@ class ReaderSettings {
   final bool openAfterSave;
   final String languageCode; // ko, en, ja
   final String heroArtworkSource; // default, custom, random
+  final bool startupUpdatePrompt;
+  final String snoozedUpdateVersion;
+  final String snoozedUpdateUntil;
+  final String preferredEditionLanguage; // auto, korean, japanese, english, chinese
 
   const ReaderSettings({
     this.nextDirection = 'left',
@@ -62,6 +66,10 @@ class ReaderSettings {
     this.openAfterSave = false,
     this.languageCode = 'ko',
     this.heroArtworkSource = 'custom',
+    this.startupUpdatePrompt = true,
+    this.snoozedUpdateVersion = '',
+    this.snoozedUpdateUntil = '',
+    this.preferredEditionLanguage = 'auto',
   });
 
   bool get reverse => nextDirection == 'right';
@@ -94,6 +102,10 @@ class ReaderSettings {
     bool? openAfterSave,
     String? languageCode,
     String? heroArtworkSource,
+    bool? startupUpdatePrompt,
+    String? snoozedUpdateVersion,
+    String? snoozedUpdateUntil,
+    String? preferredEditionLanguage,
   }) => ReaderSettings(
     nextDirection: nextDirection ?? this.nextDirection,
     twoPageSpread: twoPageSpread ?? this.twoPageSpread,
@@ -122,6 +134,10 @@ class ReaderSettings {
     openAfterSave: openAfterSave ?? this.openAfterSave,
     languageCode: languageCode ?? this.languageCode,
     heroArtworkSource: heroArtworkSource ?? this.heroArtworkSource,
+    startupUpdatePrompt: startupUpdatePrompt ?? this.startupUpdatePrompt,
+    snoozedUpdateVersion: snoozedUpdateVersion ?? this.snoozedUpdateVersion,
+    snoozedUpdateUntil: snoozedUpdateUntil ?? this.snoozedUpdateUntil,
+    preferredEditionLanguage: preferredEditionLanguage ?? this.preferredEditionLanguage,
   );
 
   Map<String, Object> toJson() => {
@@ -152,6 +168,10 @@ class ReaderSettings {
     'openAfterSave': openAfterSave,
     'languageCode': languageCode,
     'heroArtworkSource': heroArtworkSource,
+    'startupUpdatePrompt': startupUpdatePrompt,
+    'snoozedUpdateVersion': snoozedUpdateVersion,
+    'snoozedUpdateUntil': snoozedUpdateUntil,
+    'preferredEditionLanguage': preferredEditionLanguage,
   };
 
   factory ReaderSettings.fromJson(Map<String, dynamic> data) =>
@@ -164,6 +184,10 @@ class ReaderSettings {
         showPageControlsAction: data['showPageControlsAction'] != false,
         showWebReaderAction: data['showWebReaderAction'] != false,
         showOrientationAction: data['showOrientationAction'] != false,
+        startupUpdatePrompt: data['startupUpdatePrompt'] != false,
+        snoozedUpdateVersion: data['snoozedUpdateVersion'] is String && (data['snoozedUpdateVersion'] as String).length <= 40 ? data['snoozedUpdateVersion'] as String : '',
+        snoozedUpdateUntil: DateTime.tryParse(data['snoozedUpdateUntil'] is String ? data['snoozedUpdateUntil'] as String : '')?.toUtc().toIso8601String() ?? '',
+        preferredEditionLanguage: const {'auto', 'korean', 'japanese', 'english', 'chinese'}.contains(data['preferredEditionLanguage']) ? data['preferredEditionLanguage'] as String : 'auto',
         autoCoverEnabled: data['autoCoverEnabled'] == true,
         volumeKeyNavigation: data['volumeKeyNavigation'] == true,
         forceLandscapeForSpreads: data['forceLandscapeForSpreads'] == true,
@@ -179,7 +203,7 @@ class ReaderSettings {
                 .contains(data['popularityPeriod'])
             ? data['popularityPeriod'] as String : 'month',
         librarySort: const {'newest', 'published', 'hitomiPopular',
-                'mostRead', 'title', 'number'}
+                'mostRead', 'title', 'number', 'chapter'}
                 .contains(data['librarySort'])
             ? data['librarySort'] as String : 'newest',
         librarySortDescending: data['librarySortDescending'] == true,

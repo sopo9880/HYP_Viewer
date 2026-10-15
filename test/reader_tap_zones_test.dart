@@ -6,12 +6,12 @@ void main() {
     int zone(double x, {bool rtl = false, bool vertical = false}) =>
       readerTapDelta(pointX: x, pointY: 100,
         width: 100, height: 200, vertical: vertical, reverse: rtl);
-    // Default nextDirection='left': physical left is next.
-    expect(zone(10), 1);
-    expect(zone(90), -1);
-    // nextDirection='right': physical right is next.
-    expect(zone(10, rtl: true), -1);
-    expect(zone(90, rtl: true), 1);
+    // Default: physical left is previous, right is next.
+    expect(zone(10), -1);
+    expect(zone(90), 1);
+    // Reverse: left becomes next, right becomes previous.
+    expect(zone(10, rtl: true), 1);
+    expect(zone(90, rtl: true), -1);
     expect(zone(30), 0);
     expect(zone(50), 0);
     expect(zone(70), 0);

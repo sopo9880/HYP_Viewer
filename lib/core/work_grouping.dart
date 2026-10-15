@@ -239,7 +239,7 @@ class WorkGrouping {
   }
 }
 
-enum LibrarySort { newest, published, hitomiPopular, mostRead, title, number }
+enum LibrarySort { newest, published, hitomiPopular, mostRead, title, number, chapter }
 
 class WorkSorting {
   static List<WorkEntry> sort(Iterable<WorkEntry> values, LibrarySort mode,
@@ -269,6 +269,9 @@ class WorkSorting {
         case LibrarySort.number:
           return (BigInt.tryParse(a.workId) ?? BigInt.zero)
               .compareTo(BigInt.tryParse(b.workId) ?? BigInt.zero);
+        case LibrarySort.chapter:
+          final n = a.groupOrder.compareTo(b.groupOrder);
+          return n != 0 ? n : WorkGrouping.compareChapters(a, b);
       }
     }
     result.sort((a, b) {
