@@ -190,8 +190,8 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         children: [
           for (final day in days) Expanded(
             child: Tooltip(
-              message: _date(day) + ': ' +
-                  (daily[_date(day)] ?? 0).toString() + '회',
+              message: AppLocalizations.of(context)!.readingActivityDay(
+                  _date(day), daily[_date(day)] ?? 0),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 2),
                 child: Container(
@@ -221,7 +221,8 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
               .subtract(Duration(days: i));
           final count = daily[_date(day)] ?? 0;
           return Tooltip(
-            message: _date(day) + ' · ' + count.toString() + '회',
+            message: AppLocalizations.of(context)!.readingHeatmapDay(
+                _date(day), count),
             child: SizedBox(width: 13, height: 13, child: ColoredBox(
               color: count == 0 ? HypColors.raised
                 : count == 1 ? const Color(0xFF4D467B)
@@ -254,14 +255,14 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
     try {
       final boundary = _reportKey.currentContext?.findRenderObject();
       if (boundary is! RenderRepaintBoundary) {
-        throw StateError('리포트 화면을 찾지 못했어.');
+        throw StateError(AppLocalizations.of(context)!.readingSaveReportMissing);
       }
       final image = await boundary.toImage(pixelRatio: 2);
       final png = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (png == null) throw StateError('PNG로 저장할 수 없어.');
+      if (png == null) throw StateError(AppLocalizations.of(context)!.readingSaveReportBytes);
       final bytes = Uint8List.view(png.buffer, png.offsetInBytes, png.lengthInBytes);
       await FilePicker.platform.saveFile(
-        dialogTitle: '독서 리포트 PNG 저장',
+        dialogTitle: AppLocalizations.of(context)!.readingSaveReportDialog,
         fileName: 'HYP_Reading_Report.png',
         type: FileType.custom,
         allowedExtensions: ['png'],
@@ -270,7 +271,8 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: HypText('리포트 이미지 저장 실패: ' + error.toString())));
+        SnackBar(content: Text(
+          AppLocalizations.of(context)!.readingSaveReportFailed(error.toString()))));
     } finally {
       if (mounted) setState(() => _savingReport = false);
     }
