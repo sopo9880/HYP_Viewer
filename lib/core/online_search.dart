@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 class OnlineSearchWork {
   final String workId;
   final String title;
+  /// Publicly supplied translated titles (never machine-fabricated).
+  final List<String> titleAliases;
   final List<String> artists;
   final List<String> groups;
   final List<String> series;
@@ -18,6 +20,7 @@ class OnlineSearchWork {
   const OnlineSearchWork({
     required this.workId,
     required this.title,
+    this.titleAliases = const [],
     this.artists = const [],
     this.groups = const [],
     this.series = const [],
@@ -31,6 +34,23 @@ class OnlineSearchWork {
     List<String> names(String key) => data[key] is List
         ? (data[key] as List).whereType<String>().take(60).toList() : const [];
     String string(String key) => data[key] is String ? data[key] as String : '';
+    final aliases = <String>{};
+    for (final key in ['aliases', 'titles', 'alternative_titles']) {
+      final value = data[key];
+      if (value is List) {
+        aliases.addAll(value.whereType<String>().take(20));
+      } else if (value is Map) {
+        aliases.addAll(value.values.whereType<String>().take(20));
+      }
+    }
+    for (final field in [
+      'title_english', 'title_japanese', 'title_korean',
+      'title_romanized', 'original_title',
+    ]) {
+      if (data[field] is String) aliases.add(data[field] as String);
+    }
+    aliases.removeWhere((value) => value.trim().length < 2 ||
+        value.length > 180);
     final id = data['id'];
     final code = id is int ? id.toString() :
         id is String ? id : '';
@@ -40,6 +60,7 @@ class OnlineSearchWork {
     return OnlineSearchWork(
       workId: code,
       title: string('title').isEmpty ? '작품 ' + code : string('title'),
+      titleAliases: aliases.take(24).toList(),
       artists: names('artists'), groups: names('groups'),
       series: names('series'), tags: names('tags'),
       language: string('language'),
