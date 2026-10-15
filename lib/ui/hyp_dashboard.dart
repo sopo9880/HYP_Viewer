@@ -2290,6 +2290,17 @@ class _HypDashboardState extends State<HypDashboard> {
     };
   }
 
+  String _savedOnlineEditionHint(List<OnlineSearchWork> editions) {
+    for (final online in editions) {
+      final match = OnlineEditionGroups.savedAnchor(
+          online, widget.library.works);
+      if (match != null) {
+        return AppLocalizations.of(context)!.onlineLinkedShelf(match.title);
+      }
+    }
+    return '';
+  }
+
   Widget _searchContent() {
     final existingIds = widget.library.works.map((w) => w.workId).toSet();
     final online = _remoteResults.where((w) =>
@@ -2406,12 +2417,16 @@ class _HypDashboardState extends State<HypDashboard> {
                     AppLocalizations.of(context)!.editionCount(group.length),
                     group.map((w) => WorkEditions.languageName(w.language))
                         .toSet().join(' · '),
+                    if (_savedOnlineEditionHint(group).isNotEmpty)
+                      _savedOnlineEditionHint(group),
                   ].join(' · ')
                 : [
                     if (group.first.artists.isNotEmpty)
                       group.first.artists.join(', '),
                     if (group.first.language.isNotEmpty) group.first.language,
                     '#' + group.first.workId,
+                    if (_savedOnlineEditionHint(group).isNotEmpty)
+                      _savedOnlineEditionHint(group),
                     if ((_remoteFieldMatches[group.first.workId] ??
                          const <String>[]).isNotEmpty)
                       AppLocalizations.of(context)!.searchResultMatches(
