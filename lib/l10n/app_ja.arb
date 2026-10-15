@@ -312,5 +312,13 @@
   "insightActivity14": "直近14日間の閲覧セッション（記録開始以降）",
   "insightSessionsNoDates": "以前の累計閲覧数には日付がなく、過去の日別履歴は復元できません。",
   "insightNotEnough": "集計できるデータがありません。",
-  "insightNoMatchingWorks": "条件に合う作品はありません。"
+  "insightNoMatchingWorks": "条件に合う作品はありません。",
+  "editionCoverPercent": "表紙の類似度 {percent}%",
+  "@editionCoverPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  }
 }
