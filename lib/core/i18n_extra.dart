@@ -206,6 +206,13 @@ abstract final class HypExtraTranslations {
     "검증된 설치 파일을 앱 보관함에 저장했어. 다시 다운로드할 필요 없어.": ["Verified installer stored in the app folder; no need to download again.","検証済みのインストーラーを保存しました。再ダウンロードは不要です。"],
     "현재 더 새로운 릴리스가 없어.": ["No newer release is available.","新しいリリースはありません。"],
     "실제 존재하는 번호라도 댓글의 의도와 다를 수 있어. 사용자가 선택한 번호만 서재에 저장돼.": ["An existing gallery ID may be unrelated to a comment. Only chosen IDs are saved.", "存在する作品番号でもコメントの意図と違う場合があります。選択した番号のみ保存します。"],
+    "읽는 중": ["Reading", "閲覧中"],
+    "묶음 이름": ["Group name", "グループ名"],
+    "작품 번호 또는 제목으로 검색": ["Search by work ID or title", "作品番号またはタイトルで検索"],
+    "한 칸 위로": ["Move up one place", "一つ上へ"],
+    "한 칸 아래로": ["Move down one place", "一つ下へ"],
+    "현재 표지의 작품 읽기": ["Read this cover's work", "現在の表紙の作品を読む"],
+    "기존 다운로드 이어받기": ["Resume pending downloads", "保留中のダウンロードを再開"],
   };
     // Existing user data (titles, comments, URLs) is not translated.
   static const Map<String, List<String>> prefixes = {
