@@ -77,6 +77,7 @@ class HypDashboard extends StatefulWidget {
   final String appVersion;
   final bool downloadingUpdate;
   final double updateProgress;
+  final String updateStatus;
   final String? downloadingGalleryKey;
   final int downloadedGalleryPages;
   final int totalGalleryPages;
@@ -158,6 +159,7 @@ class HypDashboard extends StatefulWidget {
     required this.appVersion,
     required this.downloadingUpdate,
     required this.updateProgress,
+    required this.updateStatus,
     required this.downloadingGalleryKey,
     required this.downloadedGalleryPages,
     required this.totalGalleryPages,
@@ -766,7 +768,16 @@ class _HypDashboardState extends State<HypDashboard> {
             child: _searchField(),
           ),
           if (widget.downloadingUpdate)
-            LinearProgressIndicator(value: widget.updateProgress),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                LinearProgressIndicator(value: widget.updateProgress),
+                const SizedBox(height: 4),
+                Text(widget.updateStatus +
+                    ' · ' + (widget.updateProgress * 100).toStringAsFixed(0) +
+                    '%', style: const TextStyle(fontSize: 11)),
+              ]),
+            ),
           Expanded(
             child: Container(
               decoration: const BoxDecoration(

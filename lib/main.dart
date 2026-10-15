@@ -113,6 +113,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   int downloadedGalleryBytes = 0;
   bool downloadingUpdate = false;
   double updateProgress = 0;
+  String updateStatus = '';
   final urlInput = TextEditingController();
   final commentInput = TextEditingController();
   final numberInput = TextEditingController();
@@ -196,12 +197,42 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
   }
 
+  Future<File> _pendingUpdateFile() async {
+    final dir = await getApplicationSupportDirectory();
+    await dir.create(recursive: true);
+    return File(dir.path + Platform.pathSeparator +
+        'hyp_pending_update_version.txt');
+  }
+
+  Future<void> _checkPendingInstallation(String runningVersion) async {
+    try {
+      final pendingFile = await _pendingUpdateFile();
+      if (!await pendingFile.exists()) return;
+      final pendingVersion = (await pendingFile.readAsString()).trim();
+      if (!RegExp(r'^\d+\.\d+\.\d+$').hasMatch(pendingVersion)) {
+        await pendingFile.delete();
+        return;
+      }
+      if (UpdateService.isNewer(pendingVersion, runningVersion)) {
+        _status('업데이트 v' + pendingVersion +
+            ' 설치가 아직 확인되지 않았어. 설정에서 다시 시도할 수 있어.');
+      } else {
+        await pendingFile.delete();
+        _status('v' + pendingVersion +
+            ' 업데이트가 실제 앱 버전으로 확인됐어.');
+      }
+    } catch (_) {
+      // A missing or inaccessible pending flag must never block startup.
+    }
+  }
+
   Future<void> _loadVersionInfo() async {
     try {
       final info = await PackageInfo.fromPlatform();
       if (mounted) {
-        setState(() => appVersion =
-          'v${info.version} (build ${info.buildNumber})');
+        setState(() => appVersion = 'v' + info.version +
+            ' (build ' + info.buildNumber + ')');
+        await _checkPendingInstallation(info.version);
       }
     } catch (_) {
       // Test hosts and unsupported platforms may not supply package metadata.
@@ -2184,6 +2215,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     setState(() {
       downloadingUpdate = true;
       updateProgress = 0;
+      updateStatus = '설치 파일을 내려받는 중이야.';
       message = '설치 파일을 내려받는 중이야.';
     });
     try {
@@ -2192,6 +2224,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         asset,
         onProgress: (value) {
           if (mounted) setState(() => updateProgress = value.clamp(0.0, 1.0));
+        },
+        onStatus: (status) {
+          if (mounted) setState(() => updateStatus = status);
         },
       );
       if (!mounted) return;
@@ -2242,13 +2277,20 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         ) == true;
       }
       if (install == true) {
-        await UpdateService(client).launchInstaller(installer);
+        final pending = await _pendingUpdateFile();
+        await pending.writeAsString(release.version, flush: true);
+        try {
+          await UpdateService(client).launchInstaller(installer);
+        } catch (_) {
+          if (await pending.exists()) await pending.delete();
+          rethrow;
+        }
         if (Platform.isWindows) {
           exit(0);
         }
-        _status('Android 설치 화면을 열었어. 시스템에서 설치를 승인해줘.');
+        _status('Android 설치 화면을 열었어. 승인 후 앱 버전이 변경되면 설치를 확인할게.');
       } else {
-        _status('검증된 설치 파일을 임시 폴더에 보관했어.');
+        _status('검증된 설치 파일을 앱 보관함에 저장했어. 다시 다운로드할 필요 없어.');
       }
     } catch (e) {
       _status('업데이트 실패: ' + e.toString());
@@ -2352,6 +2394,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     appVersion: appVersion,
     downloadingUpdate: downloadingUpdate,
     updateProgress: updateProgress,
+    updateStatus: updateStatus,
     downloadingGalleryKey: downloadingGalleryKey,
     downloadedGalleryPages: downloadedGalleryPages,
     totalGalleryPages: totalGalleryPages,
