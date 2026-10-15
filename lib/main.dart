@@ -55,7 +55,9 @@ import 'core/download_queue_store.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Platform.isWindows) {
-    await BackgroundDownloadRuntime.instance.configureDesktop();
+    try {
+      await BackgroundDownloadRuntime.instance.configureDesktop();
+    } catch (_) { /* Download attempts surface the unavailable tray. */ }
   }
   runApp(const HypViewerApp());
 }
@@ -1993,7 +1995,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     if (mounted) {
       setState(() {});
       _status('다운로드 대기: ${_downloadQueue.length}개 작품. '
-          '앱 실행 중 순서대로 다운로드해.');
+          '백그라운드에서도 순서대로 다운로드해.');
     }
     unawaited(_runDownloadQueue());
   }
@@ -2130,6 +2132,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           downloaded.pageCount.toString() + '페이지를 인터넷 없이 읽을 수 있어.');
       return true;
     } on DownloadCancelled {
+      await _downloadJobs.remove(work.workId);
       _status('다운로드가 취소됐어. 기존 오프라인 파일은 유지했어.');
       return false;
     } catch (e) {
@@ -2541,6 +2544,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       ReleaseUpdate release, ReleaseAsset asset) async {
     if (downloadingUpdate) return;
     final client = http.Client();
+    var holdsBackground = false;
     setState(() {
       downloadingUpdate = true;
       updateProgress = 0;
@@ -2548,16 +2552,24 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       message = '설치 파일을 내려받는 중이야.';
     });
     try {
+      await _backgroundDownloads.acquire();
+      holdsBackground = true;
       final installer = await UpdateService(client).download(
         release,
         asset,
         onProgress: (value) {
-          if (mounted) setState(() => updateProgress = value.clamp(0.0, 1.0));
+          if (mounted) {
+            setState(() => updateProgress = value.clamp(0.0, 1.0));
+            unawaited(_backgroundDownloads.setProgress((value * 100).round(), 100));
+          }
         },
         onStatus: (status) {
           if (mounted) setState(() => updateStatus = status);
         },
       );
+      await _backgroundDownloads.clearProgress();
+      await _backgroundDownloads.release();
+      holdsBackground = false;
       if (!mounted) return;
       bool install;
       if (Platform.isAndroid) {
@@ -2625,6 +2637,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _status('업데이트 실패: ' + e.toString());
     } finally {
       client.close();
+      if (holdsBackground) {
+        await _backgroundDownloads.clearProgress();
+        await _backgroundDownloads.release();
+      }
       if (mounted) setState(() => downloadingUpdate = false);
     }
   }

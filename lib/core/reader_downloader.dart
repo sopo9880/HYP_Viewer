@@ -118,10 +118,7 @@ class ReaderGalleryDownloader {
 
     String imageName(int index) {
       final sourceName = source.filename(index);
-      final extension = RegExp(r'\.(jpg|jpeg|png|webp|gif|bmp)
-  }
-}
-,
+      final extension = RegExp(r'\.(jpg|jpeg|png|webp|gif|bmp)$',
               caseSensitive: false)
           .firstMatch(sourceName)?.group(1)?.toLowerCase();
       if (extension == null) {

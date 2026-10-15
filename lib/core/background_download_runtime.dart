@@ -67,7 +67,7 @@ class BackgroundDownloadRuntime {
 
   Future<void> clearProgress() async {
     if (!Platform.isWindows) return;
-    try { await windowManager.setProgressBar(-1); } catch (_) {}
+    try { await windowManager.setProgressBar(0); } catch (_) {}
   }
 
   Future<void> _exclusive(Future<void> Function() callback) {
@@ -96,9 +96,8 @@ class _DesktopDownloadTray with WindowListener, TrayListener {
 
   Future<void> started() async {
     await initialize();
-    _active++;
     _finishedWhileHidden = false;
-    if (_iconVisible) return;
+    if (_iconVisible) { _active++; return; }
     await trayManager.setIcon('assets/icons/hyp_tray.ico');
     await trayManager.setToolTip('HYP Viewer · 다운로드 중');
     await trayManager.setContextMenu(Menu(items: [
@@ -107,6 +106,7 @@ class _DesktopDownloadTray with WindowListener, TrayListener {
       MenuItem(key: 'exit', label: '다운로드 중단하고 종료'),
     ]));
     _iconVisible = true;
+    _active++;
   }
 
   Future<void> finished() async {
