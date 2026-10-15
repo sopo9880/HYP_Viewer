@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../core/candidate_verifier.dart';
 import '../core/i18n.dart';
 import '../core/work.dart';
+import '../l10n/app_localizations.dart';
 
 /// A user's confirmed edit. Never fetch or overwrite the title implicitly.
 class WorkEditDraft {
@@ -11,12 +12,16 @@ class WorkEditDraft {
   final String title;
   final String author;
   final String originalComment;
+  final List<String> titleAliases;
+  final List<String> sourceUrls;
 
   const WorkEditDraft({
     required this.workId,
     required this.title,
     required this.author,
     required this.originalComment,
+    this.titleAliases = const [],
+    this.sourceUrls = const [],
   });
 }
 
@@ -39,6 +44,8 @@ class _WorkEditorDialogState extends State<WorkEditorDialog> {
   late final TextEditingController titleInput;
   late final TextEditingController authorInput;
   late final TextEditingController commentInput;
+  late final TextEditingController aliasInput;
+  late final TextEditingController sourcesInput;
   bool checking = false;
   String checkedId = '';
   CandidateVerification? verification;
@@ -51,6 +58,8 @@ class _WorkEditorDialogState extends State<WorkEditorDialog> {
     titleInput = TextEditingController(text: widget.work.title);
     authorInput = TextEditingController(text: widget.work.author);
     commentInput = TextEditingController(text: widget.work.originalComment);
+    aliasInput = TextEditingController(text: widget.work.titleAliases.join('\n'));
+    sourcesInput = TextEditingController(text: widget.work.sourceUrls.join('\n'));
   }
 
   @override
@@ -59,6 +68,8 @@ class _WorkEditorDialogState extends State<WorkEditorDialog> {
     titleInput.dispose();
     authorInput.dispose();
     commentInput.dispose();
+    aliasInput.dispose();
+    sourcesInput.dispose();
     super.dispose();
   }
 
@@ -129,6 +140,10 @@ class _WorkEditorDialogState extends State<WorkEditorDialog> {
       title: titleInput.text.trim(),
       author: authorInput.text.trim(),
       originalComment: commentInput.text,
+      titleAliases: aliasInput.text.split('\n')
+          .map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
+      sourceUrls: sourcesInput.text.split('\n')
+          .map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
     ));
   }
 
@@ -228,6 +243,24 @@ class _WorkEditorDialogState extends State<WorkEditorDialog> {
                 minLines: 2, maxLines: 5,
                 decoration: InputDecoration(
                     labelText: HypI18n.t(context, '원본 댓글')),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                key: const Key('edit-work-aliases'),
+                controller: aliasInput, minLines: 2, maxLines: 4,
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context)!.editionAliasTitles,
+                  helperText: AppLocalizations.of(context)!.editionAliasHelp,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                key: const Key('edit-work-source-urls'),
+                controller: sourcesInput, minLines: 2, maxLines: 4,
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context)!.workSourceHistory,
+                  helperText: AppLocalizations.of(context)!.workSourcesHelp,
+                ),
               ),
               if (error != null) ...[
                 const SizedBox(height: 8),
