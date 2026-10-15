@@ -417,5 +417,64 @@
   "workInfoAddedToLibrary": "서재 추가일",
   "androidSecurityNotice": "삼성 갤럭시의 보안 위험 자동 차단 기능은 일부 APK 설치를 막을 수 있어. 이는 기기를 보호하는 중요한 기능이야.\n\n앱에서는 보안 차단을 자동 해제할 수 없어. 설치에 문제가 있다면 APK의 게시자, GitHub 릴리스 주소, SHA-256 체크섬을 먼저 확인하고, 기기의 보안 설정은 직접 검토해줘. 보호 기능을 끄는 것은 권장하지 않아.",
   "coverCropHelp": "사진을 드래그하거나 두 손가락으로 확대·축소해 사각형 안의 부분을 표지로 저장해.",
-  "coverCropImageFailed": "이미지를 열지 못했어."
+  "coverCropImageFailed": "이미지를 열지 못했어.",
+  "groupCardVolumes": "{count}권",
+  "@groupCardVolumes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "groupCardWorks": "시리즈 · {count}개 작품",
+  "@groupCardWorks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "candidateChecking": "작품 확인 중: {checked} / {total}",
+  "@candidateChecking": {
+    "placeholders": {
+      "checked": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "candidateSave": "선택한 작품 {count}개 한 번에 저장",
+  "@candidateSave": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "autoGroupExistingCount": "기존 {count}개 작품은 유지돼.",
+  "@autoGroupExistingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "autoGroupOthers": "그 외 {count}개 작품",
+  "@autoGroupOthers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shortsCandidateCount": "발견된 번호 후보: {count}개",
+  "@shortsCandidateCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
