@@ -42,7 +42,9 @@ Widget _localizedApp({required Widget home, ThemeData? theme, Key? key}) =>
     );
 
 void main() {
-  testWidgets('Space hides full UI and Space restores it', (tester) async {
+
+  testWidgets('reader enters hidden and tapping center reveals the toolbar',
+      (tester) async {
     await tester.binding.setSurfaceSize(const Size(1100, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(_localizedApp(
@@ -50,6 +52,54 @@ void main() {
         work: WorkEntry.create(workId: '2711759'),
         archive: _Pages(), diskCacheEnabled: false,
         settings: const ReaderSettings(preloadPages: 0),
+        onPageChanged: (_) {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsNothing);
+    expect(find.byKey(const Key('reader-next')), findsNothing);
+    final zone = tester.getRect(find.byKey(const Key('reader-tap-zones')));
+    await tester.tapAt(zone.center);
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(find.byKey(const Key('reader-toggle-spread')), findsOneWidget);
+    expect(find.byIcon(Icons.visibility_off), findsNothing);
+  });
+
+  testWidgets('reader spread toolbar toggle preserves the current page',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final changes = <bool>[];
+    await tester.pumpWidget(_localizedApp(
+      home: GalleryReader(
+        work: WorkEntry.create(workId: '2711759').copyWith(currentPage: 3),
+        archive: _Pages(), diskCacheEnabled: false,
+        settings: const ReaderSettings(
+            preloadPages: 0, hideReaderUiOnOpen: false),
+        onPageChanged: (_) {},
+        onTwoPageSpreadChanged: changes.add,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('3 / 5'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('reader-toggle-spread')));
+    await tester.pumpAndSettle();
+    expect(changes, [true]);
+    expect(find.text('3 / 5'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('reader-toggle-spread')));
+    await tester.pumpAndSettle();
+    expect(changes, [true, false]);
+    expect(find.text('3 / 5'), findsOneWidget);
+  });
+  testWidgets('Space hides full UI and Space restores it', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_localizedApp(
+      home: GalleryReader(
+        work: WorkEntry.create(workId: '2711759'),
+        archive: _Pages(), diskCacheEnabled: false,
+        settings: const ReaderSettings(hideReaderUiOnOpen: false, preloadPages: 0),
         onPageChanged: (_) {},
       ),
     ));
@@ -73,7 +123,7 @@ void main() {
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759').copyWith(currentPage: 5),
         archive: _Pages(), diskCacheEnabled: false,
-        settings: const ReaderSettings(preloadPages: 0),
+        settings: const ReaderSettings(hideReaderUiOnOpen: false, preloadPages: 0),
         onPageChanged: (_) {},
         onFinishedReading: completed.add,
       ),
@@ -100,7 +150,7 @@ void main() {
           key: ValueKey('tap-reader-$rtl'),
           work: WorkEntry.create(workId: '2711759').copyWith(currentPage: 3),
           archive: pages, diskCacheEnabled: false,
-          settings: ReaderSettings(preloadPages: 0,
+          settings: ReaderSettings(hideReaderUiOnOpen: false, preloadPages: 0,
               nextDirection: rtl ? 'right' : 'left'),
           onPageChanged: (_) {},
         ),
@@ -132,7 +182,7 @@ void main() {
         work: WorkEntry.create(workId: '2711759').copyWith(currentPage: 2),
         archive: pages,
         diskCacheEnabled: false,
-        settings: const ReaderSettings(preloadPages: 2),
+        settings: const ReaderSettings(hideReaderUiOnOpen: false, preloadPages: 2),
         onPageChanged: (_) {},
       ),
     ));
@@ -155,7 +205,7 @@ void main() {
         work: WorkEntry.create(workId: '2711759'),
         archive: _Pages(),
         diskCacheEnabled: false,
-        settings: const ReaderSettings(nextDirection: 'right'),
+        settings: const ReaderSettings(hideReaderUiOnOpen: false, nextDirection: 'right'),
         onPageChanged: (_) {},
         onVerticalScrollingChanged: changes.add,
       ),
@@ -188,7 +238,7 @@ void main() {
         work: WorkEntry.create(workId: '2711759'),
         archive: _Pages(),
         diskCacheEnabled: false,
-        settings: const ReaderSettings(
+        settings: const ReaderSettings(hideReaderUiOnOpen: false, 
           showPageControlsAction: false,
           showOrientationAction: false,
           showCoverAction: false,
@@ -214,7 +264,7 @@ void main() {
         work: WorkEntry.create(workId: '2711759'),
         archive: pages,
         diskCacheEnabled: false,
-        settings: const ReaderSettings(
+        settings: const ReaderSettings(hideReaderUiOnOpen: false, 
             nextDirection: 'right', twoPageSpread: true, preloadPages: 1),
         onPageChanged: (_) {},
       ),

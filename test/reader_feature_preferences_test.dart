@@ -10,6 +10,8 @@ void main() {
     expect(defaults.forceLandscapeForSpreads, false);
     expect(defaults.receiveAnnouncements, false);
     expect(defaults.completedHidden, false);
+    expect(defaults.hideReaderUiOnOpen, true);
+    expect(ReaderSettings.fromJson({}).hideReaderUiOnOpen, true);
 
     final restored = ReaderSettings.fromJson(
         defaults.copyWith(autoCoverEnabled: true,
@@ -20,6 +22,8 @@ void main() {
     expect(restored.volumeKeyNavigation, true);
     expect(restored.forceLandscapeForSpreads, true);
     expect(restored.receiveAnnouncements, true);
+    expect(ReaderSettings.fromJson(defaults.copyWith(
+        hideReaderUiOnOpen: false).toJson()).hideReaderUiOnOpen, false);
     expect(ReaderSettings.fromJson(defaults.copyWith(completedHidden: true).toJson()).completedHidden, true);
   });
 
