@@ -36,7 +36,7 @@ class ReaderSettings {
   final bool startupUpdatePrompt;
   final String snoozedUpdateVersion;
   final String snoozedUpdateUntil;
-  final String preferredEditionLanguage; // auto, korean, japanese, english, chinese
+  final String preferredEditionLanguage; // auto, recent, korean, japanese, english, chinese
 
   const ReaderSettings({
     this.nextDirection = 'left',
@@ -187,7 +187,7 @@ class ReaderSettings {
         startupUpdatePrompt: data['startupUpdatePrompt'] != false,
         snoozedUpdateVersion: data['snoozedUpdateVersion'] is String && (data['snoozedUpdateVersion'] as String).length <= 40 ? data['snoozedUpdateVersion'] as String : '',
         snoozedUpdateUntil: DateTime.tryParse(data['snoozedUpdateUntil'] is String ? data['snoozedUpdateUntil'] as String : '')?.toUtc().toIso8601String() ?? '',
-        preferredEditionLanguage: const {'auto', 'korean', 'japanese', 'english', 'chinese'}.contains(data['preferredEditionLanguage']) ? data['preferredEditionLanguage'] as String : 'auto',
+        preferredEditionLanguage: const {'auto', 'recent', 'korean', 'japanese', 'english', 'chinese'}.contains(data['preferredEditionLanguage']) ? data['preferredEditionLanguage'] as String : 'auto',
         autoCoverEnabled: data['autoCoverEnabled'] == true,
         volumeKeyNavigation: data['volumeKeyNavigation'] == true,
         forceLandscapeForSpreads: data['forceLandscapeForSpreads'] == true,
