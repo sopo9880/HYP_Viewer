@@ -19,6 +19,7 @@ import 'core/cover_store.dart';
 import 'core/hero_artwork_store.dart';
 import 'core/reader_settings.dart';
 import 'core/i18n.dart';
+import 'l10n/app_localizations.dart';
 import 'core/reader_downloader.dart';
 import 'core/reader_cache_pruner.dart';
 import 'core/announcements.dart';
@@ -62,6 +63,7 @@ class HypViewerApp extends StatelessWidget {
       locale: Locale(language),
       supportedLocales: const [Locale('ko'), Locale('en'), Locale('ja')],
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
