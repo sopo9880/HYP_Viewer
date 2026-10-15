@@ -554,5 +554,14 @@
         "type": "int"
       }
     }
-  }
+  },
+  "onlineLinkedShelf": "本棚の「{title}」と同じ作品の候補",
+  "@onlineLinkedShelf": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "onlineSafeLink": "保存時に確認済みの言語版グループへの追加を試みます。"
 }
