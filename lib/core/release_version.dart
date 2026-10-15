@@ -1,2 +1,2 @@
-/// Four-part GitHub hotfix tag, three-part Flutter semver (+Android build).
-const String hypReleaseVersion = '0.4.3.1';
+/// Published GitHub tag; Flutter uses the matching 0.x base version.
+const String hypReleaseVersion = '0.4.4';
