@@ -39,7 +39,9 @@ void main() {
     final korean = work('222222', 'Story', 'korean')
         .copyWith(editionGroupId: 'edition_a', completed: false);
     final items = [japanese, korean];
-    expect(WorkEditions.visibleOnShelf(items, true).length, 2);
+    expect(WorkEditions.visibleOnShelf(items, true), isEmpty);
+    expect(WorkEditions.visibleOnShelf(
+      [japanese.copyWith(completed: false), korean], true).length, 2);
     expect(WorkEditions.visibleOnShelf(
       [japanese, korean.copyWith(completed: true)], true), isEmpty);
     expect(WorkEditions.visibleOnShelf(items, false).length, 2);
