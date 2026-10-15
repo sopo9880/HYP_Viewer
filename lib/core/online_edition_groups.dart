@@ -10,6 +10,7 @@ abstract final class OnlineEditionGroups {
         workId: work.workId,
         title: work.title,
         author: work.artists.join(', '),
+        titleAliases: work.titleAliases,
       ).copyWith(
         sourceLanguage: work.language,
         sourceGroup: work.groups.join(', '),
