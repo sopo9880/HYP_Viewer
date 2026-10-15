@@ -216,8 +216,8 @@ void main() {
       })), 200, headers: {'content-type':'application/json; charset=utf-8'});
     });
     final result = await YoutubePublicClient(client).fetch(videoId);
-    expect(page, 3);
-    expect(result.comments.length, 3);
+    expect(page, 10);
+    expect(result.comments.length, 10);
     expect(result.mayBeIncomplete, true);
     client.close();
   });

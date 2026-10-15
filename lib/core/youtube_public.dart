@@ -8,6 +8,8 @@ import 'youtube.dart';
 /// Uses public page configuration and continuations, not YouTube Data API v3
 /// or a user-supplied developer API key. YouTube may change or block this.
 class YoutubePublicClient {
+  static const int _maxComments = 300;
+  static const int _maxPages = 10;
   final http.Client client;
   const YoutubePublicClient(this.client);
 
@@ -79,7 +81,7 @@ class YoutubePublicClient {
 
     final visited = <String>{};
     var interrupted = false;
-    for (var attempt = 0; attempt < 3 && comments.length < 100; attempt++) {
+    for (var attempt = 0; attempt < _maxPages && comments.length < _maxComments; attempt++) {
       if (token == null || token.isEmpty || !visited.add(token)) break;
       try {
         batch = await _next(key, context, continuation: token);
@@ -103,7 +105,7 @@ class YoutubePublicClient {
         mayBeIncomplete: interrupted ||
             (comments.isEmpty && description.isNotEmpty) ||
             (token != null && token.isNotEmpty && !visited.contains(token)) ||
-            comments.length >= 100);
+            comments.length >= _maxComments);
   }
 
   Future<Map<String, dynamic>> _next(
@@ -277,11 +279,11 @@ class YoutubePublicClient {
       Set<String> seen) {
     void add(dynamic text) {
       if (text is! String || text.trim().isEmpty ||
-          comments.length >= 100) return;
+          comments.length >= _maxComments) return;
       if (seen.add(text.trim())) comments.add(text.trim());
     }
     void scan(dynamic value) {
-      if (comments.length >= 100) return;
+      if (comments.length >= _maxComments) return;
       if (value is List) {
         for (final item in value) { scan(item); }
       } else if (value is Map) {
