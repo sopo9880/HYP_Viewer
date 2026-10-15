@@ -2083,8 +2083,9 @@ class _HypDashboardState extends State<HypDashboard> {
     final showLocal = _searchScope != 'online';
     final showOnline = _searchScope != 'local';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const HypSectionTitle(icon: Icons.search_rounded,
-          title: '통합 작품 검색', subtitle: '내 서재와 온라인 작품을 함께 찾아봐.'),
+      HypSectionTitle(icon: Icons.search_rounded,
+          title: HypI18n.t(context, '통합 작품 검색'),
+          subtitle: HypI18n.t(context, '내 서재와 온라인 작품을 함께 찾아봐.')),
       const SizedBox(height: 10),
       Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center,
         children: [
@@ -2560,7 +2561,7 @@ class _HypDashboardState extends State<HypDashboard> {
         subtitle: '뷰어 조작, 기본 표지, 추가 다운로드 소스와 앱 데이터를 관리해.',
       ),
       const SizedBox(height: 14),
-      _settingsPanel('general', '언어·일반', Column(
+      _settingsPanel('general', AppLocalizations.of(context)!.settingsGeneral, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('언어', style: Theme.of(context).textTheme.titleMedium),
@@ -2574,9 +2575,9 @@ class _HypDashboardState extends State<HypDashboard> {
             // Native names are deliberately NOT translated by the selected
             // language: the chooser always reads 한국어 / English / 日本語.
             items: const [
-              DropdownMenuItem(value: 'ko', child: HypText('한국어')),
-              DropdownMenuItem(value: 'en', child: HypText('English')),
-              DropdownMenuItem(value: 'ja', child: HypText('日本語')),
+              DropdownMenuItem(value: 'ko', child: Text('한국어')),
+              DropdownMenuItem(value: 'en', child: Text('English')),
+              DropdownMenuItem(value: 'ja', child: Text('日本語')),
             ],
             onChanged: (language) {
               if (language != null) {
@@ -2596,10 +2597,10 @@ class _HypDashboardState extends State<HypDashboard> {
                 labelText: HypI18n.t(context, '선호 작품 언어')),
             items: const [
               DropdownMenuItem(value: 'auto', child: HypText('자동 선택')),
-              DropdownMenuItem(value: 'korean', child: HypText('한국어')),
-              DropdownMenuItem(value: 'japanese', child: HypText('日本語')),
-              DropdownMenuItem(value: 'english', child: HypText('English')),
-              DropdownMenuItem(value: 'chinese', child: HypText('中文')),
+              DropdownMenuItem(value: 'korean', child: Text('한국어')),
+              DropdownMenuItem(value: 'japanese', child: Text('日本語')),
+              DropdownMenuItem(value: 'english', child: Text('English')),
+              DropdownMenuItem(value: 'chinese', child: Text('中文')),
             ],
             onChanged: (value) {
               if (value != null) widget.onSaveReaderSettings(
@@ -2609,7 +2610,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 10),
-      _settingsPanel('hero', '홈 배너', Column(
+      _settingsPanel('hero', AppLocalizations.of(context)!.settingsHero, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('홈 배너 일러스트',
@@ -2695,7 +2696,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 10),
-      _settingsPanel('viewer', '뷰어·로딩 설정', Column(
+      _settingsPanel('viewer', AppLocalizations.of(context)!.settingsViewer, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('이미지 뷰어 설정', style: Theme.of(context).textTheme.titleMedium),
@@ -2900,7 +2901,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 10),
-      _settingsPanel('cover', '표지 관리', Column(
+      _settingsPanel('cover', AppLocalizations.of(context)!.settingsCover, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('표지 자동 설정 및 편집', style: Theme.of(context).textTheme.titleMedium),
@@ -2931,7 +2932,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      _settingsPanel('android', 'Android 동작', Column(
+      _settingsPanel('android', AppLocalizations.of(context)!.settingsAndroid, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('Android 뷰어 동작', style: Theme.of(context).textTheme.titleMedium),
@@ -2962,7 +2963,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      _settingsPanel('notices', '공지', Column(
+      _settingsPanel('notices', AppLocalizations.of(context)!.settingsNotices, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('관리자 공지', style: Theme.of(context).textTheme.titleMedium),
@@ -2994,7 +2995,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      _settingsPanel('web', '기본 웹 리더', Column(
+      _settingsPanel('web', AppLocalizations.of(context)!.settingsWeb, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('기본 웹 리더 (주소 고정)',
@@ -3017,7 +3018,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      _settingsPanel('source', '추가 이미지 소스', Column(
+      _settingsPanel('source', AppLocalizations.of(context)!.settingsSource, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('추가 JSON 이미지 소스 (선택)', style: Theme.of(context).textTheme.titleMedium),
@@ -3046,7 +3047,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      _settingsPanel('backup', '서재 데이터·백업', Column(
+      _settingsPanel('backup', AppLocalizations.of(context)!.settingsBackup, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('서재 데이터', style: Theme.of(context).textTheme.titleMedium),
@@ -3081,7 +3082,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 13),
-      _settingsPanel('updates', '업데이트', Column(
+      _settingsPanel('updates', AppLocalizations.of(context)!.settingsUpdates, Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HypText('업데이트', style: Theme.of(context).textTheme.titleMedium),
