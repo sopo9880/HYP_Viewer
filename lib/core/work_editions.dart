@@ -48,50 +48,98 @@ abstract final class WorkEditions {
     }
     if (ca != null && cb == null && ca > 1 ||
         cb != null && ca == null && cb > 1) {
-      return const EditionMatch(0, '회차 불확실');
+      return const EditionMatch(0, '회차 정보 불충분');
     }
     final titleA = originalTitle(a.title);
     final titleB = originalTitle(b.title);
-    if (titleA.length < 4 || titleB.length < 4 ||
-        RegExp(r'^(?:작품|work|gallery)\s*\d+$', caseSensitive: false)
-            .hasMatch(titleA) ||
-        RegExp(r'^(?:작품|work|gallery)\s*\d+$', caseSensitive: false)
-            .hasMatch(titleB)) {
+    bool meaningful(String title) => title.length >= 4 &&
+        !RegExp(r'^(?:작품|work|gallery)\s*\d+$', caseSensitive: false)
+            .hasMatch(title);
+    if (!meaningful(titleA) || !meaningful(titleB)) {
       return const EditionMatch(0, '확인 가능한 원제 부족');
     }
-    if (_knownConflict(a.author, b.author) != null &&
-        _knownConflict(a.sourceGroup, b.sourceGroup) != null) {
-      return const EditionMatch(0, '작가와 서클 불일치');
+
+    String normal(String text) => text.trim().toLowerCase();
+    bool sameNonEmpty(String left, String right) =>
+        normal(left).isNotEmpty && normal(left) == normal(right);
+    final sameAuthor = sameNonEmpty(a.author, b.author);
+    final sameCircle = sameNonEmpty(a.sourceGroup, b.sourceGroup);
+    if (a.author.trim().isNotEmpty && b.author.trim().isNotEmpty &&
+        a.sourceGroup.trim().isNotEmpty && b.sourceGroup.trim().isNotEmpty &&
+        !sameAuthor && !sameCircle) {
+      return const EditionMatch(0, '작가와 서클 정보 불일치');
     }
+    final sameSeries = sameNonEmpty(a.sourceSeries, b.sourceSeries);
+    final sameDate = sameNonEmpty(a.sourceDate, b.sourceDate);
+    final hasPages = a.totalPages > 0 && b.totalPages > 0;
+    final pageDifference = hasPages
+        ? (a.totalPages - b.totalPages).abs() : 9999;
     final sameTitle = titleA == titleB;
-    final sameAuthor = a.author.trim().isNotEmpty &&
-        a.author.trim().toLowerCase() == b.author.trim().toLowerCase();
-    final sameCircle = a.sourceGroup.trim().isNotEmpty &&
-        a.sourceGroup.trim().toLowerCase() ==
-            b.sourceGroup.trim().toLowerCase();
-    final sameSeries = a.sourceSeries.trim().isNotEmpty &&
-        a.sourceSeries.trim().toLowerCase() ==
-            b.sourceSeries.trim().toLowerCase();
     if (!sameTitle) {
-      // Different titles and only shared creators/franchise are insufficient
-      // for automatic cross-language linking.
-      return EditionMatch(sameAuthor && sameCircle && sameSeries ? 50 : 0,
-          '원제 상이 · 직접 확인 필요');
+      // Different translations can have entirely different titles.
+      // Auto-link only with independent creator, series, chapter and
+      // page evidence, or especially strong standalone-publication evidence.
+      if (sameSeries && (sameAuthor || sameCircle) &&
+          ca != null && cb != null && ca == cb &&
+          pageDifference <= 4) {
+        return const EditionMatch(90, '번역 제목 상이 · 제작자/시리즈/회차/페이지 일치');
+      }
+      if (sameSeries && sameAuthor && sameCircle && sameDate &&
+          ca == null && cb == null && pageDifference <= 2) {
+        return const EditionMatch(85, '번역 제목 상이 · 제작자/발행일/페이지 일치');
+      }
+      return EditionMatch(
+        sameAuthor || sameCircle || sameSeries ? 50 : 0,
+        '번역 제목이 달라서 수동 확인 필요',
+      );
     }
     var score = 60;
     if (sameAuthor) score += 20;
     if (sameCircle) score += 20;
     if (sameSeries) score += 5;
     if (ca != null && ca == cb) score += 10;
-    if (a.totalPages > 0 && b.totalPages > 0) {
-      final diff = (a.totalPages - b.totalPages).abs();
-      if (diff <= 3) score += 5;
-      if (diff > 25) score -= 30;
+    if (hasPages) {
+      if (pageDifference <= 3) score += 5;
+      if (pageDifference > 25) score -= 30;
     }
-    // Never automatically link on a bare title alone.
     if (!sameAuthor && !sameCircle) score = score.clamp(0, 75).toInt();
     return EditionMatch(score.clamp(0, 100).toInt(),
         sameAuthor || sameCircle ? '원제 및 제작자 일치' : '원제 일치 · 확인 필요');
+  }
+
+  /// The library shelf hides a chapter only when all of its editions have
+  /// been completed. Every edition remains individually available in search,
+  /// history and the chooser while any sibling is unfinished.
+  static List<WorkEntry> visibleOnShelf(
+      Iterable<WorkEntry> works, bool hideCompleted) {
+    final all = works.toList();
+    if (!hideCompleted) return all;
+    final unfinished = all.where((entry) =>
+        entry.editionGroupId.isNotEmpty && !entry.completed)
+        .map((entry) => entry.editionGroupId).toSet();
+    return all.where((entry) =>
+        !entry.completed || entry.editionGroupId.isNotEmpty &&
+            unfinished.contains(entry.editionGroupId)).toList();
+  }
+
+  /// Diversify a translated-title search without sending reading history.
+  /// Explicit creator/series terms only come from public work metadata.
+  static List<String> searchQueries(WorkEntry work, String entered) {
+    final result = <String>[];
+    void add(String query) {
+      final cleaned = query.trim();
+      if (cleaned.isNotEmpty && cleaned.length <= 150 &&
+          !result.contains(cleaned)) result.add(cleaned);
+    }
+    add(entered);
+    final creator = work.author.split(',').first.trim();
+    if (creator.isNotEmpty) add('artist:' + creator);
+    final circle = work.sourceGroup.split(',').first.trim();
+    if (circle.isNotEmpty) add('group:' + circle);
+    if (work.sourceSeries.trim().isNotEmpty) {
+      add('series:' + work.sourceSeries.trim());
+    }
+    return result.take(4).toList();
   }
 
   static String groupKey(WorkEntry work) =>
