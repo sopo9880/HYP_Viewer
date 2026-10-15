@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import '../core/i18n.dart';
+import '../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 import '../core/work.dart';
@@ -72,7 +73,7 @@ class HypWorkGroupCard extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 9, vertical: 5),
-                      child: HypText('${members.length}권',
+                      child: Text(AppLocalizations.of(context)!.groupCardVolumes(members.length),
                         style: const TextStyle(fontSize: 11,
                             fontWeight: FontWeight.w800)),
                     )),
@@ -87,7 +88,7 @@ class HypWorkGroupCard extends StatelessWidget {
                     style: const TextStyle(fontSize: 13,
                         fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
-                  HypText('시리즈 · ${members.length}개 작품', maxLines: 1,
+                  Text(AppLocalizations.of(context)!.groupCardWorks(members.length), maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 11,
                         color: HypColors.muted)),
