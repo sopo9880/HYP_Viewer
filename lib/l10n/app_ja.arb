@@ -1,0 +1,40 @@
+{
+  "@@locale": "ja",
+  "cancel": "キャンセル",
+  "search": "検索",
+  "findOtherEditions": "他の言語版を探す",
+  "editionSearchLabel": "原題または検索語",
+  "editionSearchHint": "原題・作者・シリーズから翻訳版の題名も検索できます。",
+  "editionConfirmSelection": "同じ作品か確認して追加",
+  "editionConfirmWarning": "同じシリーズでも話数が異なる場合があります。同一話の別言語版か確認してください。",
+  "editionSearchPartial": "一部のオンライン検索に失敗しました。取得済みの候補と本棚の検索は利用できます。",
+  "editionLikelyMatch": "同一作品の可能性が高い",
+  "editionManualReview": "手動確認が必要",
+  "editionNoCandidates": "候補がありません。原題や作者名で再検索してください。",
+  "editionLinkConfirmTitle": "言語版の統合確認",
+  "editionLinkAction": "同じ作品としてまとめる",
+  "editionChoose": "読む言語版を選択",
+  "editionCount": "{count} 言語版",
+  "@editionCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "preferredEditionLanguage": "優先する作品の言語",
+  "startupUpdatePrompt": "起動時に更新を通知",
+  "snoozeSevenDays": "7日間表示しない",
+  "updateLater": "後で",
+  "updateAvailable": "新しいバージョンがあります。ダウンロードしますか？",
+  "releasePage": "リリースを見る",
+  "clearFinder": "クリア",
+  "chapterSort": "話数順（手動）",
+  "completedMark": "読了にする",
+  "completedUnmark": "読了を解除",
+  "editionUnlink": "言語版グループから外す",
+  "libraryWorks": "マイ本棚",
+  "searchOnline": "オンライン作品",
+  "editionSourceLocal": "本棚",
+  "editionSourceRemote": "オンライン"
+}
