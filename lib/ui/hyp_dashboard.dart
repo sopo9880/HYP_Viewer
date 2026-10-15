@@ -18,6 +18,7 @@ import '../core/i18n.dart';
 import '../l10n/app_localizations.dart';
 import '../core/number_extractor.dart';
 import '../core/online_search.dart';
+import '../core/online_edition_groups.dart';
 import '../core/reading_history.dart';
 import 'reading_insights.dart';
 import 'candidate_editor.dart';
@@ -2315,9 +2316,18 @@ class _HypDashboardState extends State<HypDashboard> {
           label: HypText(_selectingWorks ? '선택 종료' : '선택'),
         )),
         _selectionControls(_results),
-        _gridOrEmpty(_results,
-          emptyTitle: '내 서재에서 찾지 못했어',
-          emptyMessage: '온라인 결과가 나오면 아래에서 확인해 봐.'),
+        if (_results.isEmpty)
+          _gridOrEmpty(_results,
+            emptyTitle: '내 서재에서 찾지 못했어',
+            emptyMessage: '온라인 결과가 나오면 아래에서 확인해 봐.')
+        else if (_selectingWorks)
+          // In bulk-selection mode each physical edition is selectable.
+          _gridOrEmpty(_results,
+            emptyTitle: '내 서재에서 찾지 못했어',
+            emptyMessage: '온라인 결과가 나오면 아래에서 확인해 봐.')
+        else
+          // Normal search mirrors the shelf's logical edition-stack cards.
+          _editionAwareGrid(_results),
       ],
       if (showOnline) ...[
         const SizedBox(height: 18),
@@ -2352,28 +2362,46 @@ class _HypDashboardState extends State<HypDashboard> {
         if (!_remoteBusy && _remoteError == null && _remoteResults.isEmpty)
           const Padding(padding: EdgeInsets.all(15),
             child: HypText('온라인 결과가 아직 없어. 제목이나 작가·태그로 검색해 줘.')),
-        for (final work in online) Card(
-          key: Key('online-search-' + work.workId),
+        for (final group in OnlineEditionGroups.cluster(online)) Card(
+          key: group.length > 1
+              ? Key('online-edition-stack-' + group.first.workId)
+              : Key('online-search-' + group.first.workId),
           child: ListTile(
-            leading: const Icon(Icons.menu_book_outlined),
-            title: HypText(work.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-            subtitle: Text([
-              if (work.artists.isNotEmpty) work.artists.join(', '),
-              if (work.language.isNotEmpty) work.language,
-              '#' + work.workId,
-              if ((_remoteFieldMatches[work.workId] ?? const <String>[])
-                  .isNotEmpty)
-                AppLocalizations.of(context)!.searchResultMatches(
-                  _remoteFieldMatches[work.workId]!
-                    .map((field) => _searchFieldLabel(context, field))
-                    .join(', ')),
-            ].join(' · '), maxLines: 3),
+            leading: Icon(group.length > 1
+                ? Icons.layers_outlined : Icons.menu_book_outlined),
+            title: HypText(group.first.title,
+                maxLines: 2, overflow: TextOverflow.ellipsis),
+            subtitle: Text(group.length > 1
+                ? [
+                    AppLocalizations.of(context)!.editionCount(group.length),
+                    group.map((w) => WorkEditions.languageName(w.language))
+                        .toSet().join(' · '),
+                  ].join(' · ')
+                : [
+                    if (group.first.artists.isNotEmpty)
+                      group.first.artists.join(', '),
+                    if (group.first.language.isNotEmpty) group.first.language,
+                    '#' + group.first.workId,
+                    if ((_remoteFieldMatches[group.first.workId] ??
+                         const <String>[]).isNotEmpty)
+                      AppLocalizations.of(context)!.searchResultMatches(
+                        _remoteFieldMatches[group.first.workId]!
+                          .map((field) => _searchFieldLabel(context, field))
+                          .join(', ')),
+                  ].join(' · '), maxLines: 3),
             trailing: IconButton(
-              tooltip: AppLocalizations.of(context)!.tooltipAddLibrary,
-              onPressed: () => widget.onSaveOnlineSearchWork(work),
-              icon: const Icon(Icons.bookmark_add_outlined),
+              tooltip: group.length > 1
+                  ? AppLocalizations.of(context)!.editionChoose
+                  : AppLocalizations.of(context)!.tooltipAddLibrary,
+              onPressed: group.length > 1
+                  ? () => _showOnlineEditionCandidates(group)
+                  : () => widget.onSaveOnlineSearchWork(group.first),
+              icon: Icon(group.length > 1 ? Icons.language
+                  : Icons.bookmark_add_outlined),
             ),
-            onTap: () => _showOnlineWork(work),
+            onTap: group.length > 1
+                ? () => _showOnlineEditionCandidates(group)
+                : () => _showOnlineWork(group.first),
           ),
         ),
         if (!_remoteBusy && _remoteHasMore && _remoteResults.isNotEmpty)
@@ -2385,6 +2413,41 @@ class _HypDashboardState extends State<HypDashboard> {
           ),
       ],
     ]);
+  }
+
+  Future<void> _showOnlineEditionCandidates(
+      List<OnlineSearchWork> candidates) async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context, isScrollControlled: true,
+      builder: (sheet) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(AppLocalizations.of(sheet)!.editionChoose,
+              style: Theme.of(sheet).textTheme.titleMedium),
+          const SizedBox(height: 12),
+          SizedBox(height: 320, child: ListView.builder(
+            itemCount: candidates.length,
+            itemBuilder: (_, index) {
+              final work = candidates[index];
+              return ListTile(
+                key: Key('online-edition-choice-' + work.workId),
+                title: Text(work.title, maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+                subtitle: Text(WorkEditions.languageName(work.language) +
+                    ' · #' + work.workId),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _showOnlineWork(work);
+                  });
+                },
+              );
+            },
+          )),
+        ]),
+      )),
+    );
   }
 
   Future<void> _showOnlineWork(OnlineSearchWork work) async {
