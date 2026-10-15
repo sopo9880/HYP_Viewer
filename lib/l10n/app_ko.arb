@@ -544,5 +544,15 @@
   "readingStatsDevice": "HYP Viewer · 기기 안에 저장된 실제 열람 세션 기준",
   "readingStatsCollect": "활성 시간·날짜·페이지 정보를 기기 안에만 보관해.",
   "readingStatsEraseHint": "서재·완독 표시·기존 열람 횟수는 유지돼.",
-  "readingStatsEraseConfirm": "기기에 저장된 날짜별 독서 세션을 전부 삭제할까? 이 작업은 되돌릴 수 없어."
+  "readingStatsEraseConfirm": "기기에 저장된 날짜별 독서 세션을 전부 삭제할까? 이 작업은 되돌릴 수 없어.",
+  "youtubeMoreVideos": "다음 영상 목록 불러오기",
+  "youtubeMoreUnavailable": "추가 영상을 가져올 수 없어. 지금 불러온 영상에서 선택하거나 개별 URL을 붙여넣어줘.",
+  "youtubeVideosLoaded": "공개 영상 {count}개 확인",
+  "@youtubeVideosLoaded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
