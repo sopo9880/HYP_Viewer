@@ -44,7 +44,6 @@ import 'core/reading_history.dart';
 import 'core/youtube.dart';
 import 'core/youtube_public.dart';
 import 'core/source_links.dart';
-import 'core/work_editions.dart';
 import 'core/work_edition_service.dart';
 import 'core/update_prompt.dart';
 
@@ -2051,14 +2050,14 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             constraints: const BoxConstraints(maxWidth: 460),
             child: Column(mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('선택된 작품: ' + selected.length.toString() + '개',
+                HypText('선택된 작품: ' + selected.length.toString() + '개',
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 for (final work in selected.take(4))
-                  Text('#' + work.workId + ' · ' + work.title,
+                  HypText('#' + work.workId + ' · ' + work.title,
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                 if (selected.length > 4)
-                  Text('외 ' + (selected.length - 4).toString() + '개'),
+                  HypText('외 ' + (selected.length - 4).toString() + '개'),
                 const SizedBox(height: 10),
                 const HypText('선택한 작품의 즐겨찾기와 읽기 기록도 제거돼. '
                     '다른 작품과 컬렉션은 유지해.'),

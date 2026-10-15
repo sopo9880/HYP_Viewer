@@ -96,9 +96,11 @@ void main() {
     final save = find.byKey(const Key('save-selected-works'));
     expect(save, findsOneWidget);
     // Having candidates must never prevent the user from collapsing details.
+    await tester.ensureVisible(find.text('댓글·번호 입력 접기'));
     await tester.tap(find.text('댓글·번호 입력 접기'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('candidate-editor')), findsNothing);
+    await tester.ensureVisible(find.text('댓글 직접 입력 · 번호 확정'));
     await tester.tap(find.text('댓글 직접 입력 · 번호 확정'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('candidate-editor')), findsOneWidget);

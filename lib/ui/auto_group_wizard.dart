@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
+import '../core/i18n.dart';
 
 /// Reviewed selection for either a new group or an existing one.
 class AutoGroupReview {
