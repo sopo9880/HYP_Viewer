@@ -77,6 +77,20 @@ void main() {
     client.close();
   });
 
+  test('Instagram metadata never claims complete captions or comments',
+      () async {
+    final client = MockClient((request) async => http.Response.bytes(
+      utf8.encode('<html><meta property="og:title" content="Public work" />'
+          '<meta property="og:description" content="Work 3172801"></html>'),
+      200,
+    ));
+    final result = await PublicSourcePreview(client).fetchDetailed(
+      SourceLink.parse('https://www.instagram.com/reel/ABC12345/')!);
+    expect(result.text, contains('3172801'));
+    expect(result.fullBody, false);
+    client.close();
+  });
+
   test('public metadata preview reads descriptions without a developer key', () async {
     final client = MockClient((request) async {
       expect(request.url.host, 'www.instagram.com');

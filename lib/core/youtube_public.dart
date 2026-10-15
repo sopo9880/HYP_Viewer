@@ -56,6 +56,13 @@ class YoutubePublicClient {
     final context = _jsonProperty(html, 'INNERTUBE_CONTEXT') ??
         _fallbackContext(html);
     if (key == null || key.isEmpty || context == null) {
+      // The metadata was publicly embedded, but the comments transport is
+      // unavailable. Keep these publicly accessible work IDs and clearly
+      // indicate partial coverage; never assume comments were collected.
+      if (title.isNotEmpty || description.isNotEmpty) {
+        return YoutubeResults(title, description, const [],
+            mayBeIncomplete: true);
+      }
       throw const FormatException('유튜브 공개 페이지 형식이 변경됐어. '
           '앱에서 댓글을 읽을 수 없어.');
     }
