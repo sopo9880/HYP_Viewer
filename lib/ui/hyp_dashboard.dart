@@ -17,6 +17,8 @@ import '../core/reader_settings.dart';
 import '../core/i18n.dart';
 import '../core/number_extractor.dart';
 import '../core/online_search.dart';
+import '../core/reading_history.dart';
+import 'reading_insights.dart';
 import 'candidate_editor.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
@@ -33,7 +35,7 @@ extension HypPageInfo on HypPage {
   String get label => switch (this) {
     HypPage.home => '홈',
     HypPage.library => '내 서재',
-    HypPage.favorites => '즐겨찾기',
+    HypPage.favorites => '내 독서',
     HypPage.downloads => '다운로드',
     HypPage.history => '열람 기록',
     HypPage.settings => '설정',
@@ -42,7 +44,7 @@ extension HypPageInfo on HypPage {
   IconData get icon => switch (this) {
     HypPage.home => Icons.home_rounded,
     HypPage.library => Icons.library_books_rounded,
-    HypPage.favorites => Icons.favorite_rounded,
+    HypPage.favorites => Icons.insights_rounded,
     HypPage.downloads => Icons.download_rounded,
     HypPage.history => Icons.history_rounded,
     HypPage.settings => Icons.settings_rounded,
@@ -53,6 +55,8 @@ extension HypPageInfo on HypPage {
 /// YouTube, CBZ and updater services instead of imitating them with mock data.
 class HypDashboard extends StatefulWidget {
   final LibraryBackup library;
+  final List<ReadingSession> readingSessions;
+  final Future<void> Function() onClearReadingHistory;
   final GalleryStore galleryStore;
   final CoverStore coverStore;
   final ReaderSettings readerSettings;
@@ -132,6 +136,8 @@ class HypDashboard extends StatefulWidget {
   const HypDashboard({
     super.key,
     required this.library,
+    required this.readingSessions,
+    required this.onClearReadingHistory,
     required this.galleryStore,
     required this.coverStore,
     required this.readerSettings,
@@ -841,7 +847,7 @@ class _HypDashboardState extends State<HypDashboard> {
         destinations: [
           NavigationDestination(icon: const Icon(Icons.favorite_outline),
             selectedIcon: const Icon(Icons.favorite),
-            label: HypI18n.t(context, '즐겨찾기')),
+            label: HypI18n.t(context, '내 독서')),
           NavigationDestination(icon: const Icon(Icons.library_books_outlined),
             selectedIcon: const Icon(Icons.library_books),
             label: HypI18n.t(context, '서재')),
@@ -1033,9 +1039,7 @@ class _HypDashboardState extends State<HypDashboard> {
         : switch (_page) {
             HypPage.home => _homeContent(),
             HypPage.library => _libraryContent(),
-            HypPage.favorites => _fullPage('즐겨찾기',
-                '하트를 누른 작품만 모아 보여줘.',
-                HypPage.favorites.icon, _favorites),
+            HypPage.favorites => _insightsContent(),
             HypPage.history => _fullPage('열람 기록',
                 '최근 읽기 화면을 연 순서대로 표시해.',
                 HypPage.history.icon, _recent),
@@ -1048,6 +1052,29 @@ class _HypDashboardState extends State<HypDashboard> {
       children: [pageContent],
     );
   }
+
+  Widget _insightsContent() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      HypReadingInsights(
+        works: _works,
+        sessions: widget.readingSessions,
+        settings: widget.readerSettings,
+        onSaveSettings: widget.onSaveReaderSettings,
+        onClearHistory: widget.onClearReadingHistory,
+        onOpenWork: (work) {
+          if (_offlineKeys.contains(work.key)) {
+            widget.onOpenGallery(work);
+          } else {
+            widget.onReadOnline(work);
+          }
+        },
+      ),
+      const SizedBox(height: 16),
+      _fullPage('즐겨찾기', '기존에 즐겨찾기한 작품을 그대로 확인해.',
+          Icons.favorite_rounded, _favorites),
+    ],
+  );
 
   Widget _homeContent() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
