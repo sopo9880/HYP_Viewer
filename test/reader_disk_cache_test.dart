@@ -36,6 +36,27 @@ void main() {
     expect(await parent.list().toList(), isEmpty);
   });
 
+  test('manual retry purges only the failed page, preserving good pages',
+      () async {
+    final parent = await Directory.systemTemp.createTemp('hyp-retry-test-');
+    addTearDown(() => parent.delete(recursive: true));
+    final source = _Pages();
+    final cache = GalleryDiskCache(source, parent: parent);
+    try {
+      expect(await cache.loadPage(0), [1, 2, 3]);
+      expect(await cache.loadPage(1), [2, 2, 3]);
+      expect(source.calls, 2);
+      await cache.invalidate(0);
+      expect(await cache.loadPage(0), [1, 2, 3]);
+      expect(source.calls, 3);
+      expect(await cache.loadPage(1), [2, 2, 3]);
+      expect(source.calls, 3,
+          reason: 'Retrying a corrupt page must not clear valid page caches');
+    } finally {
+      await cache.dispose();
+    }
+  });
+
   test('small disk budget safely refuses further full-cache writes',
       () async {
     final parent = await Directory.systemTemp.createTemp('hyp-limit-test-');
