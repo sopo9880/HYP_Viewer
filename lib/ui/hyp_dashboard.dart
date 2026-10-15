@@ -59,6 +59,8 @@ extension HypPageInfo on HypPage {
 /// YouTube, CBZ and updater services instead of imitating them with mock data.
 class HypDashboard extends StatefulWidget {
   final LibraryBackup library;
+  final String? editionLookupId;
+  final int editionLookupEpoch;
   final List<ReadingSession> readingSessions;
   final Future<void> Function() onClearReadingHistory;
   final GalleryStore galleryStore;
@@ -146,6 +148,8 @@ class HypDashboard extends StatefulWidget {
   const HypDashboard({
     super.key,
     required this.library,
+    this.editionLookupId,
+    this.editionLookupEpoch = 0,
     required this.readingSessions,
     required this.onClearReadingHistory,
     required this.galleryStore,
@@ -401,6 +405,16 @@ class _HypDashboardState extends State<HypDashboard> {
     if (oldWidget.libraryNavigationEpoch != widget.libraryNavigationEpoch) {
       _page = HypPage.library;
       _search.clear();
+    }
+    if (oldWidget.editionLookupEpoch != widget.editionLookupEpoch &&
+        widget.editionLookupId != null) {
+      final id = widget.editionLookupId!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final match = widget.library.works
+            .where((entry) => entry.workId == id).firstOrNull;
+        if (match != null) _findOtherEditions(match);
+      });
     }
     _selectedWorkIds.removeWhere((id) =>
         !widget.library.works.any((w) => w.workId == id));
