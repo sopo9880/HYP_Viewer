@@ -326,5 +326,25 @@
   "legacyCompletionApply": "선택한 작품 완독 처리",
   "legacyCompletionEmpty": "검토할 완독 후보가 없어.",
   "youtubeChooseVideos": "YouTube 목록에서 영상 선택",
-  "youtubeAnalyzeSelected": "선택한 영상 분석 (최대 5개)"
+  "youtubeAnalyzeSelected": "선택한 영상 분석 (최대 5개)",
+  "searchSeries": "시리즈",
+  "searchTag": "일반 태그",
+  "searchAdvanced": "직접 지정",
+  "searchAllFields": "분야 전체",
+  "searchLocalCount": "내 서재 · {count}개 결과",
+  "@searchLocalCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchResultMatches": "일치 항목: {fields}",
+  "@searchResultMatches": {
+    "placeholders": {
+      "fields": {
+        "type": "String"
+      }
+    }
+  }
 }
