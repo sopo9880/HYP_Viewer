@@ -563,5 +563,6 @@
       }
     }
   },
-  "onlineSafeLink": "When saved, verified editions can join the existing stack."
+  "onlineSafeLink": "When saved, verified editions can join the existing stack.",
+  "youtubeCommentsPartial": "Only some public comments were collected. Paste any missing comment text manually."
 }
