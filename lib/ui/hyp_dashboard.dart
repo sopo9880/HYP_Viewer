@@ -25,6 +25,7 @@ import 'candidate_editor.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
 import '../core/work_editions.dart';
+import '../core/title_alias_index.dart';
 import '../core/local_search.dart';
 import 'reader_navigation_focus.dart';
 import '../core/cover_similarity.dart';
@@ -254,6 +255,8 @@ class _HypDashboardState extends State<HypDashboard> {
   int _remoteTotal = 0;
   int _remotePage = 0;
   bool _remoteHasMore = false;
+  int _remoteProgressDone = 0;
+  int _remoteProgressTotal = 0;
   Map<String, int> _remoteFieldTotals = const {};
   Map<String, List<String>> _remoteFieldMatches = const {};
   String _remoteFieldFilter = '';
@@ -471,6 +474,8 @@ class _HypDashboardState extends State<HypDashboard> {
     _remotePage = 0;
     _remoteTotal = 0;
     _remoteHasMore = false;
+    _remoteProgressDone = 0;
+    _remoteProgressTotal = 0;
     _remoteFieldTotals = const {};
     _remoteFieldMatches = const {};
     _remoteFieldFilter = '';
@@ -487,8 +492,27 @@ class _HypDashboardState extends State<HypDashboard> {
   Future<void> _fetchOnlineSearch({required int epoch, bool next = false}) async {
     if (!mounted || _searchScope == 'local' || _search.text.trim().isEmpty) return;
     final term = _search.text.trim();
+    // A title already known in the library can have verified translations
+    // under a completely different name. Query only synonyms of matching
+    // works; never upload the entire private library or reading history.
+    final aliases = TitleAliasIndex.fromLibrary(widget.library.works);
+    final otherNames = <String>[];
+    if (!RegExp(r'^[a-z_]+:', caseSensitive: false).hasMatch(term)) {
+      for (final work in widget.library.works) {
+        if (!LocalWorkSearch.matches(work, term)) continue;
+        for (final alias in aliases.aliasesFor(work)) {
+          if (alias.toLowerCase() != term.toLowerCase() &&
+              alias.length <= 100 && !otherNames.contains(alias)) {
+            otherNames.add(alias);
+          }
+          if (otherNames.length >= 4) break;
+        }
+        if (otherNames.length >= 4) break;
+      }
+    }
+    final expanded = [term, ...otherNames].join(' | ');
     final page = next ? _remotePage + 1 : 1;
-    final key = [term.toLowerCase(), _searchLanguage, page].join('|');
+    final key = [expanded.toLowerCase(), _searchLanguage, page].join('|');
     final cached = _remoteCache[key];
     if (cached != null && DateTime.now().difference(cached.$1) <
         const Duration(minutes: 10)) {
@@ -497,13 +521,23 @@ class _HypDashboardState extends State<HypDashboard> {
     }
     setState(() {
       _remoteBusy = true;
+      _remoteProgressDone = 0;
+      _remoteProgressTotal = 0;
       _remoteError = null;
     });
     final client = http.Client();
     try {
       final service = OnlineWorkSearch(client);
-      final result = await service.searchUnified(term, page: page,
-          language: _searchLanguage);
+      final result = await service.searchUnified(expanded, page: page,
+          language: _searchLanguage,
+          onProgress: (done, total) {
+            if (mounted && epoch == _searchEpoch) {
+              setState(() {
+                _remoteProgressDone = done;
+                _remoteProgressTotal = total;
+              });
+            }
+          });
       if (!mounted || epoch != _searchEpoch) return;
       _remoteCache[key] = (DateTime.now(), result);
       if (_remoteCache.length > 60) _remoteCache.clear();
@@ -521,9 +555,9 @@ class _HypDashboardState extends State<HypDashboard> {
   void _useOnlineResults(OnlineSearchResult result, int epoch,
       {required bool next}) {
     if (!mounted || epoch != _searchEpoch) return;
+    final previousCount = _remoteResults.length;
     setState(() {
       _remotePage = result.page;
-      _remoteHasMore = result.hasNextPage;
       _remoteFieldTotals = result.fieldTotals;
       _remoteFieldMatches = <String, List<String>>{
         if (next) ..._remoteFieldMatches,
@@ -539,6 +573,10 @@ class _HypDashboardState extends State<HypDashboard> {
       _remoteResults = [...next ? _remoteResults : <OnlineSearchWork>[],
         ...result.works].where((work) => seen.add(work.workId)).toList();
       _remoteTotal = _remoteResults.length;
+      // Avoid an endless Load More button when a mirror repeats the same
+      // result page or a page contains only already collected IDs.
+      _remoteHasMore = result.hasNextPage &&
+          (!next || _remoteTotal > previousCount) && result.page < 100;
     });
   }
 
@@ -1563,7 +1601,8 @@ class _HypDashboardState extends State<HypDashboard> {
     final remote = <OnlineSearchWork>[];
     final errors = <String>[];
     final client = http.Client();
-    final queries = WorkEditions.searchQueries(work, query);
+    final queries = TitleAliasIndex.fromLibrary(widget.library.works)
+        .queriesFor(work, entered: query, limit: 14);
     try {
       final batches = <OnlineSearchResult>[];
       final searcher = OnlineWorkSearch(client);
@@ -1576,11 +1615,19 @@ class _HypDashboardState extends State<HypDashboard> {
           try {
             final first = await searcher.search(term);
             pages.add(first);
+            // Up to three pages per query, with a shared capped remote
+            // request budget. Full scans would exhaust community mirrors.
             if (first.works.isNotEmpty && first.total > first.works.length) {
-              try {
-                pages.add(await searcher.search(term, page: 2));
-              } catch (error) {
-                errors.add(term + ' page 2: ' + error.toString());
+              for (var nextPage = 2; nextPage <= 3; nextPage++) {
+                try {
+                  final next = await searcher.search(term, page: nextPage);
+                  if (next.works.isEmpty) break;
+                  pages.add(next);
+                  if (next.works.length < 25) break;
+                } catch (error) {
+                  errors.add('$term page $nextPage: $error');
+                  break;
+                }
               }
             }
           } catch (error) {
@@ -1614,8 +1661,8 @@ class _HypDashboardState extends State<HypDashboard> {
       final right = WorkGrouping.episodeNumber(entry);
       if (left != null && right != null && left != right) continue;
       if (entry.sourceLanguage.isNotEmpty &&
-          entry.sourceLanguage.toLowerCase() ==
-              work.sourceLanguage.toLowerCase()) continue;
+          WorkEditions.canonicalLanguage(entry.sourceLanguage) ==
+              WorkEditions.canonicalLanguage(work.sourceLanguage)) continue;
       if (match.score < 45 &&
           !entry.title.toLowerCase().contains(query.toLowerCase())) continue;
       items.add((id: entry.workId, title: entry.title,
@@ -1625,7 +1672,9 @@ class _HypDashboardState extends State<HypDashboard> {
     for (final entry in remote) {
       final candidate = WorkEntry.create(
           workId: entry.workId, title: entry.title,
-          author: entry.artists.join(', ')).copyWith(
+          author: entry.artists.join(', '),
+          titleAliases: entry.titleAliases,
+        ).copyWith(
             sourceLanguage: entry.language,
             sourceSeries: entry.series.join(', '),
             sourceGroup: entry.groups.join(', '),
@@ -1634,8 +1683,8 @@ class _HypDashboardState extends State<HypDashboard> {
       final right = WorkGrouping.episodeNumber(candidate);
       if (left != null && right != null && left != right) continue;
       if (candidate.sourceLanguage.isNotEmpty &&
-          candidate.sourceLanguage.toLowerCase() ==
-              work.sourceLanguage.toLowerCase()) continue;
+          WorkEditions.canonicalLanguage(candidate.sourceLanguage) ==
+              WorkEditions.canonicalLanguage(work.sourceLanguage)) continue;
       items.add((id: entry.workId, title: entry.title,
           language: entry.language, inLibrary: false, remote: entry,
           match: WorkEditions.compare(work, candidate)));
@@ -1675,11 +1724,11 @@ class _HypDashboardState extends State<HypDashboard> {
         compareClient.close();
       }
     }
+    EditionMatch evaluated(EditionMatch match, String id) =>
+        WorkEditions.withCoverEvidence(match, coverScores[id]);
     items.sort((a, b) {
-      final coverA = coverScores[a.id] ?? 0;
-      final coverB = coverScores[b.id] ?? 0;
-      final score = (b.match.score + coverB * 8).compareTo(
-          a.match.score + coverA * 8);
+      final score = evaluated(b.match, b.id).score.compareTo(
+          evaluated(a.match, a.id).score);
       if (score != 0) return score;
       return a.inLibrary == b.inLibrary ? a.id.compareTo(b.id) :
           a.inLibrary ? -1 : 1;
@@ -1707,10 +1756,10 @@ class _HypDashboardState extends State<HypDashboard> {
                     overflow: TextOverflow.ellipsis),
                 subtitle: Text('#' + item.id + ' · ' +
                     WorkEditions.languageName(item.language) + ' · ' +
-                    (item.match.autoLink ? labels.editionLikelyMatch :
-                        labels.editionManualReview) +
-                    ' · ' + item.match.score.toString() + '/100' +
-                    ' · ' + item.match.reason +
+                    (evaluated(item.match, item.id).autoLink
+                        ? labels.editionLikelyMatch : labels.editionManualReview) +
+                    ' · ' + evaluated(item.match, item.id).score.toString() + '/100' +
+                    ' · ' + evaluated(item.match, item.id).reason +
                     (coverScores[item.id] == null ? '' :
                         ' · ' + labels.editionCoverPercent(
                             (coverScores[item.id]! * 100).round()))),
@@ -2259,6 +2308,17 @@ class _HypDashboardState extends State<HypDashboard> {
     };
   }
 
+  String _savedOnlineEditionHint(List<OnlineSearchWork> editions) {
+    for (final online in editions) {
+      final match = OnlineEditionGroups.savedAnchor(
+          online, widget.library.works);
+      if (match != null) {
+        return AppLocalizations.of(context)!.onlineLinkedShelf(match.title);
+      }
+    }
+    return '';
+  }
+
   Widget _searchContent() {
     final existingIds = widget.library.works.map((w) => w.workId).toSet();
     final online = _remoteResults.where((w) =>
@@ -2349,9 +2409,20 @@ class _HypDashboardState extends State<HypDashboard> {
               ),
           ]),
         if (_remoteWarnings.isNotEmpty)
-          const HypText('일부 분야 검색이 실패했어. 조회된 결과만 표시해.'),
+          ExpansionTile(
+            title: Text(AppLocalizations.of(context)!.searchPartialSources),
+            children: [
+              for (final warning in _remoteWarnings.take(10))
+                ListTile(dense: true, title: SelectableText(warning)),
+            ],
+          ),
         const SizedBox(height: 8),
-        if (_remoteBusy) const LinearProgressIndicator(),
+        if (_remoteBusy) ...[
+          const LinearProgressIndicator(),
+          if (_remoteProgressTotal > 0)
+            Text(AppLocalizations.of(context)!.searchProgress(
+                _remoteProgressDone, _remoteProgressTotal)),
+        ],
         if (_remoteError != null) ...[
           HypText('온라인 검색에 실패했어. 내 서재 검색은 정상 동작해.\n' +
               _remoteError!, style: const TextStyle(color: Colors.orangeAccent)),
@@ -2375,12 +2446,16 @@ class _HypDashboardState extends State<HypDashboard> {
                     AppLocalizations.of(context)!.editionCount(group.length),
                     group.map((w) => WorkEditions.languageName(w.language))
                         .toSet().join(' · '),
+                    if (_savedOnlineEditionHint(group).isNotEmpty)
+                      _savedOnlineEditionHint(group),
                   ].join(' · ')
                 : [
                     if (group.first.artists.isNotEmpty)
                       group.first.artists.join(', '),
                     if (group.first.language.isNotEmpty) group.first.language,
                     '#' + group.first.workId,
+                    if (_savedOnlineEditionHint(group).isNotEmpty)
+                      _savedOnlineEditionHint(group),
                     if ((_remoteFieldMatches[group.first.workId] ??
                          const <String>[]).isNotEmpty)
                       AppLocalizations.of(context)!.searchResultMatches(

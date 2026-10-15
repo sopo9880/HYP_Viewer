@@ -66,17 +66,32 @@ class YoutubePublicClient {
     if (token == null) {
       // Some watch pages only supply a comment token through the first next
       // request made with videoId.
-      batch = await _next(key, context, videoId: id);
-      _appendComments(batch, comments, seen);
-      token = _commentToken(batch);
+      try {
+        batch = await _next(key, context, videoId: id);
+        _appendComments(batch, comments, seen);
+        token = _commentToken(batch);
+      } catch (_) {
+        if (description.isEmpty) rethrow;
+        return YoutubeResults(title, description, comments,
+            mayBeIncomplete: true);
+      }
     }
 
     final visited = <String>{};
+    var interrupted = false;
     for (var attempt = 0; attempt < 3 && comments.length < 100; attempt++) {
       if (token == null || token.isEmpty || !visited.add(token)) break;
-      batch = await _next(key, context, continuation: token);
-      _appendComments(batch, comments, seen);
-      token = _commentToken(batch);
+      try {
+        batch = await _next(key, context, continuation: token);
+        _appendComments(batch, comments, seen);
+        token = _commentToken(batch);
+      } catch (_) {
+        // Do not discard already accessible public comments when another
+        // continuation page is unavailable. Report incompleteness instead.
+        if (comments.isEmpty && description.isEmpty) rethrow;
+        interrupted = true;
+        break;
+      }
     }
 
     if (comments.isEmpty && description.isEmpty) {
@@ -84,7 +99,11 @@ class YoutubePublicClient {
           '댓글이 비활성화됐거나 유튜브의 접근 제한/구조 변경일 수 있어. '
           '유튜브에서 댓글을 직접 복사해 입력해줘.');
     }
-    return YoutubeResults(title, description, comments);
+    return YoutubeResults(title, description, comments,
+        mayBeIncomplete: interrupted ||
+            (comments.isEmpty && description.isNotEmpty) ||
+            (token != null && token.isNotEmpty && !visited.contains(token)) ||
+            comments.length >= 100);
   }
 
   Future<Map<String, dynamic>> _next(

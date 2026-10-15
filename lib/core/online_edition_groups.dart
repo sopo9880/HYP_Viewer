@@ -10,11 +10,31 @@ abstract final class OnlineEditionGroups {
         workId: work.workId,
         title: work.title,
         author: work.artists.join(', '),
+        titleAliases: work.titleAliases,
       ).copyWith(
         sourceLanguage: work.language,
         sourceGroup: work.groups.join(', '),
         sourceSeries: work.series.join(', '),
       );
+
+  /// Find one unambiguous saved logical work for an online edition.
+  /// An uncertain candidate is never automatically stored or merged.
+  static WorkEntry? savedAnchor(OnlineSearchWork remote,
+      Iterable<WorkEntry> library) {
+    final candidate = _candidate(remote).copyWith(
+        titleAliases: remote.titleAliases);
+    final grouped = <String, WorkEntry>{};
+    for (final local in library) {
+      if (local.workId == remote.workId) return local;
+      if (WorkEditions.canonicalLanguage(local.sourceLanguage) ==
+          WorkEditions.canonicalLanguage(remote.language)) continue;
+      if (!WorkEditions.compare(local, candidate).autoLink) continue;
+      grouped.putIfAbsent(WorkEditions.groupKey(local), () => local);
+    }
+    // Multiple unrelated saved chapter groups matched this metadata:
+    // leave the choice to the reader rather than silently selecting one.
+    return grouped.length == 1 ? grouped.values.single : null;
+  }
 
   static List<List<OnlineSearchWork>> cluster(
       Iterable<OnlineSearchWork> searchResults) {
@@ -24,13 +44,13 @@ abstract final class OnlineEditionGroups {
       if (!seen.add(item.workId)) continue;
       final candidate = _candidate(item);
       List<OnlineSearchWork>? target;
-      final code = item.language.trim().toLowerCase();
+      final code = WorkEditions.canonicalLanguage(item.language);
       if (code.isNotEmpty) {
         for (final group in groups) {
           // Every edition must agree with EVERY member, not just the first;
           // this avoids accidentally grouping a chain of different chapters.
           if (group.every((other) {
-            final otherCode = other.language.trim().toLowerCase();
+            final otherCode = WorkEditions.canonicalLanguage(other.language);
             return otherCode.isNotEmpty && otherCode != code &&
                 WorkEditions.compare(candidate, _candidate(other)).autoLink;
           })) {

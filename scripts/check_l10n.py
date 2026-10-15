@@ -47,6 +47,13 @@ def check():
         "searchLanguageChip", "settingsTapZonesNote", "settingsHeroUploadNote",
         "workInfoHeader", "workInfoProgress", "workInfoLanguage",
         "androidSecurityNotice", "tooltipSearchLanguage",
+        "editionAliasTitles", "editionAliasHelp",
+        "workSourceHistory", "workSourcesHelp", "workSourceInvalid",
+        "workSourceCount", "onlineLinkedShelf", "searchProgress",
+        "youtubeMoreVideos", "youtubeCommentsPartial",
+        "readerFailedPage", "readerTooltipPrevious", "readerTooltipNext",
+        "readingStatsSummary", "readingActivityDay",
+        "readingSaveReportFailed",
     }
     if required - reference:
         raise ValueError(f"Missing core UI localization keys: {sorted(required - reference)}")
@@ -95,7 +102,7 @@ def check():
     for base in ("origin/main", "main"):
         result = subprocess.run(
             ["git", "diff", "--unified=0", f"{base}...HEAD", "--", "lib"],
-            capture_output=True, text=True)
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
         if result.returncode == 0:
             diff = result.stdout
             break

@@ -190,8 +190,8 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         children: [
           for (final day in days) Expanded(
             child: Tooltip(
-              message: _date(day) + ': ' +
-                  (daily[_date(day)] ?? 0).toString() + '회',
+              message: AppLocalizations.of(context)!.readingActivityDay(
+                  _date(day), daily[_date(day)] ?? 0),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 2),
                 child: Container(
@@ -221,7 +221,8 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
               .subtract(Duration(days: i));
           final count = daily[_date(day)] ?? 0;
           return Tooltip(
-            message: _date(day) + ' · ' + count.toString() + '회',
+            message: AppLocalizations.of(context)!.readingHeatmapDay(
+                _date(day), count),
             child: SizedBox(width: 13, height: 13, child: ColoredBox(
               color: count == 0 ? HypColors.raised
                 : count == 1 ? const Color(0xFF4D467B)
@@ -254,14 +255,14 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
     try {
       final boundary = _reportKey.currentContext?.findRenderObject();
       if (boundary is! RenderRepaintBoundary) {
-        throw StateError('리포트 화면을 찾지 못했어.');
+        throw StateError(AppLocalizations.of(context)!.readingSaveReportMissing);
       }
       final image = await boundary.toImage(pixelRatio: 2);
       final png = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (png == null) throw StateError('PNG로 저장할 수 없어.');
+      if (png == null) throw StateError(AppLocalizations.of(context)!.readingSaveReportBytes);
       final bytes = Uint8List.view(png.buffer, png.offsetInBytes, png.lengthInBytes);
       await FilePicker.platform.saveFile(
-        dialogTitle: '독서 리포트 PNG 저장',
+        dialogTitle: AppLocalizations.of(context)!.readingSaveReportDialog,
         fileName: 'HYP_Reading_Report.png',
         type: FileType.custom,
         allowedExtensions: ['png'],
@@ -270,7 +271,8 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: HypText('리포트 이미지 저장 실패: ' + error.toString())));
+        SnackBar(content: Text(
+          AppLocalizations.of(context)!.readingSaveReportFailed(error.toString()))));
     } finally {
       if (mounted) setState(() => _savingReport = false);
     }
@@ -483,7 +485,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               HypText(reportTitle, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 6),
-              HypText('HYP Viewer · 기기 안에 저장된 실제 열람 세션 기준'),
+              Text(language.readingStatsDevice),
               const SizedBox(height: 8),
               _bars(periodTotals, count: 12),
               Text(language.insightSessionPeriod(_period == 'all'
@@ -504,7 +506,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(language.insightCollectActivity),
-          subtitle: const HypText('활성 시간·날짜·페이지 정보를 기기 안에만 보관해.'),
+          subtitle: Text(language.readingStatsCollect),
           value: widget.settings.analyticsEnabled,
           onChanged: (enabled) => widget.onSaveSettings(
               widget.settings.copyWith(analyticsEnabled: enabled)),
@@ -514,13 +516,13 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.delete_outline),
           title: Text(language.insightClearActivity),
-          subtitle: const HypText('서재·완독 표시·기존 열람 횟수는 유지돼.'),
+          subtitle: Text(language.readingStatsEraseHint),
           onTap: () async {
             final approved = await showDialog<bool>(
               context: context,
               builder: (ctx) => AlertDialog(
                 title: const HypText('독서 활동 기록 삭제'),
-                content: const HypText('기기에 저장된 날짜별 독서 세션을 전부 삭제할까? 이 작업은 되돌릴 수 없어.'),
+                content: Text(language.readingStatsEraseConfirm),
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(ctx, false),
                       child: const HypText('취소')),
@@ -534,15 +536,13 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         ),
         TextButton.icon(
           onPressed: () => Clipboard.setData(ClipboardData(
-              text: '내 서재 ' + works.length.toString() +
-                '개 · 완독 ' + completed.toString() +
-                '개 · 누적 열람 ' + totalOpens.toString() +
-                '회 · 새 독서 세션 ' + sessions.length.toString() + '회')),
+              text: language.readingStatsSummary(
+                  works.length, completed, totalOpens, sessions.length))),
           icon: const Icon(Icons.copy),
           label: Text(language.insightCopySummary),
         ),
-        const HypText('앱의 JSON 백업에서 서재와 활동 기록을 함께 내보낼 수 있어. 다른 분석 서버로 열람 기록을 전송하지 않아.',
-          style: TextStyle(fontSize: 11, color: HypColors.muted)),
+        Text(language.readingStatsPrivacy,
+          style: const TextStyle(fontSize: 11, color: HypColors.muted)),
       ]), icon: Icons.tune),
     ]);
   }

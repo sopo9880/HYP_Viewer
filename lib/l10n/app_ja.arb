@@ -476,5 +476,135 @@
         "type": "int"
       }
     }
+  },
+  "editionAliasTitles": "原題・翻訳タイトルの別名（1行に1件）",
+  "editionAliasHelp": "確認済みのタイトルのみ入力してください。未確認の翻訳を自動統合しません。",
+  "workSourceHistory": "作品の発見元URL（1行に1件）",
+  "workSourcesHelp": "HTTPSリンクを最大32件保持します。読書履歴は維持されます。",
+  "editionAliasCount": "確認済みタイトル・別名 {count}件",
+  "@editionAliasCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "editionKnownEvidence": "本棚で紐付けられた別言語版のタイトルも検索します。",
+  "workSourceCount": "確認された発見元 {count}件",
+  "@workSourceCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "workSourceOpen": "発見元を表示",
+  "workSourceInvalid": "リンクが無効です。公開HTTPSアドレスのみ入力できます。",
+  "searchProgress": "検索 {current}/{total}項目完了",
+  "@searchProgress": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "searchPartialSources": "一部の検索項目に失敗しました。件数は全結果を表さない場合があります。",
+  "sourceIncomplete": "公開された投稿全文を取得できませんでした。欠けた内容を手動で貼り付けてください。",
+  "readerRetrying": "画像サーバーに再接続しています…",
+  "readerFailedPage": "{page}ページを読み込めませんでした。",
+  "@readerFailedPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "readerFailureHttp": "画像サーバーが不安定です。少し待って再試行するかWebリーダーで開いてください。",
+  "readingStatsSummary": "本棚 {works}作品・読了 {completed}作品・累計閲覧 {opens}回・新規セッション {sessions}件",
+  "@readingStatsSummary": {
+    "placeholders": {
+      "works": {
+        "type": "int"
+      },
+      "completed": {
+        "type": "int"
+      },
+      "opens": {
+        "type": "int"
+      },
+      "sessions": {
+        "type": "int"
+      }
+    }
+  },
+  "readingStatsPrivacy": "本棚と読書履歴はJSONでまとめて書き出せます。外部の分析サーバーへ送信しません。",
+  "readingStatsDevice": "HYP Viewer・端末に保存された読書セッションに基づきます",
+  "readingStatsCollect": "閲覧時間・日付・ページ番号はこの端末にのみ保存されます。",
+  "readingStatsEraseHint": "本棚・読了状態・累計閲覧数は維持されます。",
+  "readingStatsEraseConfirm": "端末に保存された日付別読書セッションをすべて削除しますか？元に戻せません。",
+  "youtubeMoreVideos": "次の動画一覧を読み込む",
+  "youtubeMoreUnavailable": "追加動画を取得できません。表示中の動画から選ぶかURLを直接入力してください。",
+  "youtubeVideosLoaded": "公開動画 {count}件を取得",
+  "@youtubeVideosLoaded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "onlineLinkedShelf": "本棚の「{title}」と同じ作品の候補",
+  "@onlineLinkedShelf": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "onlineSafeLink": "保存時に確認済みの言語版グループへの追加を試みます。",
+  "youtubeCommentsPartial": "公開コメントの一部のみ取得しました。欠けたコメントは手動で貼り付けてください。",
+  "readerTooltipPrevious": "前のページ（PageUp）",
+  "readerTooltipNext": "次のページ（PageDown / Space）",
+  "readerTooltipSaveOffline": "オンライン画像をCBZとして保存",
+  "readerTooltipSetCover": "現在のページを本棚の表紙に設定",
+  "readerTooltipHideTools": "ページ操作を隠す",
+  "readerTooltipShowTools": "ページ操作を表示",
+  "readerTooltipOpenWeb": "現在のページをWebリーダーで開く",
+  "readerTooltipHorizontal": "横方向に切り替え",
+  "readerTooltipVertical": "縦方向に切り替え",
+  "readingActivityDay": "{date}: {count}回",
+  "@readingActivityDay": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "readingHeatmapDay": "{date}・{count}回",
+  "@readingHeatmapDay": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "readingSaveReportDialog": "読書レポートPNGを保存",
+  "readingSaveReportMissing": "レポート画面が見つかりません。",
+  "readingSaveReportBytes": "PNGを保存できません。",
+  "readingSaveReportFailed": "レポート画像の保存に失敗: {error}",
+  "@readingSaveReportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   }
 }

@@ -157,6 +157,30 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
+          Changes in v0.4.3:
+          - Store verified multilingual title aliases and multiple HTTPS
+            discovery URLs per work. Preserve original titles, read positions,
+            favorites, completion, local covers and CBZ identifiers.
+          - Expand unified and edition-specific search through known translated
+            titles, artist, circle, series and tags, showing progress,
+            relevance, individual field failures and bounded pagination.
+          - Display safe online-to-shelf language-edition associations and
+            review metadata with bounded cover-similarity evidence.
+            Similar covers alone never authorize an automatic merger.
+          - Browse more public YouTube playlist/channel videos on demand;
+            report when comment content is incomplete or inaccessible and
+            keep accessible public descriptions.
+          - Retry only a failed/corrupt reader page without removing valid
+            page caches; preserve existing transient-HTTP backoff behavior.
+          - Improve Korean/English/Japanese translations across reader
+            controls, source editor, work information, and reading reports.
+          - Add regression cases for translated title discovery, source URL
+            editing/JSON recovery, 1,000-work library search, safe edition
+            unlinking, image cache eviction and YouTube continuations.
+          - Remote metadata providers and public social-network content may
+            be unavailable or incomplete; the application cannot bypass
+            authentication requirements.
+
           Changes in v0.4.1:
           - Safe HTTP-to-HTTPS upgrades for trusted YouTube, Instagram and
             Hitomi links, including native Android community-post shares.

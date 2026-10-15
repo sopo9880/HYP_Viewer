@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 class OnlineSearchWork {
   final String workId;
   final String title;
+  /// Publicly supplied translated titles (never machine-fabricated).
+  final List<String> titleAliases;
   final List<String> artists;
   final List<String> groups;
   final List<String> series;
@@ -18,6 +20,7 @@ class OnlineSearchWork {
   const OnlineSearchWork({
     required this.workId,
     required this.title,
+    this.titleAliases = const [],
     this.artists = const [],
     this.groups = const [],
     this.series = const [],
@@ -31,6 +34,23 @@ class OnlineSearchWork {
     List<String> names(String key) => data[key] is List
         ? (data[key] as List).whereType<String>().take(60).toList() : const [];
     String string(String key) => data[key] is String ? data[key] as String : '';
+    final aliases = <String>{};
+    for (final key in ['aliases', 'titles', 'alternative_titles']) {
+      final value = data[key];
+      if (value is List) {
+        aliases.addAll(value.whereType<String>().take(20));
+      } else if (value is Map) {
+        aliases.addAll(value.values.whereType<String>().take(20));
+      }
+    }
+    for (final field in [
+      'title_english', 'title_japanese', 'title_korean',
+      'title_romanized', 'original_title',
+    ]) {
+      if (data[field] is String) aliases.add(data[field] as String);
+    }
+    aliases.removeWhere((value) => value.trim().length < 2 ||
+        value.length > 180);
     final id = data['id'];
     final code = id is int ? id.toString() :
         id is String ? id : '';
@@ -40,6 +60,7 @@ class OnlineSearchWork {
     return OnlineSearchWork(
       workId: code,
       title: string('title').isEmpty ? '작품 ' + code : string('title'),
+      titleAliases: aliases.take(24).toList(),
       artists: names('artists'), groups: names('groups'),
       series: names('series'), tags: names('tags'),
       language: string('language'),
@@ -102,7 +123,7 @@ class OnlineWorkSearch {
     if (advanced) return [('advanced', input)];
     final alternatives = input.split('|')
         .map((part) => part.trim()).where((part) => part.isNotEmpty)
-        .take(3).toList();
+        .take(5).toList();
     final planned = <(String, String)>[];
     void add(String field, String value) {
       if (value.isNotEmpty && value.length <= 150 &&
@@ -143,6 +164,7 @@ class OnlineWorkSearch {
   Future<OnlineSearchResult> searchUnified(String raw, {
     int page = 1,
     String language = '',
+    void Function(int completed, int total)? onProgress,
   }) async {
     final queries = planQueries(raw);
     final unique = <String, OnlineSearchWork>{};
@@ -151,6 +173,7 @@ class OnlineWorkSearch {
     final warnings = <String>[];
     var successes = 0;
     var hasMore = false;
+    var completed = 0;
     // Keep concurrent requests bounded so a partially down mirror never
     // floods either server when the user types a short common word.
     for (var i = 0; i < queries.length; i += 3) {
@@ -173,6 +196,9 @@ class OnlineWorkSearch {
           }
         } catch (e) {
           warnings.add(entry.$1 + ': ' + e.toString());
+        } finally {
+          completed++;
+          onProgress?.call(completed, queries.length);
         }
       }));
     }
@@ -180,7 +206,20 @@ class OnlineWorkSearch {
       throw StateError('모든 검색 서버 요청이 실패했어: ' +
           warnings.take(2).join(' / '));
     }
-    return OnlineSearchResult(unique.values.toList(), unique.length, page,
+    final ordered = unique.values.toList();
+    const weights = {
+      'general': 12, 'advanced': 12, 'artist': 10, 'series': 8,
+      'group': 7, 'tag': 4, 'female': 4, 'male': 4,
+    };
+    int score(OnlineSearchWork work) =>
+        (matched[work.workId] ?? const <String>{}).fold<int>(
+            0, (sum, field) => sum + (weights[field] ?? 1));
+    ordered.sort((a, b) {
+      final relevance = score(b).compareTo(score(a));
+      if (relevance != 0) return relevance;
+      return a.workId.compareTo(b.workId);
+    });
+    return OnlineSearchResult(ordered, unique.length, page,
         fieldTotals: counts,
         matchedFields: matched.map((id, fields) =>
             MapEntry(id, fields.toList())),

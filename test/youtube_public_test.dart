@@ -192,6 +192,52 @@ void main() {
     client.close();
   });
 
+  test('reports partial coverage when more public comment pages remain',
+      () async {
+    var page = 0;
+    final client = MockClient((request) async {
+      if (request.method == 'GET') {
+        return watchResponse(html(initial: section('comments-0')));
+      }
+      final token = (jsonDecode(request.body) as Map)['continuation'];
+      expect(token, 'comments-$page');
+      page++;
+      return http.Response.bytes(utf8.encode(jsonEncode({
+        'onResponseReceivedEndpoints': [
+          {'appendContinuationItemsAction': {'continuationItems': [
+            {'commentRenderer': {'contentText': {
+              'simpleText': '작품 번호 ${300000 + page}'
+            }}},
+            {'continuationItemRenderer': {'continuationEndpoint': {
+              'continuationCommand': {'token': 'comments-$page'}
+            }}},
+          ]}}
+        ]
+      })), 200, headers: {'content-type':'application/json; charset=utf-8'});
+    });
+    final result = await YoutubePublicClient(client).fetch(videoId);
+    expect(page, 3);
+    expect(result.comments.length, 3);
+    expect(result.mayBeIncomplete, true);
+    client.close();
+  });
+
+  test('preserves public description if YouTube comments are blocked',
+      () async {
+    final client = MockClient((request) async {
+      if (request.method == 'GET') {
+        return watchResponse(html(initial: section('comments-one'),
+            description: '설명에 포함된 작품 번호 2711759'));
+      }
+      return http.Response('access denied', 403);
+    });
+    final result = await YoutubePublicClient(client).fetch(videoId);
+    expect(result.description, contains('2711759'));
+    expect(result.comments, isEmpty);
+    expect(result.mayBeIncomplete, true);
+    client.close();
+  });
+
   test('clearly fails when public web configuration is unavailable', () async {
     final client = MockClient((request) async =>
         watchResponse(html(initial: section('one'), withConfig: false)));

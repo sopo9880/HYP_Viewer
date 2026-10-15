@@ -64,6 +64,16 @@ void main() {
         ['111111','222222'],'series_2','bad'),throwsStateError);
   });
 
+  test('ISO and full language names cannot be linked as distinct editions', () {
+    final a = make('111111', 'ko');
+    final b = make('222222', 'korean');
+    final library = LibraryBackup(works: [a, b], collections: const []);
+    expect(() => WorkEditionService.link(
+      library, '111111', '222222'), throwsStateError);
+    final automatic = WorkEditionService.autoLink(library, ['222222']);
+    expect(automatic.works.every((w) => w.editionGroupId.isEmpty), true);
+  });
+
   test('manual unlink keeps independent reading records', () {
     final a=make('111111','japanese',page:16);
     final b=make('222222','english',page:4);

@@ -130,6 +130,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   List<NumberCandidate> candidates = [];
   final Map<String, CandidateVerification> _candidateCache = {};
   final Map<String, String> _candidateSourceUrls = {};
+  final Map<String, Set<String>> _candidateSourceEvidence = {};
   int finderClearEpoch = 0;
   late final Future<void> _settingsLoad;
   bool _updateDismissedThisLaunch = false;
@@ -482,6 +483,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           titleInput, authorInput]) { ctrl.clear(); }
       candidates = [];
       _candidateSourceUrls.clear();
+      _candidateSourceEvidence.clear();
       _candidateCache.clear();
       finderClearEpoch++;
       message = '';
@@ -538,46 +540,95 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<List<YoutubeCollectionItem>?> _chooseYoutubeCollection(
-      List<YoutubeCollectionItem> items) async {
-    if (items.isEmpty || !mounted) return null;
+      YoutubeCollectionReader reader, YoutubeCollectionPage first,
+      {required bool playlist}) async {
+    if (first.videos.isEmpty || !mounted) return null;
     final selected = <String>{};
+    final items = <YoutubeCollectionItem>[...first.videos];
+    var current = first;
+    var loadingMore = false;
+    String? nextError;
+    final seenTokens = <String>{};
+    Future<void> fetchNext(StateSetter refresh, BuildContext dialog) async {
+      if (!current.hasMore || loadingMore || items.length >= 300) return;
+      if (!seenTokens.add(current.continuation!)) return;
+      refresh(() { loadingMore = true; nextError = null; });
+      try {
+        final next = await reader.listNext(current, playlist: playlist);
+        if (!dialog.mounted) return;
+        refresh(() {
+          final known = items.map((e) => e.videoId).toSet();
+          items.addAll(next.videos.where((e) => known.add(e.videoId)));
+          current = next;
+          if (next.videos.isEmpty) current = YoutubeCollectionPage(items);
+        });
+      } catch (error) {
+        if (dialog.mounted) refresh(() {
+          nextError = error.toString();
+          // A failed page can be retried without repeating old results.
+          seenTokens.remove(current.continuation);
+        });
+      } finally {
+        if (dialog.mounted) refresh(() => loadingMore = false);
+      }
+    }
     return showDialog<List<YoutubeCollectionItem>>(
       context: context,
       builder: (dialog) => StatefulBuilder(
-        builder: (context, refresh) => AlertDialog(
-          title: Text(AppLocalizations.of(context)!.youtubeChooseVideos),
-          content: SizedBox(width: 550, height: 420,
-            child: ListView.builder(
-              itemCount: items.length,
-              itemBuilder: (_, index) {
-                final item = items[index];
-                return CheckboxListTile(
-                  dense: true,
-                  value: selected.contains(item.videoId),
-                  title: Text(item.title, maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
-                  subtitle: Text(item.videoId),
-                  onChanged: (value) => refresh(() {
-                    if (value == true && selected.length < 5) {
-                      selected.add(item.videoId);
-                    } else if (value != true) {
-                      selected.remove(item.videoId);
-                    }
-                  }),
-                );
-              },
-            )),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialog),
-                child: const HypText('취소')),
-            FilledButton(
-              onPressed: selected.isEmpty ? null : () => Navigator.pop(
-                dialog, items.where((item) =>
-                    selected.contains(item.videoId)).toList()),
-              child: Text(AppLocalizations.of(context)!.youtubeAnalyzeSelected),
+        builder: (context, refresh) {
+          final l = AppLocalizations.of(context)!;
+          return AlertDialog(
+            title: Text(l.youtubeChooseVideos),
+            content: SizedBox(width: 550, height: 440,
+              child: Column(children: [
+                Text(l.youtubeVideosLoaded(items.length)),
+                const SizedBox(height: 8),
+                Expanded(child: ListView.builder(
+                  itemCount: items.length,
+                  itemBuilder: (_, index) {
+                    final item = items[index];
+                    return CheckboxListTile(
+                      dense: true, value: selected.contains(item.videoId),
+                      title: Text(item.title, maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                      subtitle: Text(item.videoId),
+                      onChanged: (value) => refresh(() {
+                        if (value == true && selected.length < 5) {
+                          selected.add(item.videoId);
+                        } else if (value != true) {
+                          selected.remove(item.videoId);
+                        }
+                      }),
+                    );
+                  },
+                )),
+                if (nextError != null)
+                  Text(l.youtubeMoreUnavailable,
+                      style: const TextStyle(color: Colors.orangeAccent)),
+                if (current.hasMore && items.length < 300)
+                  TextButton.icon(
+                    onPressed: loadingMore ? null :
+                        () => fetchNext(refresh, dialog),
+                    icon: loadingMore
+                        ? const SizedBox(width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.expand_more),
+                    label: Text(l.youtubeMoreVideos),
+                  ),
+              ]),
             ),
-          ],
-        ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog),
+                  child: const HypText('취소')),
+              FilledButton(
+                onPressed: selected.isEmpty ? null : () => Navigator.pop(
+                  dialog, items.where((item) =>
+                      selected.contains(item.videoId)).toList()),
+                child: Text(l.youtubeAnalyzeSelected),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -597,7 +648,13 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final client = http.Client();
     final blocks = <String>[];
     final errors = <String>[];
+    final youtubePartialText = AppLocalizations.of(context)!.youtubeCommentsPartial;
     final mapped = <String, String>{};
+    final evidence = <String, Set<String>>{};
+    void remember(String id, String url) {
+      mapped.putIfAbsent(id, () => url);
+      evidence.putIfAbsent(id, () => <String>{}).add(url);
+    }
     try {
       final key = apiKeyInput.text.trim();
       for (final link in links) {
@@ -606,11 +663,13 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           if (link.kind == SourceKind.hitomiWork) {
             content = link.url;
           } else if (link.kind == SourceKind.youtubeCollection) {
-            final entries = await YoutubeCollectionReader(client).list(link);
-            if (entries.isEmpty) {
+            final collection = YoutubeCollectionReader(client);
+            final firstPage = await collection.listFirst(link);
+            if (firstPage.videos.isEmpty) {
               errors.add('YouTube 영상 목록을 읽지 못했어. 직접 영상 주소를 공유해줘.');
             } else {
-              final selected = await _chooseYoutubeCollection(entries);
+              final selected = await _chooseYoutubeCollection(
+                  collection, firstPage, playlist: link.uri.path == '/playlist');
               for (final video in selected ?? <YoutubeCollectionItem>[]) {
                 try {
                   final result = key.isEmpty
@@ -620,9 +679,12 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                       ...result.comments].where((part) =>
                           part.trim().isNotEmpty).join('\n\n');
                   blocks.add(text);
+                  if (result.mayBeIncomplete) {
+                    errors.add(video.videoId + ': ' + youtubePartialText);
+                  }
                   for (final candidate in NumberExtractor.extract(
                       text, source: video.url)) {
-                    mapped.putIfAbsent(candidate.code, () => video.url);
+                    remember(candidate.code, video.url);
                   }
                 } catch (error) {
                   errors.add(video.videoId + ': ' + error.toString());
@@ -635,6 +697,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                 : await YoutubeClient(client).fetch(link.videoId, key);
             content = [result.description, ...result.comments]
                 .where((value) => value.trim().isNotEmpty).join('\n\n');
+            if (result.mayBeIncomplete) {
+              errors.add(link.videoId + ': ' + youtubePartialText);
+            }
           } else if (link.canPreview) {
             final preview = await PublicSourcePreview(client).fetchDetailed(link);
             content = preview.text;
@@ -652,7 +717,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         blocks.add(content);
         for (final candidate in NumberExtractor.extract(
             content, source: link.url)) {
-          mapped.putIfAbsent(candidate.code, () => link.url);
+          remember(candidate.code, link.url);
         }
       }
       final shared = raw.replaceAll(RegExp(r'https?://\S+'), '').trim();
@@ -661,6 +726,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _candidateSourceUrls
         ..clear()
         ..addAll(mapped);
+      _candidateSourceEvidence
+        ..clear()
+        ..addAll(evidence);
       _analyze();
       if (errors.isNotEmpty) {
         _status('분석된 후보 ' + candidates.length.toString() + '개. ' +
@@ -695,11 +763,23 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   Future<void> _saveOnlineSearchWork(OnlineSearchWork result) async {
     await _commitLibrary((latest) {
-      if (latest.works.any((w) => w.workId == result.workId)) return latest;
+      if (latest.works.any((w) => w.workId == result.workId)) {
+        // A repeat search can teach us a confirmed original/translated
+        // title. Preserve the user's own title, reading position, covers
+        // and all pre-existing language-group relationships.
+        return LibraryBackup(
+          works: latest.works.map((work) => work.workId == result.workId
+              ? work.withEvidence(
+                  aliases: [result.title, ...result.titleAliases])
+              : work).toList(),
+          collections: latest.collections,
+        );
+      }
       final work = WorkEntry.create(
         workId: result.workId, title: result.title,
         author: result.artists.join(', '),
       ).copyWith(
+        titleAliases: result.titleAliases,
         tags: result.tags,
         sourceGroup: result.groups.join(', '),
         sourceSeries: result.series.join(', '),
@@ -797,6 +877,14 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           workId: code,
           videoId: mappedLink?.videoId ?? '',
           videoUrl: mappedLink?.url ?? '',
+          sourceUrls: [
+            ...?_candidateSourceEvidence[code],
+            if (mappedLink != null) mappedLink.url,
+          ],
+          titleAliases: [
+            ...title.split('|').skip(1),
+            ...?info?.titleAliases,
+          ],
           title: title,
           author: codes.length == 1 && authorInput.text.trim().isNotEmpty
               ? authorInput.text.trim() : (info?.author ?? ''),
@@ -889,6 +977,18 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final edited = current.copyWith(
       workId: draft.workId, title: draft.title,
       author: draft.author, originalComment: draft.originalComment,
+      titleAliases: draft.titleAliases,
+      sourceUrls: draft.sourceUrls,
+      // Keep the backward-compatible primary source in sync with the
+      // explicitly edited source list. Otherwise a removed legacy videoUrl
+      // would silently reappear when JSON backup is restored.
+      videoUrl: draft.sourceUrls.contains(current.videoUrl)
+          ? current.videoUrl
+          : draft.sourceUrls.isEmpty ? '' : draft.sourceUrls.first,
+      videoId: draft.sourceUrls.contains(current.videoUrl)
+          ? current.videoId
+          : draft.sourceUrls.isEmpty ? '' :
+              (ShortsLink.videoId(draft.sourceUrls.first) ?? ''),
       coverMode: resetCover
           ? (readerSettings.autoCoverEnabled ? 'auto' : 'preset')
           : current.coverMode,
@@ -939,7 +1039,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                 sourceSeries: info.series,
                 sourceGroup: info.group,
                 sourceDate: info.date,
-              );
+              ).withEvidence(aliases: info.titleAliases);
             }).toList(),
             collections: latest.collections,
           ));

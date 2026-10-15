@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hyp_viewer/core/gallery.dart';
 import 'package:hyp_viewer/core/reader_settings.dart';
 import 'package:hyp_viewer/core/work.dart';
+import 'package:hyp_viewer/l10n/app_localizations.dart';
 import 'package:hyp_viewer/ui/gallery_reader.dart';
 
 class _Pages implements GalleryPageSource {
@@ -29,11 +30,22 @@ class _Pages implements GalleryPageSource {
   }
 }
 
+
+Widget _localizedApp({required Widget home, ThemeData? theme, Key? key}) =>
+    MaterialApp(
+      key: key,
+      locale: const Locale('ko'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      theme: theme,
+      home: home,
+    );
+
 void main() {
   testWidgets('Space hides full UI and Space restores it', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1100, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(_localizedApp(
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759'),
         archive: _Pages(), diskCacheEnabled: false,
@@ -57,7 +69,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1100, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final completed = <int>[];
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(_localizedApp(
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759').copyWith(currentPage: 5),
         archive: _Pages(), diskCacheEnabled: false,
@@ -82,7 +94,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final rtl in [false, true]) {
       final pages = _Pages();
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(_localizedApp(
         key: ValueKey('direction-$rtl'),
         home: GalleryReader(
           key: ValueKey('tap-reader-$rtl'),
@@ -114,7 +126,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1100, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final pages = _Pages();
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(_localizedApp(
       theme: ThemeData.dark(),
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759').copyWith(currentPage: 2),
@@ -137,7 +149,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1120, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final changes = <bool>[];
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(_localizedApp(
       theme: ThemeData.dark(),
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759'),
@@ -170,7 +182,7 @@ void main() {
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1100, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(_localizedApp(
       theme: ThemeData.dark(),
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759'),
@@ -196,7 +208,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1200, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final pages = _Pages();
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(_localizedApp(
       theme: ThemeData.dark(),
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759'),

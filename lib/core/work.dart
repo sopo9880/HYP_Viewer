@@ -3,6 +3,10 @@ import 'dart:convert';
 class WorkEntry {
   final String videoId;
   final String videoUrl;
+  /// All validated public links that identified this work, not just the first.
+  final List<String> sourceUrls;
+  /// Explicit original/translated titles learned from metadata or user links.
+  final List<String> titleAliases;
   final String workId;
   final String title;
   final String author;
@@ -38,6 +42,8 @@ class WorkEntry {
   const WorkEntry({
     required this.videoId,
     required this.videoUrl,
+    this.sourceUrls = const [],
+    this.titleAliases = const [],
     required this.workId,
     required this.title,
     required this.author,
@@ -70,6 +76,8 @@ class WorkEntry {
     required String workId,
     String videoId = '',
     String videoUrl = '',
+    List<String> sourceUrls = const [],
+    List<String> titleAliases = const [],
     String title = '',
     String author = '',
     String originalComment = '',
@@ -77,6 +85,10 @@ class WorkEntry {
     return WorkEntry(
       videoId: videoId.trim(),
       videoUrl: videoUrl.trim(),
+      sourceUrls: _cleanSourceUrls([
+        ...sourceUrls, if (videoUrl.trim().isNotEmpty) videoUrl.trim(),
+      ]),
+      titleAliases: _cleanAliases(titleAliases),
       workId: workId.trim(),
       title: title.trim(),
       author: author.trim(),
@@ -90,15 +102,56 @@ class WorkEntry {
     );
   }
 
+  static List<String> _cleanSourceUrls(Iterable<String> values) {
+    final out = <String>{};
+    for (final raw in values) {
+      final uri = Uri.tryParse(raw.trim());
+      if (uri == null || uri.scheme != 'https' || uri.host.isEmpty ||
+          uri.userInfo.isNotEmpty || uri.hasPort || raw.length > 2048) {
+        continue;
+      }
+      out.add(uri.toString());
+      if (out.length >= 32) break;
+    }
+    return out.toList();
+  }
+
+  static List<String> _cleanAliases(Iterable<String> values) {
+    final out = <String>{};
+    for (final raw in values) {
+      for (final part in raw.split('|')) {
+        final clean = part.trim();
+        if (clean.length >= 2 && clean.length <= 180) out.add(clean);
+        if (out.length >= 24) break;
+      }
+      if (out.length >= 24) break;
+    }
+    return out.toList();
+  }
+
+  /// Combine aliases and source evidence without altering independent
+  /// completed status, reading position, local files or cover preferences.
+  WorkEntry withEvidence({
+    Iterable<String> aliases = const [],
+    Iterable<String> urls = const [],
+  }) => copyWith(
+    titleAliases: _cleanAliases([...titleAliases, ...aliases]),
+    sourceUrls: _cleanSourceUrls([...sourceUrls, ...urls]),
+  );
+
   // Each work has its own shelf entry even when several share one Shorts URL.
   // Covers, downloads and progress are also indexed by the work identifier.
   String get key => 'work:$workId';
 
   WorkEntry copyWith({
+    String? videoId,
+    String? videoUrl,
     String? workId,
     String? title,
     String? author,
     String? originalComment,
+    List<String>? sourceUrls,
+    List<String>? titleAliases,
     bool? favorite,
     bool? completed,
     int? currentPage,
@@ -122,8 +175,12 @@ class WorkEntry {
     int? coverPage,
   }) {
     return WorkEntry(
-      videoId: videoId,
-      videoUrl: videoUrl,
+      videoId: videoId ?? this.videoId,
+      videoUrl: videoUrl ?? this.videoUrl,
+      sourceUrls: sourceUrls == null ? this.sourceUrls :
+          _cleanSourceUrls(sourceUrls),
+      titleAliases: titleAliases == null ? this.titleAliases :
+          _cleanAliases(titleAliases),
       workId: workId ?? this.workId,
       title: title ?? this.title,
       author: author ?? this.author,
@@ -156,6 +213,8 @@ class WorkEntry {
   Map<String, Object?> toJson() => {
     'videoId': videoId,
     'videoUrl': videoUrl,
+    if (sourceUrls.isNotEmpty) 'sourceUrls': sourceUrls,
+    if (titleAliases.isNotEmpty) 'titleAliases': titleAliases,
     'workId': workId,
     'title': title,
     'author': author,
@@ -194,6 +253,14 @@ class WorkEntry {
     return WorkEntry(
       videoId: text('videoId'),
       videoUrl: text('videoUrl'),
+      sourceUrls: _cleanSourceUrls([
+        if (data['sourceUrls'] is List)
+          ...(data['sourceUrls'] as List).whereType<String>(),
+        if (text('videoUrl').isNotEmpty) text('videoUrl'),
+      ]),
+      titleAliases: _cleanAliases(
+        data['titleAliases'] is List
+          ? (data['titleAliases'] as List).whereType<String>() : const []),
       workId: code,
       title: text('title'),
       author: text('author'),
@@ -362,6 +429,15 @@ class LibraryBackup {
         videoUrl: recent.videoUrl.isNotEmpty
             ? recent.videoUrl
             : (useIncoming ? existing.videoUrl : incoming.videoUrl),
+        sourceUrls: WorkEntry._cleanSourceUrls([
+          ...existing.sourceUrls, ...incoming.sourceUrls,
+          if (existing.videoUrl.isNotEmpty) existing.videoUrl,
+          if (incoming.videoUrl.isNotEmpty) incoming.videoUrl,
+        ]),
+        titleAliases: WorkEntry._cleanAliases([
+          ...existing.titleAliases, ...incoming.titleAliases,
+          ...existing.title.split('|'), ...incoming.title.split('|'),
+        ]),
         workId: recent.workId,
         title: recent.title.isNotEmpty
             ? recent.title

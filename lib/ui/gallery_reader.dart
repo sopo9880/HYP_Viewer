@@ -11,6 +11,7 @@ import '../core/gallery.dart';
 import '../core/android_controls.dart';
 import '../core/reader_settings.dart';
 import '../core/reader_disk_cache.dart';
+import '../l10n/app_localizations.dart';
 import '../core/reader_tap_zones.dart';
 import '../core/work.dart';
 
@@ -284,7 +285,11 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     _imageCache.removeWhere((index, _) => index < first || index >= last);
   }
 
-  void _retryPage(int index) {
+  Future<void> _retryPage(int index) async {
+    // A corrupted image may have been successfully downloaded and cached.
+    // Delete ONLY this page before fetching it again, not the whole book.
+    await _diskCache?.invalidate(index);
+    if (!mounted) return;
     setState(() {
       _imageCache.remove(index);
       _reloadGeneration++;
@@ -434,9 +439,9 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
 
   Widget _failedImage(int index, Object error) {
     final raw = error.toString();
+    final l = AppLocalizations.of(context)!;
     final reason = RegExp(r'\b(429|502|503|504)\b').hasMatch(raw)
-        ? '이미지 서버가 일시적으로 응답하지 않았어. '
-          '앱이 요청 속도를 제한하고 재시도했지만 아직 실패했어.'
+        ? l.readerFailureHttp
         : raw.length <= 280 ? raw : raw.substring(0, 280) + '…';
     return Center(child: Padding(
       padding: const EdgeInsets.all(14),
@@ -448,7 +453,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
             const Icon(Icons.broken_image_outlined,
                 color: Colors.white70, size: 42),
             const SizedBox(height: 10),
-            HypText((index + 1).toString() + '페이지를 불러오지 못했어.',
+            Text(l.readerFailedPage(index + 1),
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white,
                     fontWeight: FontWeight.bold)),
@@ -563,7 +568,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     final total = widget.archive.pageCount;
     Widget previousButton() => IconButton(
       key: const Key('reader-previous'),
-      tooltip: '이전 페이지 (PageUp)',
+      tooltip: AppLocalizations.of(context)!.readerTooltipPrevious,
       color: Colors.white,
       onPressed: _currentUnit > 0 ? () => _turn(-1) : null,
       icon: Icon(_verticalReading
@@ -572,7 +577,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     );
     Widget nextButton() => IconButton(
       key: const Key('reader-next'),
-      tooltip: '다음 페이지 (PageDown / Space)',
+      tooltip: AppLocalizations.of(context)!.readerTooltipNext,
       color: Colors.white,
       onPressed: _currentUnit < _units - 1 ? () => _turn(1) : null,
       icon: Icon(_verticalReading
@@ -595,19 +600,19 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 widget.onDownloadOffline != null)
               IconButton(
                 key: const Key('reader-download-offline'),
-                tooltip: '온라인 이미지를 CBZ로 저장',
+                tooltip: AppLocalizations.of(context)!.readerTooltipSaveOffline,
                 onPressed: () { widget.onDownloadOffline?.call(); },
                 icon: const Icon(Icons.download_for_offline_outlined),
               ),
             if (widget.settings.showCoverAction &&
                 widget.onChooseCover != null)
               IconButton(
-                tooltip: '현재 페이지를 서재 표지로 지정',
+                tooltip: AppLocalizations.of(context)!.readerTooltipSetCover,
                 onPressed: _useAsCover,
                 icon: const Icon(Icons.photo_library_outlined),
               ),
             if (widget.settings.showPageControlsAction) IconButton(
-              tooltip: _controlsVisible ? '페이지 도구 숨기기' : '페이지 도구 표시',
+              tooltip: _controlsVisible ? AppLocalizations.of(context)!.readerTooltipHideTools : AppLocalizations.of(context)!.readerTooltipShowTools,
               onPressed: () => setState(
                 () => _controlsVisible = !_controlsVisible),
               icon: Icon(_controlsVisible
@@ -615,7 +620,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
             ),
             if (widget.onOpenInBrowser != null)
               IconButton(
-                tooltip: '현재 페이지를 웹 리더로 열기',
+                tooltip: AppLocalizations.of(context)!.readerTooltipOpenWeb,
                 onPressed: () { widget.onOpenInBrowser?.call(_currentPage); },
                 icon: const Icon(Icons.open_in_browser),
               ),
@@ -623,7 +628,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 !widget.settings.twoPageSpread &&
                 !widget.settings.webtoonMode)
               IconButton(
-                tooltip: _vertical ? '가로 넘기기' : '세로 넘기기',
+                tooltip: _vertical ? AppLocalizations.of(context)!.readerTooltipHorizontal : AppLocalizations.of(context)!.readerTooltipVertical,
                 icon: Icon(_vertical ? Icons.swap_horiz : Icons.swap_vert),
                 onPressed: _toggleVertical,
               ),

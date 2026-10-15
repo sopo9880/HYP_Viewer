@@ -223,6 +223,26 @@ class GalleryDiskCache implements GalleryPageSource {
     }
   }
 
+  /// Remove a failed/corrupt cached page so a manual retry really requests
+  /// fresh bytes. Every other downloaded page and offline CBZ is untouched.
+  Future<void> invalidate(int index) async {
+    if (_disposed || index < 0 || index >= pageCount) return;
+    _finishedOnDisk.remove(index);
+    if (!cacheToDisk) return;
+    try {
+      final folder = await _getDir();
+      final page = File(folder.path + Platform.pathSeparator +
+          'page_' + index.toString() + '.bin');
+      if (!await page.exists()) return;
+      final size = await page.length();
+      await page.delete();
+      _writtenBytes = (_writtenBytes - size).clamp(0, maxBytes).toInt();
+      if (_writtenBytes < maxBytes) _capacityReached = false;
+    } on FileSystemException {
+      // A disk failure should not prevent retrying a visible online page.
+    }
+  }
+
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;

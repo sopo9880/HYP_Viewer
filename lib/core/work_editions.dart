@@ -21,12 +21,26 @@ abstract final class WorkEditions {
     return WorkGrouping.normalizedSeries(s);
   }
 
-  static String languageName(String value) {
+  /// Canonical language identifier shared by local records and mirrors.
+  /// A record labeled 'ko' is not a different edition from 'korean'.
+  static String canonicalLanguage(String value) {
     switch (value.trim().toLowerCase()) {
-      case 'korean': case 'ko': return '한국어';
-      case 'japanese': case 'ja': return '日本語';
-      case 'english': case 'en': return 'English';
-      case 'chinese': case 'zh': return '中文';
+      case 'ko': case 'korean': case '한국어': return 'korean';
+      case 'ja': case 'japanese': case '日本語': return 'japanese';
+      case 'en': case 'english': return 'english';
+      case 'zh': case 'zh-cn': case 'zh-tw':
+      case 'chinese': case 'chinese (simplified)':
+      case 'chinese (traditional)': case '中文': return 'chinese';
+      default: return value.trim().toLowerCase();
+    }
+  }
+
+  static String languageName(String value) {
+    switch (canonicalLanguage(value)) {
+      case 'korean': return '한국어';
+      case 'japanese': return '日本語';
+      case 'english': return 'English';
+      case 'chinese': return '中文';
       default: return value.trim().isEmpty ? '언어 미확인' : value;
     }
   }
@@ -47,8 +61,10 @@ abstract final class WorkEditions {
     bool meaningful(String title) => title.length >= 4 &&
         !RegExp(r'^(?:작품|work|gallery)\s*\d+$', caseSensitive: false)
             .hasMatch(title);
-    if (!meaningful(titleA) || !meaningful(titleB)) {
-      return const EditionMatch(0, '확인 가능한 원제 부족');
+    final hasTitleEvidence = meaningful(titleA) && meaningful(titleB) ||
+        a.titleAliases.isNotEmpty && b.titleAliases.isNotEmpty;
+    if (!hasTitleEvidence) {
+      return const EditionMatch(0, '확인 가능한 원제 또는 별칭 부족');
     }
 
     String normal(String text) => text.trim().toLowerCase();
@@ -68,11 +84,13 @@ abstract final class WorkEditions {
         ? (a.totalPages - b.totalPages).abs() : 9999;
     // Titles can contain multiple original/translated aliases separated by
     // '|'. Any independently matching alias counts as shared title evidence.
-    Set<String> aliases(String title) => title.split('|')
+    Set<String> aliases(WorkEntry work) => [
+      work.title, ...work.titleAliases,
+    ].expand((title) => title.split('|'))
         .map((name) => WorkGrouping.normalizedSeries(name))
-        .where((name) => name.length >= 4).toSet();
+        .where((name) => name.length >= 3).toSet();
     final sameTitle = titleA == titleB ||
-        aliases(a.title).intersection(aliases(b.title)).isNotEmpty;
+        aliases(a).intersection(aliases(b)).isNotEmpty;
     if (!sameTitle) {
       // Different translations can have entirely different titles.
       // Auto-link only with independent creator, series, chapter and
@@ -105,6 +123,30 @@ abstract final class WorkEditions {
         sameAuthor || sameCircle ? '원제 및 제작자 일치' : '원제 일치 · 확인 필요');
   }
 
+  /// Adjust the *displayed* evidence using two available covers.
+  ///
+  /// Cover similarity alone never promotes a non-automatic metadata match
+  /// into an automatic match. A striking visual mismatch can instead mark a
+  /// potential automatic match for the reader to review manually.
+  static EditionMatch withCoverEvidence(EditionMatch metadata,
+      double? similarity) {
+    if (similarity == null || !similarity.isFinite ||
+        similarity < 0 || similarity > 1 || metadata.score <= 0) {
+      return metadata;
+    }
+    if (similarity <= .18 && metadata.autoLink) {
+      return EditionMatch(74,
+          metadata.reason + ' · 표지 차이 큼, 수동 확인 필요');
+    }
+    if (similarity >= .9 && metadata.isCandidate) {
+      final boosted = (metadata.score + 7).clamp(
+          0, metadata.autoLink ? 100 : 79).toInt();
+      return EditionMatch(boosted,
+          metadata.reason + ' · 표지 유사도 높음 (보조 근거)');
+    }
+    return metadata;
+  }
+
   /// Hide a logical chapter on the shelf when any language edition is
   /// completed. Search and each edition's underlying reading status remain
   /// independent.
@@ -135,8 +177,8 @@ abstract final class WorkEditions {
     add(entered);
     // Retain both sides of "original | translated": a plain search can
     // otherwise miss a differently localized title.
-    for (final title in work.title.split('|')) {
-      add(title);
+    for (final title in [work.title, ...work.titleAliases]) {
+      for (final part in title.split('|')) add(part);
     }
     final creator = work.author.split(',').first.trim();
     if (creator.isNotEmpty) add('artist:' + creator);
@@ -147,7 +189,7 @@ abstract final class WorkEditions {
     if (work.sourceSeries.trim().isNotEmpty) {
       add(work.sourceSeries.trim());
     }
-    return result.take(7).toList();
+    return result.take(12).toList();
   }
 
   static String groupKey(WorkEntry work) =>
