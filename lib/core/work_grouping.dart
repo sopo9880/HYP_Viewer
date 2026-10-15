@@ -170,7 +170,17 @@ class WorkGrouping {
 
   static List<WorkGroupSuggestion> suggest(List<WorkEntry> works) {
     final groups = <String, List<WorkEntry>>{};
-    final sorted = [...works]..sort((a, b) => a.workId.compareTo(b.workId));
+    // Multiple translations of one chapter are a single logical title.
+    // Prefer its existing-series representative before any ungrouped copy.
+    final all = [...works]..sort((a, b) {
+      final grouped = (a.groupId.isEmpty ? 1 : 0)
+          .compareTo(b.groupId.isEmpty ? 1 : 0);
+      return grouped != 0 ? grouped : a.workId.compareTo(b.workId);
+    });
+    final seenEditions = <String>{};
+    final sorted = all.where((work) => work.editionGroupId.isEmpty ||
+        seenEditions.add(work.editionGroupId)).toList()
+      ..sort((a, b) => a.workId.compareTo(b.workId));
     final clusters = <List<WorkEntry>>[];
 
     // Existing series may receive new works, but are never recreated/changed.

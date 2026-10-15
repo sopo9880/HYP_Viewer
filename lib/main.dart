@@ -906,12 +906,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           throw StateError('이미 묶인 작품은 Auto/수동 묶기로 바꿀 수 없어. '
               '먼저 기존 묶음을 해제해줘.');
         }
-        return LibraryBackup(
-          works: latest.works.map((work) {
-            final index = workIds.indexOf(work.workId);
-            return index < 0 ? work : work.copyWith(
-              groupId: id, groupTitle: name, groupOrder: index + 1);
-          }).toList(), collections: latest.collections);
+        return WorkEditionService.createSeries(latest,
+            workIds, id, name);
       });
       _status('작품 ' + selected.length.toString() + '개를 묶었어.');
     } catch (error) {
@@ -935,22 +931,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           newcomers.any((w) => w.groupId.isNotEmpty)) {
         throw StateError('이미 다른 묶음에 속한 작품은 추가하지 않아.');
       }
-      var maxOrder = 0;
-      for (final member in old) {
-        if (member.groupOrder > maxOrder) maxOrder = member.groupOrder;
-      }
-      final targetOrder = <String, int>{
-        for (var i = 0; i < orderedIds.length; i++)
-          orderedIds[i]: maxOrder + i + 1
-      };
-      return LibraryBackup(
-        works: latest.works.map((w) =>
-          targetOrder.containsKey(w.workId)
-            ? w.copyWith(groupId: groupId,
-                groupTitle: old.first.groupTitle,
-                groupOrder: targetOrder[w.workId]) : w).toList(),
-        collections: latest.collections,
-      );
+      return WorkEditionService.appendSeries(latest, groupId, orderedIds);
     });
     _status('기존 묶음에 ' + orderedIds.length.toString() + '개 작품을 추가했어.');
   }
@@ -975,14 +956,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _reorderGroup(String groupId, List<String> orderedIds) async {
-    await _commitLibrary((latest) => LibraryBackup(
-      works: latest.works.map((w) {
-        if (w.groupId != groupId) return w;
-        final position = orderedIds.indexOf(w.workId);
-        return position < 0 ? w : w.copyWith(groupOrder: position + 1);
-      }).toList(),
-      collections: latest.collections,
-    ));
+    await _commitLibrary((latest) =>
+        WorkEditionService.reorderSeries(latest, groupId, orderedIds));
   }
 
   Future<void> _deleteSelectedOffline(List<String> workIds) async {

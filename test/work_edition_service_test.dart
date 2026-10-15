@@ -28,6 +28,26 @@ void main() {
     expect(result.works[0].editionGroupId, isEmpty);
     expect(result.works[1].editionGroupId, isEmpty);
   });
+  test('series group and reorder treat stacked translations as one chapter', () {
+    final firstJ=make('111111','japanese',title:'Part 1');
+    final firstK=make('222222','korean',title:'Part 1');
+    final second=make('333333','japanese',title:'Part 2');
+    final joined=WorkEditionService.link(LibraryBackup(
+        works:[firstJ,firstK,second],collections:const []),
+        '111111','222222');
+    final grouped=WorkEditionService.createSeries(joined,
+        ['111111','333333'],'series_1','A Series');
+    expect(grouped.works.map((w)=>w.groupId).toSet(), {'series_1'});
+    expect(grouped.works[0].groupOrder, grouped.works[1].groupOrder);
+    final reordered=WorkEditionService.reorderSeries(grouped,
+        'series_1',['333333','111111']);
+    expect(reordered.works[0].groupOrder, 2);
+    expect(reordered.works[1].groupOrder, 2);
+    expect(reordered.works[2].groupOrder, 1);
+    expect(()=>WorkEditionService.createSeries(joined,
+        ['111111','222222'],'series_2','bad'),throwsStateError);
+  });
+
   test('manual unlink keeps independent reading records', () {
     final a=make('111111','japanese',page:16);
     final b=make('222222','english',page:4);

@@ -1716,8 +1716,11 @@ class _HypDashboardState extends State<HypDashboard> {
         input.dispose();
       }
     } else if (action == 'reorder') {
-      final ordered = [...members]..sort((a,b) =>
-          a.groupOrder.compareTo(b.groupOrder));
+      final seen = <String>{};
+      final ordered = ([...members]..sort((a,b) =>
+          a.groupOrder.compareTo(b.groupOrder)))
+          .where((work) => work.editionGroupId.isEmpty ||
+              seen.add(work.editionGroupId)).toList();
       final result = await showDialog<List<String>>(
         context: context,
         builder: (ctx) => StatefulBuilder(

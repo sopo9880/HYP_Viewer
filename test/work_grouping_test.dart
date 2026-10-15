@@ -55,6 +55,14 @@ void main() {
     expect(WorkSorting.sort([a,b],LibrarySort.chapter).first.workId, '123457');
     expect(WorkSorting.sort([a,b],LibrarySort.chapter,descending:true).first.workId, '123456');
   });
+  test('same chapter translations never create a false series suggestion', () {
+    final ja = WorkEntry.create(workId:'201101',title:'Story One')
+        .copyWith(sourceLanguage:'japanese',editionGroupId:'ed1');
+    final ko = WorkEntry.create(workId:'201102',title:'Story One | 한국어')
+        .copyWith(sourceLanguage:'korean',editionGroupId:'ed1');
+    expect(WorkGrouping.suggest([ja,ko]),isEmpty);
+  });
+
   test('sorting uses added date not read-update date and numeric ids', () {
     final a = WorkEntry.create(workId: '100').copyWith(
         addedAt: '2025-01-01T00:00:00Z', openCount: 5);
