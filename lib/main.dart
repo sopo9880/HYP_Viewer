@@ -574,7 +574,12 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             content = [result.description, ...result.comments]
                 .where((value) => value.trim().isNotEmpty).join('\n\n');
           } else if (link.canPreview) {
-            content = await PublicSourcePreview(client).fetch(link);
+            final preview = await PublicSourcePreview(client).fetchDetailed(link);
+            content = preview.text;
+            if (link.kind == SourceKind.youtubePost && !preview.fullBody) {
+              errors.add('YouTube 게시물 전체 본문에 접근하지 못해 미리보기만 읽었어. '
+                  '원문을 직접 붙여넣으면 누락된 번호를 확인할 수 있어.');
+            }
           } else {
             errors.add('원문 자동 분석 미지원: ' + link.uri.host);
           }
@@ -588,7 +593,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           mapped.putIfAbsent(candidate.code, () => link.url);
         }
       }
-      final shared = raw.replaceAll(RegExp(r'https://\S+'), '').trim();
+      final shared = raw.replaceAll(RegExp(r'https?://\S+'), '').trim();
       if (shared.isNotEmpty) blocks.add(shared);
       commentInput.text = blocks.join('\n\n');
       _candidateSourceUrls
