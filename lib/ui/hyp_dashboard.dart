@@ -25,6 +25,7 @@ import '../core/work.dart';
 import '../core/work_grouping.dart';
 import '../core/work_editions.dart';
 import '../core/local_search.dart';
+import 'reader_navigation_focus.dart';
 import '../core/cover_similarity.dart';
 import 'work_edition_card.dart';
 import 'hero_banner.dart';
@@ -258,6 +259,7 @@ class _HypDashboardState extends State<HypDashboard> {
   List<String> _remoteWarnings = const [];
   final Map<String, (DateTime, OnlineSearchResult)> _remoteCache = {};
   final FocusNode _searchFocus = FocusNode();
+  final FocusNode _dashboardFocus = FocusNode(debugLabel: 'dashboard-shortcuts');
   HypPage _page = HypPage.home;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey _backupSectionKey = GlobalKey();
@@ -438,6 +440,7 @@ class _HypDashboardState extends State<HypDashboard> {
     _search.removeListener(_changedSearch);
     _search.dispose();
     _searchFocus.dispose();
+    _dashboardFocus.dispose();
     super.dispose();
   }
 
@@ -539,6 +542,7 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   void _navigate(HypPage page) {
+    _dashboardFocus.requestFocus();
     _openedGroupId = null;
     _lastHomeBack = null;
     _search.clear();
@@ -650,6 +654,13 @@ class _HypDashboardState extends State<HypDashboard> {
     await _refreshOffline();
   }
 
+
+  Future<void> _openReaderWith(Future<void> Function() action) =>
+      ReaderNavigationFocus.show(
+        returnFocus: _dashboardFocus,
+        isMounted: () => mounted,
+        openReader: action,
+      );
 
   String _coverSignature(LibraryBackup backup) => backup.works
       .map((w) => w.key + ':' + w.coverMode + ':' +
@@ -776,6 +787,7 @@ class _HypDashboardState extends State<HypDashboard> {
       if (!didPop) _handleSystemBack();
     },
     child: Focus(
+    focusNode: _dashboardFocus,
     autofocus: true,
     onKeyEvent: _onKeyboardShortcut,
     child: LayoutBuilder(builder: (context, size) {
@@ -1121,9 +1133,9 @@ class _HypDashboardState extends State<HypDashboard> {
         onClearHistory: widget.onClearReadingHistory,
         onOpenWork: (work) {
           if (_offlineKeys.contains(work.key)) {
-            widget.onOpenGallery(work);
+            _openReaderWith(() => widget.onOpenGallery(work));
           } else {
-            widget.onReadOnline(work);
+            _openReaderWith(() => widget.onReadOnline(work));
           }
         },
       ),
@@ -1149,8 +1161,8 @@ class _HypDashboardState extends State<HypDashboard> {
           final matching = widget.library.works.where((work) => work.key == key);
           if (matching.isEmpty) return;
           final work = matching.first;
-          if (_offlineKeys.contains(work.key)) widget.onOpenGallery(work);
-          else widget.onReadOnline(work);
+          if (_offlineKeys.contains(work.key)) _openReaderWith(() => widget.onOpenGallery(work));
+          else _openReaderWith(() => widget.onReadOnline(work));
         },
         onOpenLibrary: () => _navigate(HypPage.library),
         onOpenDownloads: () => _navigate(HypPage.downloads),
@@ -1352,8 +1364,8 @@ class _HypDashboardState extends State<HypDashboard> {
       )),
     );
     if (selected == null || !mounted) return;
-    if (_offlineKeys.contains(selected.key)) widget.onOpenGallery(selected);
-    else widget.onReadOnline(selected);
+    if (_offlineKeys.contains(selected.key)) _openReaderWith(() => widget.onOpenGallery(selected));
+    else _openReaderWith(() => widget.onReadOnline(selected));
   }
 
   Widget _editionTile(List<WorkEntry> members) {
@@ -1371,8 +1383,8 @@ class _HypDashboardState extends State<HypDashboard> {
       totalPages: _pageCounts[work.key],
       coverBytes: _coverImages[work.key],
       onOpen: () {
-        if (_offlineKeys.contains(work.key)) widget.onOpenGallery(work);
-        else widget.onReadOnline(work);
+        if (_offlineKeys.contains(work.key)) _openReaderWith(() => widget.onOpenGallery(work));
+        else _openReaderWith(() => widget.onReadOnline(work));
       },
       onAction: (action) => _workAction(action, work),
       selectionMode: _selectingWorks && _canSelectWorks,
@@ -2396,7 +2408,7 @@ class _HypDashboardState extends State<HypDashboard> {
             FilledButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
-                widget.onReadOnlineSearchWork(work);
+                _openReaderWith(() => widget.onReadOnlineSearchWork(work));
               },
               icon: const Icon(Icons.menu_book),
               label: const HypText('서재 추가하고 읽기'),
@@ -2427,9 +2439,9 @@ class _HypDashboardState extends State<HypDashboard> {
       coverImages: _coverImages,
       onOpen: (work) {
         if (_offlineKeys.contains(work.key)) {
-          widget.onOpenGallery(work);
+          _openReaderWith(() => widget.onOpenGallery(work));
         } else {
-          widget.onReadOnline(work);
+          _openReaderWith(() => widget.onReadOnline(work));
         }
       },
       onAction: _workAction,
@@ -2442,11 +2454,11 @@ class _HypDashboardState extends State<HypDashboard> {
 
   void _workAction(String action, WorkEntry work) async {
     if (action == 'offline') {
-      await widget.onOpenGallery(work);
+      await _openReaderWith(() => widget.onOpenGallery(work));
     } else if (action == 'online') {
-      await widget.onReadOnline(work);
+      await _openReaderWith(() => widget.onReadOnline(work));
     } else if (action == 'page') {
-      await widget.onReadWebPage(work);
+      await _openReaderWith(() => widget.onReadWebPage(work));
     } else if (action == 'download') {
       await widget.onDownloadOnline(work);
       await _refreshOffline();
