@@ -564,5 +564,47 @@
     }
   },
   "onlineSafeLink": "保存時に確認済みの言語版グループへの追加を試みます。",
-  "youtubeCommentsPartial": "公開コメントの一部のみ取得しました。欠けたコメントは手動で貼り付けてください。"
+  "youtubeCommentsPartial": "公開コメントの一部のみ取得しました。欠けたコメントは手動で貼り付けてください。",
+  "readerTooltipPrevious": "前のページ（PageUp）",
+  "readerTooltipNext": "次のページ（PageDown / Space）",
+  "readerTooltipSaveOffline": "オンライン画像をCBZとして保存",
+  "readerTooltipSetCover": "現在のページを本棚の表紙に設定",
+  "readerTooltipHideTools": "ページ操作を隠す",
+  "readerTooltipShowTools": "ページ操作を表示",
+  "readerTooltipOpenWeb": "現在のページをWebリーダーで開く",
+  "readerTooltipHorizontal": "横方向に切り替え",
+  "readerTooltipVertical": "縦方向に切り替え",
+  "readingActivityDay": "{date}: {count}回",
+  "@readingActivityDay": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "readingHeatmapDay": "{date}・{count}回",
+  "@readingHeatmapDay": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "readingSaveReportDialog": "読書レポートPNGを保存",
+  "readingSaveReportMissing": "レポート画面が見つかりません。",
+  "readingSaveReportBytes": "PNGを保存できません。",
+  "readingSaveReportFailed": "レポート画像の保存に失敗: {error}",
+  "@readingSaveReportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }
