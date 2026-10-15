@@ -157,7 +157,28 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.4.0:
+          Changes in v0.4.1:
+          - Safe HTTP-to-HTTPS upgrades for trusted YouTube, Instagram and
+            Hitomi links, including native Android community-post shares.
+          - Parse full publicly embedded YouTube community post text when
+            available; explicitly warn if only a clipped preview was loaded.
+          - Public YouTube playlist/channel video-selection support,
+            with limited user-selected video/comment analysis.
+          - Unified metadata search now fans out across supported title,
+            artist, circle and tag fields, and deduplicates fetched IDs.
+            Category counts may overlap and are labeled accordingly.
+          - Enhanced other-language edition search with alternate titles,
+            two-page searches, supporting metadata, optional bounded cover
+            similarity, and an explicit last-read edition choice.
+          - Translated settings accordion headings and A-L Reading Insights
+            into formal Korean/English/Japanese locale bundles, including
+            dynamic metrics and report labels.
+          - Aligned completed hiding with the original policy: finishing
+            any edition hides its logical work from the shelf, while search
+            and each edition's own reading progress remain independent.
+          - Added an opt-in review of legacy last-page records without
+            silently rewriting existing completed flags.
+          - Existing v0.4.0 functionality retained:
           - Fixed page-edge tapping to use physical left=previous and
             right=next by default, with the reverse setting mirrored; verified
             keyboard and two-page navigation expectations.
