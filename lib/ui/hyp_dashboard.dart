@@ -488,8 +488,27 @@ class _HypDashboardState extends State<HypDashboard> {
   Future<void> _fetchOnlineSearch({required int epoch, bool next = false}) async {
     if (!mounted || _searchScope == 'local' || _search.text.trim().isEmpty) return;
     final term = _search.text.trim();
+    // A title already known in the library can have verified translations
+    // under a completely different name. Query only synonyms of matching
+    // works; never upload the entire private library or reading history.
+    final aliases = TitleAliasIndex.fromLibrary(widget.library.works);
+    final otherNames = <String>[];
+    if (!RegExp(r'^[a-z_]+:', caseSensitive: false).hasMatch(term)) {
+      for (final work in widget.library.works) {
+        if (!LocalWorkSearch.matches(work, term)) continue;
+        for (final alias in aliases.aliasesFor(work)) {
+          if (alias.toLowerCase() != term.toLowerCase() &&
+              alias.length <= 100 && !otherNames.contains(alias)) {
+            otherNames.add(alias);
+          }
+          if (otherNames.length >= 4) break;
+        }
+        if (otherNames.length >= 4) break;
+      }
+    }
+    final expanded = [term, ...otherNames].join(' | ');
     final page = next ? _remotePage + 1 : 1;
-    final key = [term.toLowerCase(), _searchLanguage, page].join('|');
+    final key = [expanded.toLowerCase(), _searchLanguage, page].join('|');
     final cached = _remoteCache[key];
     if (cached != null && DateTime.now().difference(cached.$1) <
         const Duration(minutes: 10)) {
@@ -503,7 +522,7 @@ class _HypDashboardState extends State<HypDashboard> {
     final client = http.Client();
     try {
       final service = OnlineWorkSearch(client);
-      final result = await service.searchUnified(term, page: page,
+      final result = await service.searchUnified(expanded, page: page,
           language: _searchLanguage);
       if (!mounted || epoch != _searchEpoch) return;
       _remoteCache[key] = (DateTime.now(), result);
