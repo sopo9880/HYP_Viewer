@@ -22,7 +22,8 @@ class WorkGrouping {
   static final _prefixChapter = RegExp(
       r'(?:episode|ep\.?|chapter|ch\.?|part|vol(?:ume)?\.?)\s*#?\s*(\d{1,3})(?!\d)',
       caseSensitive: false);
-  static final _japaneseChapter = RegExp(r'第\s*(\d{1,3})\s*[話巻部]');
+  // Both 第3話 and 3話 are common Japanese chapter labels.
+  static final _japaneseChapter = RegExp(r'(?<!\d)(?:第\s*)?(\d{1,3})\s*[話巻部]');
   static final _trailingNumber = RegExp(r'(?:[\s\-_.#]+)(\d{1,3})\s*$');
 
   static int? _chapterInText(String text) {
