@@ -47,6 +47,23 @@ abstract final class WorkEditionService {
     final mergedId = anchor.editionGroupId.isNotEmpty
         ? anchor.editionGroupId : 'edition_' + anchor.workId;
     final oldId = incoming.editionGroupId;
+    bool related(WorkEntry work) =>
+        work.workId == anchor.workId ||
+        work.workId == incoming.workId ||
+        anchor.editionGroupId.isNotEmpty &&
+          work.editionGroupId == anchor.editionGroupId ||
+        oldId.isNotEmpty && work.editionGroupId == oldId;
+    final linked = works.where(related).toList();
+    final series = linked.where((work) => work.groupId.isNotEmpty)
+        .map((work) => work.groupId).toSet();
+    if (series.length > 1) {
+      throw StateError('서로 다른 시리즈에 포함된 판본은 합칠 수 없어.');
+    }
+    final representative = linked.firstWhere(
+        (work) => work.groupId.isNotEmpty, orElse: () => anchor);
+    final selectedGroup = representative.groupId;
+    final selectedTitle = representative.groupTitle;
+    final selectedOrder = representative.groupOrder;
     return works.map((work) {
       final isAnchor = work.workId == anchor.workId ||
           anchor.editionGroupId.isNotEmpty &&
@@ -56,9 +73,9 @@ abstract final class WorkEditionService {
       if (!isAnchor && !isIncoming) return work;
       return work.copyWith(
         editionGroupId: mergedId,
-        groupId: anchor.groupId,
-        groupTitle: anchor.groupTitle,
-        groupOrder: anchor.groupOrder,
+        groupId: selectedGroup,
+        groupTitle: selectedTitle,
+        groupOrder: selectedOrder,
       );
     }).toList();
   }

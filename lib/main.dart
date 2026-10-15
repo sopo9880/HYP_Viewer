@@ -647,9 +647,13 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _linkEdition(WorkEntry anchor, String targetId) async {
-    await _commitLibrary((latest) =>
-        WorkEditionService.link(latest, anchor.workId, targetId));
-    _status('같은 작품의 다른 언어판으로 묶었어.');
+    try {
+      await _commitLibrary((latest) =>
+          WorkEditionService.link(latest, anchor.workId, targetId));
+      _status('같은 작품의 다른 언어판으로 묶었어.');
+    } catch (error) {
+      _status('언어판 묶기에 실패했어: ' + error.toString());
+    }
   }
 
   Future<void> _unlinkEdition(WorkEntry work) async {

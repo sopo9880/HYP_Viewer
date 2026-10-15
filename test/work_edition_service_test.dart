@@ -20,6 +20,22 @@ void main() {
     expect(linked.works[0].currentPage, 10);
     expect(linked.works[1].currentPage, 4);
   });
+  test('link to existing series never drops series membership', () {
+    final ungrouped=make('111111','japanese');
+    final grouped=make('222222','korean',seriesId:'series_7');
+    final linked=WorkEditionService.link(LibraryBackup(
+        works:[ungrouped,grouped],collections:const []),
+        '111111','222222');
+    expect(linked.works.every((w) => w.groupId == 'series_7'), true);
+    expect(linked.works[0].groupOrder, linked.works[1].groupOrder);
+  });
+  test('link refuses two different existing series', () {
+    final first=make('111111','japanese',seriesId:'series_1');
+    final second=make('222222','korean',seriesId:'series_2');
+    final backup=LibraryBackup(works:[first,second],collections:const []);
+    expect(()=>WorkEditionService.link(backup,'111111','222222'),
+        throwsStateError);
+  });
   test('different chapters are not auto-linked', () {
     final first=make('111111','japanese',title:'Title 1화');
     final second=make('222222','korean',title:'Title 2화');
