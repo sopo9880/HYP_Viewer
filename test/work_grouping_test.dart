@@ -35,6 +35,20 @@ void main() {
     expect(three.groupId, 'existing');
   });
 
+  test('original title with a distinct Korean translation groups its sequel', () {
+    final first = WorkEntry.create(workId: '50001',
+      title: 'Yarasete Yarutte Ittenno! | 하게 해주겠다고 말했어!');
+    final second = WorkEntry.create(workId: '50002',
+      title: 'Yarasete Yarutte Ittenno! 2 | 하게 해준다니까! 2');
+    expect(WorkGrouping.normalizedSeries(first.title),
+      WorkGrouping.normalizedSeries(second.title));
+    expect(WorkGrouping.episodeNumber(first), isNull);
+    expect(WorkGrouping.episodeNumber(second), 2);
+    final grouped = WorkGrouping.suggest([second, first]);
+    expect(grouped, hasLength(1));
+    expect(grouped.single.workIds, ['50001', '50002']);
+  });
+
   test('sorting uses added date not read-update date and numeric ids', () {
     final a = WorkEntry.create(workId: '100').copyWith(
         addedAt: '2025-01-01T00:00:00Z', openCount: 5);

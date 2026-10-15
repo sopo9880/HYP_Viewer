@@ -36,8 +36,15 @@ class WorkGrouping {
   static int? episodeNumber(WorkEntry work) {
     // A saved Shorts batch keeps the same originalComment for EVERY work.
     // Reading the first "1편" in that shared block assigns 1 to all works.
-    final titleChapter = _chapterInText(work.title);
+    final original = work.title.split('|').first.trim();
+    final titleChapter = _chapterInText(original);
     if (titleChapter != null) return titleChapter;
+    // Bare trailing numerals in the ORIGINAL title denote a sequel:
+    // "Yarasete Yarutte Ittenno! 2 | ... 2".
+    final trailing = _trailingNumber.firstMatch(original);
+    if (trailing != null && normalizedSeries(original).length >= 4) {
+      return int.tryParse(trailing.group(1)!);
+    }
     // Only use comment evidence if the line points to this work specifically.
     for (final line in work.originalComment.split(RegExp(r'[\r\n]+'))) {
       final chapter = _chapterInText(line);
@@ -56,7 +63,9 @@ class WorkGrouping {
   }
 
   static String normalizedSeries(String rawTitle) {
-    var s = rawTitle.toLowerCase().trim();
+    // Multilingual titles are often "original | translated". Compare the
+    // original separately: different translations must not prevent a match.
+    var s = rawTitle.split('|').first.toLowerCase().trim();
     // Metadata titles often start with a circle or artist in brackets.
     s = s.replaceFirst(RegExp(r'^(?:\[[^\]]{1,75}\]\s*)+'), '');
     s = s.replaceAll(_chapter, ' ')
@@ -132,8 +141,17 @@ class WorkGrouping {
   static int compareChapters(WorkEntry a, WorkEntry b) {
     final ae = episodeNumber(a), be = episodeNumber(b);
     if (ae != null && be != null && ae != be) return ae.compareTo(be);
-    if (ae != null && be == null) return -1;
-    if (be != null && ae == null) return 1;
+    if (ae != null && be == null) {
+      // An unnumbered original is commonly the first installment of a series.
+      if (ae > 1 && normalizedSeries(a.title) ==
+          normalizedSeries(b.title)) return 1;
+      return -1;
+    }
+    if (be != null && ae == null) {
+      if (be > 1 && normalizedSeries(a.title) ==
+          normalizedSeries(b.title)) return -1;
+      return 1;
+    }
     if (a.sourceDate.isNotEmpty && b.sourceDate.isNotEmpty &&
         a.sourceDate != b.sourceDate) {
       return a.sourceDate.compareTo(b.sourceDate);
