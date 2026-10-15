@@ -130,6 +130,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   List<NumberCandidate> candidates = [];
   final Map<String, CandidateVerification> _candidateCache = {};
   final Map<String, String> _candidateSourceUrls = {};
+  final Map<String, Set<String>> _candidateSourceEvidence = {};
   int finderClearEpoch = 0;
   late final Future<void> _settingsLoad;
   bool _updateDismissedThisLaunch = false;
@@ -482,6 +483,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           titleInput, authorInput]) { ctrl.clear(); }
       candidates = [];
       _candidateSourceUrls.clear();
+      _candidateSourceEvidence.clear();
       _candidateCache.clear();
       finderClearEpoch++;
       message = '';
@@ -598,6 +600,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final blocks = <String>[];
     final errors = <String>[];
     final mapped = <String, String>{};
+    final evidence = <String, Set<String>>{};
+    void remember(String id, String url) {
+      mapped.putIfAbsent(id, () => url);
+      evidence.putIfAbsent(id, () => <String>{}).add(url);
+    }
     try {
       final key = apiKeyInput.text.trim();
       for (final link in links) {
@@ -622,7 +629,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                   blocks.add(text);
                   for (final candidate in NumberExtractor.extract(
                       text, source: video.url)) {
-                    mapped.putIfAbsent(candidate.code, () => video.url);
+                    remember(candidate.code, video.url);
                   }
                 } catch (error) {
                   errors.add(video.videoId + ': ' + error.toString());
@@ -652,7 +659,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         blocks.add(content);
         for (final candidate in NumberExtractor.extract(
             content, source: link.url)) {
-          mapped.putIfAbsent(candidate.code, () => link.url);
+          remember(candidate.code, link.url);
         }
       }
       final shared = raw.replaceAll(RegExp(r'https?://\S+'), '').trim();
@@ -661,6 +668,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _candidateSourceUrls
         ..clear()
         ..addAll(mapped);
+      _candidateSourceEvidence
+        ..clear()
+        ..addAll(evidence);
       _analyze();
       if (errors.isNotEmpty) {
         _status('분석된 후보 ' + candidates.length.toString() + '개. ' +
@@ -700,6 +710,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         workId: result.workId, title: result.title,
         author: result.artists.join(', '),
       ).copyWith(
+        titleAliases: result.titleAliases,
         tags: result.tags,
         sourceGroup: result.groups.join(', '),
         sourceSeries: result.series.join(', '),
@@ -797,6 +808,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           workId: code,
           videoId: mappedLink?.videoId ?? '',
           videoUrl: mappedLink?.url ?? '',
+          sourceUrls: [
+            ...?_candidateSourceEvidence[code],
+            if (mappedLink != null) mappedLink.url,
+          ],
+          titleAliases: title.split('|').skip(1).toList(),
           title: title,
           author: codes.length == 1 && authorInput.text.trim().isNotEmpty
               ? authorInput.text.trim() : (info?.author ?? ''),
@@ -889,6 +905,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final edited = current.copyWith(
       workId: draft.workId, title: draft.title,
       author: draft.author, originalComment: draft.originalComment,
+      titleAliases: draft.titleAliases,
+      sourceUrls: draft.sourceUrls,
       coverMode: resetCover
           ? (readerSettings.autoCoverEnabled ? 'auto' : 'preset')
           : current.coverMode,
