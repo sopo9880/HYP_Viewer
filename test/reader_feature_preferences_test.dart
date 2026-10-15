@@ -9,6 +9,7 @@ void main() {
     expect(defaults.volumeKeyNavigation, false);
     expect(defaults.forceLandscapeForSpreads, false);
     expect(defaults.receiveAnnouncements, false);
+    expect(defaults.completedHidden, false);
 
     final restored = ReaderSettings.fromJson(
         defaults.copyWith(autoCoverEnabled: true,
@@ -19,6 +20,7 @@ void main() {
     expect(restored.volumeKeyNavigation, true);
     expect(restored.forceLandscapeForSpreads, true);
     expect(restored.receiveAnnouncements, true);
+    expect(ReaderSettings.fromJson(defaults.copyWith(completedHidden: true).toJson()).completedHidden, true);
   });
 
   test('custom cover metadata survives JSON backup', () {

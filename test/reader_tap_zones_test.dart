@@ -2,12 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hyp_viewer/core/reader_tap_zones.dart';
 
 void main() {
-  test('left always previous, right always next regardless of reverse', () {
+  test('physical left/right follows selected next direction', () {
     int zone(double x, {bool rtl = false, bool vertical = false}) =>
       readerTapDelta(pointX: x, pointY: 100,
         width: 100, height: 200, vertical: vertical, reverse: rtl);
-    expect(zone(10), -1);
-    expect(zone(90), 1);
+    // Default nextDirection='left': physical left is next.
+    expect(zone(10), 1);
+    expect(zone(90), -1);
+    // nextDirection='right': physical right is next.
     expect(zone(10, rtl: true), -1);
     expect(zone(90, rtl: true), 1);
     expect(zone(30), 0);

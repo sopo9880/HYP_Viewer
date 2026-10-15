@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'hero_artwork_store.dart';
 import 'reader_settings.dart';
 import 'work.dart';
+import 'reading_history.dart';
 
 /// Schema 2 applies to portable exports only. App-local library storage
 /// retains schema 1, preserving older installations and recovery snapshots.
@@ -18,6 +19,8 @@ class AppBackup {
   final bool includesLibrary;
   final Uint8List? bannerImage;
   final List<BackupCover> covers;
+  final List<ReadingSession> readingSessions;
+  final bool includesReadingHistory;
 
   const AppBackup({
     required this.library,
@@ -25,6 +28,8 @@ class AppBackup {
     this.includesLibrary = true,
     this.bannerImage,
     this.covers = const [],
+    this.readingSessions = const [],
+    this.includesReadingHistory = false,
   });
 
   bool get hasSettings => settings != null;
@@ -42,6 +47,8 @@ class AppBackup {
           : <Object>[],
       'collections': includesLibrary ? library.collections : <String>[],
       if (settings != null) 'settings': settings!.toJson(),
+      if (includesLibrary && includesReadingHistory)
+        'readingSessions': readingSessions.map((session) => session.toJson()).toList(),
       if (hasImages) 'images': {
         if (bannerImage != null) 'banner': base64Encode(bannerImage!),
         if (covers.isNotEmpty) 'covers': [
@@ -57,6 +64,9 @@ class AppBackup {
   }
 
   Uint8List encode() {
+    if (readingSessions.length > ReadingHistoryStore.maxSessions) {
+      throw const FormatException('백업 열람 기록이 너무 많아.');
+    }
     _validateImages(bannerImage, covers, library);
     final bytes = Uint8List.fromList(
       utf8.encode(const JsonEncoder.withIndent('  ').convert(toJson())));
@@ -143,12 +153,28 @@ class AppBackup {
       }
     }
     _validateImages(banner, covers, library);
+    final rawSessions = decoded['readingSessions'];
+    if (rawSessions != null && (rawSessions is! List ||
+        rawSessions.length > ReadingHistoryStore.maxSessions)) {
+      throw const FormatException('백업의 독서 기록이 유효하지 않아.');
+    }
+    final sessions = <ReadingSession>[];
+    if (rawSessions is List && includeLibrary) {
+      for (final item in rawSessions) {
+        if (item is! Map<String, dynamic>) {
+          throw const FormatException('백업 열람 기록 항목이 손상됐어.');
+        }
+        sessions.add(ReadingSession.fromJson(item));
+      }
+    }
     return AppBackup(
       library: library,
       settings: settings,
       includesLibrary: includeLibrary,
       bannerImage: banner,
       covers: covers,
+      readingSessions: sessions,
+      includesReadingHistory: rawSessions != null && includeLibrary,
     );
   }
 

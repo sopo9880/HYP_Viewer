@@ -16,6 +16,9 @@ import '../core/cover_store.dart';
 import '../core/reader_settings.dart';
 import '../core/i18n.dart';
 import '../core/number_extractor.dart';
+import '../core/online_search.dart';
+import '../core/reading_history.dart';
+import 'reading_insights.dart';
 import 'candidate_editor.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
@@ -32,7 +35,7 @@ extension HypPageInfo on HypPage {
   String get label => switch (this) {
     HypPage.home => '홈',
     HypPage.library => '내 서재',
-    HypPage.favorites => '즐겨찾기',
+    HypPage.favorites => '내 독서',
     HypPage.downloads => '다운로드',
     HypPage.history => '열람 기록',
     HypPage.settings => '설정',
@@ -41,7 +44,7 @@ extension HypPageInfo on HypPage {
   IconData get icon => switch (this) {
     HypPage.home => Icons.home_rounded,
     HypPage.library => Icons.library_books_rounded,
-    HypPage.favorites => Icons.favorite_rounded,
+    HypPage.favorites => Icons.insights_rounded,
     HypPage.downloads => Icons.download_rounded,
     HypPage.history => Icons.history_rounded,
     HypPage.settings => Icons.settings_rounded,
@@ -52,6 +55,8 @@ extension HypPageInfo on HypPage {
 /// YouTube, CBZ and updater services instead of imitating them with mock data.
 class HypDashboard extends StatefulWidget {
   final LibraryBackup library;
+  final List<ReadingSession> readingSessions;
+  final Future<void> Function() onClearReadingHistory;
   final GalleryStore galleryStore;
   final CoverStore coverStore;
   final ReaderSettings readerSettings;
@@ -72,6 +77,7 @@ class HypDashboard extends StatefulWidget {
   final String appVersion;
   final bool downloadingUpdate;
   final double updateProgress;
+  final String updateStatus;
   final String? downloadingGalleryKey;
   final int downloadedGalleryPages;
   final int totalGalleryPages;
@@ -80,6 +86,8 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function() onFetch;
   final Future<void> Function() onSaveWork;
   final Future<void> Function(String code) onQuickAddNumber;
+  final Future<void> Function(OnlineSearchWork) onSaveOnlineSearchWork;
+  final Future<void> Function(OnlineSearchWork) onReadOnlineSearchWork;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
   final CandidateBatchVerify onVerifyCandidateCodes;
   final List<NumberCandidate> Function()? onCrossLineFallback;
@@ -129,6 +137,8 @@ class HypDashboard extends StatefulWidget {
   const HypDashboard({
     super.key,
     required this.library,
+    required this.readingSessions,
+    required this.onClearReadingHistory,
     required this.galleryStore,
     required this.coverStore,
     required this.readerSettings,
@@ -149,6 +159,7 @@ class HypDashboard extends StatefulWidget {
     required this.appVersion,
     required this.downloadingUpdate,
     required this.updateProgress,
+    required this.updateStatus,
     required this.downloadingGalleryKey,
     required this.downloadedGalleryPages,
     required this.totalGalleryPages,
@@ -157,6 +168,8 @@ class HypDashboard extends StatefulWidget {
     required this.onFetch,
     required this.onSaveWork,
     required this.onQuickAddNumber,
+    required this.onSaveOnlineSearchWork,
+    required this.onReadOnlineSearchWork,
     required this.onSaveSelectedWorks,
     required this.onVerifyCandidateCodes,
     this.onCrossLineFallback,
@@ -210,6 +223,16 @@ class HypDashboard extends StatefulWidget {
 
 class _HypDashboardState extends State<HypDashboard> {
   final TextEditingController _search = TextEditingController();
+  Timer? _searchDebounce;
+  int _searchEpoch = 0;
+  String _searchScope = 'all'; // all, local, online
+  String _searchLanguage = '';
+  bool _remoteBusy = false;
+  String? _remoteError;
+  List<OnlineSearchWork> _remoteResults = [];
+  int _remoteTotal = 0;
+  int _remotePage = 0;
+  final Map<String, (DateTime, OnlineSearchResult)> _remoteCache = {};
   final FocusNode _searchFocus = FocusNode();
   HypPage _page = HypPage.home;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -218,6 +241,11 @@ class _HypDashboardState extends State<HypDashboard> {
   bool _openBackupSectionRequested = false;
   final Set<String> _offlineKeys = <String>{};
   bool _selectingWorks = false;
+  bool _bannerHovered = false;
+  bool _notificationHovered = false;
+  bool _notificationShown = true;
+  Timer? _notificationTimer;
+  Timer? _notificationExitTimer;
   String? _openedGroupId;
   final Set<String> _selectedWorkIds = <String>{};
   bool get _canSelectWorks => _page == HypPage.library ||
@@ -233,6 +261,7 @@ class _HypDashboardState extends State<HypDashboard> {
   final Set<String> _popularityTried = {};
   bool _popularityBusy = false;
   bool _publicationBusy = false;
+  bool _groupScanBusy = false;
   bool _publicationTried = false;
   String? _sortLoadError;
 
@@ -322,10 +351,11 @@ class _HypDashboardState extends State<HypDashboard> {
     _preloadInput = TextEditingController(
       text: widget.readerSettings.preloadPages.toString());
     _search.addListener(_changedSearch);
+    _scheduleNotificationTimer();
     _syncSortLookup();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshOffline());
     _bannerTimer = Timer.periodic(const Duration(seconds: 8), (_) {
-      if (mounted && _page == HypPage.home &&
+      if (mounted && _page == HypPage.home && !_bannerHovered &&
           widget.readerSettings.heroArtworkSource == 'random' &&
           _coverImages.isNotEmpty) {
         _shuffleBannerCover();
@@ -336,6 +366,10 @@ class _HypDashboardState extends State<HypDashboard> {
   @override
   void didUpdateWidget(covariant HypDashboard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.message != widget.message) {
+      _notificationShown = true;
+      _scheduleNotificationTimer();
+    }
     if (oldWidget.readerSettings.librarySort != widget.readerSettings.librarySort ||
         oldWidget.readerSettings.popularityPeriod !=
             widget.readerSettings.popularityPeriod) _syncSortLookup();
@@ -363,15 +397,94 @@ class _HypDashboardState extends State<HypDashboard> {
   @override
   void dispose() {
     _bannerTimer?.cancel();
+    _notificationTimer?.cancel();
+    _notificationExitTimer?.cancel();
     _preloadInput.dispose();
+    _searchDebounce?.cancel();
     _search.removeListener(_changedSearch);
     _search.dispose();
     _searchFocus.dispose();
     super.dispose();
   }
 
+  void _scheduleNotificationTimer() {
+    _notificationTimer?.cancel();
+    _notificationExitTimer?.cancel();
+    if (widget.message.isEmpty || _notificationHovered) return;
+    final captured = widget.message;
+    final isFailure = RegExp(r'실패|오류|HTTP\s*[45]\d\d|에러',
+        caseSensitive: false).hasMatch(captured);
+    _notificationTimer = Timer(
+        Duration(seconds: isFailure ? 10 : 5), () {
+      if (!mounted || widget.message != captured || _notificationHovered) return;
+      setState(() => _notificationShown = false);
+      _notificationExitTimer = Timer(const Duration(milliseconds: 300), () {
+        if (mounted && widget.message == captured &&
+            !_notificationHovered) widget.onDismissMessage();
+      });
+    });
+  }
+
   void _changedSearch() {
+    _searchDebounce?.cancel();
+    _searchEpoch++;
+    _remoteResults = [];
+    _remoteError = null;
+    _remotePage = 0;
+    _remoteTotal = 0;
+    _remoteBusy = false;
     if (mounted) setState(() {});
+    if (_search.text.trim().isNotEmpty && _searchScope != 'local') {
+      final epoch = _searchEpoch;
+      _searchDebounce = Timer(const Duration(milliseconds: 450),
+          () => _fetchOnlineSearch(epoch: epoch));
+    }
+  }
+
+  Future<void> _fetchOnlineSearch({required int epoch, bool next = false}) async {
+    if (!mounted || _searchScope == 'local' || _search.text.trim().isEmpty) return;
+    final term = _search.text.trim();
+    final page = next ? _remotePage + 1 : 1;
+    final key = [term.toLowerCase(), _searchLanguage, page].join('|');
+    final cached = _remoteCache[key];
+    if (cached != null && DateTime.now().difference(cached.$1) <
+        const Duration(minutes: 10)) {
+      _useOnlineResults(cached.$2, epoch, next: next);
+      return;
+    }
+    setState(() {
+      _remoteBusy = true;
+      _remoteError = null;
+    });
+    final client = http.Client();
+    try {
+      final service = OnlineWorkSearch(client);
+      final result = await service.search(term, page: page,
+          language: _searchLanguage);
+      if (!mounted || epoch != _searchEpoch) return;
+      _remoteCache[key] = (DateTime.now(), result);
+      if (_remoteCache.length > 60) _remoteCache.clear();
+      _useOnlineResults(result, epoch, next: next);
+    } catch (error) {
+      if (mounted && epoch == _searchEpoch) setState(() {
+        _remoteError = error.toString();
+      });
+    } finally {
+      client.close();
+      if (mounted && epoch == _searchEpoch) setState(() => _remoteBusy = false);
+    }
+  }
+
+  void _useOnlineResults(OnlineSearchResult result, int epoch,
+      {required bool next}) {
+    if (!mounted || epoch != _searchEpoch) return;
+    setState(() {
+      _remotePage = result.page;
+      _remoteTotal = result.total;
+      final seen = <String>{};
+      _remoteResults = [...next ? _remoteResults : <OnlineSearchWork>[],
+        ...result.works].where((work) => seen.add(work.workId)).toList();
+    });
   }
 
   void _navigate(HypPage page) {
@@ -565,6 +678,9 @@ class _HypDashboardState extends State<HypDashboard> {
 
   List<WorkEntry> get _favorites => _works.where((w) => w.favorite).toList();
 
+  List<WorkEntry> get _visibleLibraryWorks => widget.readerSettings.completedHidden
+      ? _works.where((work) => !work.completed).toList() : _works;
+
   List<WorkEntry> get _recent => widget.library.works
       .where((w) => w.lastOpenedAt != null)
       .toList()
@@ -578,7 +694,8 @@ class _HypDashboardState extends State<HypDashboard> {
     if (term.isEmpty) return _works;
     return _works.where((w) {
       return [
-        w.title, w.author, w.workId, ...w.collections,
+        w.title, w.author, w.workId, w.sourceGroup, w.sourceSeries,
+        w.sourceType, w.sourceLanguage, ...w.tags, ...w.collections,
       ].join(' ').toLowerCase().contains(term);
     }).toList();
   }
@@ -652,7 +769,16 @@ class _HypDashboardState extends State<HypDashboard> {
             child: _searchField(),
           ),
           if (widget.downloadingUpdate)
-            LinearProgressIndicator(value: widget.updateProgress),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                LinearProgressIndicator(value: widget.updateProgress),
+                const SizedBox(height: 4),
+                Text(widget.updateStatus +
+                    ' · ' + (widget.updateProgress * 100).toStringAsFixed(0) +
+                    '%', style: const TextStyle(fontSize: 11)),
+              ]),
+            ),
           Expanded(
             child: Container(
               decoration: const BoxDecoration(
@@ -670,7 +796,21 @@ class _HypDashboardState extends State<HypDashboard> {
                 if (widget.message.isNotEmpty)
                   Positioned(
                     top: 8, left: 12, right: 12,
-                    child: Semantics(
+                    child: MouseRegion(
+                      onEnter: (_) {
+                        _notificationHovered = true;
+                        _notificationTimer?.cancel();
+                        _notificationExitTimer?.cancel();
+                        if (!_notificationShown) setState(() => _notificationShown = true);
+                      },
+                      onExit: (_) {
+                        _notificationHovered = false;
+                        _scheduleNotificationTimer();
+                      },
+                      child: AnimatedOpacity(
+                        opacity: _notificationShown ? 1 : 0,
+                        duration: const Duration(milliseconds: 300),
+                        child: Semantics(
                       liveRegion: true,
                       child: Material(
                         key: const Key('viewport-notification'),
@@ -696,6 +836,8 @@ class _HypDashboardState extends State<HypDashboard> {
                         ),
                       ),
                     ),
+                    ),
+                    ),
                   ),
               ]),
             ),
@@ -717,7 +859,7 @@ class _HypDashboardState extends State<HypDashboard> {
         destinations: [
           NavigationDestination(icon: const Icon(Icons.favorite_outline),
             selectedIcon: const Icon(Icons.favorite),
-            label: HypI18n.t(context, '즐겨찾기')),
+            label: HypI18n.t(context, '내 독서')),
           NavigationDestination(icon: const Icon(Icons.library_books_outlined),
             selectedIcon: const Icon(Icons.library_books),
             label: HypI18n.t(context, '서재')),
@@ -909,9 +1051,7 @@ class _HypDashboardState extends State<HypDashboard> {
         : switch (_page) {
             HypPage.home => _homeContent(),
             HypPage.library => _libraryContent(),
-            HypPage.favorites => _fullPage('즐겨찾기',
-                '하트를 누른 작품만 모아 보여줘.',
-                HypPage.favorites.icon, _favorites),
+            HypPage.favorites => _insightsContent(),
             HypPage.history => _fullPage('열람 기록',
                 '최근 읽기 화면을 연 순서대로 표시해.',
                 HypPage.history.icon, _recent),
@@ -925,6 +1065,30 @@ class _HypDashboardState extends State<HypDashboard> {
     );
   }
 
+  Widget _insightsContent() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      HypReadingInsights(
+        works: _works,
+        sessions: widget.readingSessions,
+        offlineCount: _offlineKeys.length,
+        settings: widget.readerSettings,
+        onSaveSettings: widget.onSaveReaderSettings,
+        onClearHistory: widget.onClearReadingHistory,
+        onOpenWork: (work) {
+          if (_offlineKeys.contains(work.key)) {
+            widget.onOpenGallery(work);
+          } else {
+            widget.onReadOnline(work);
+          }
+        },
+      ),
+      const SizedBox(height: 16),
+      _fullPage('즐겨찾기', '기존에 즐겨찾기한 작품을 그대로 확인해.',
+          Icons.favorite_rounded, _favorites),
+    ],
+  );
+
   Widget _homeContent() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -934,6 +1098,16 @@ class _HypDashboardState extends State<HypDashboard> {
         rotatingArtworks: widget.readerSettings.heroArtworkSource == 'random'
             ? _rotatingCoverKeys.map((key) => _coverImages[key]).toList()
             : null,
+        rotatingArtworkKeys: widget.readerSettings.heroArtworkSource == 'random'
+            ? List<String?>.from(_rotatingCoverKeys) : null,
+        onHoverChanged: (hovered) => _bannerHovered = hovered,
+        onOpenArtwork: (key) {
+          final matching = widget.library.works.where((work) => work.key == key);
+          if (matching.isEmpty) return;
+          final work = matching.first;
+          if (_offlineKeys.contains(work.key)) widget.onOpenGallery(work);
+          else widget.onReadOnline(work);
+        },
         onOpenLibrary: () => _navigate(HypPage.library),
         onOpenDownloads: () => _navigate(HypPage.downloads),
       ),
@@ -1158,12 +1332,87 @@ class _HypDashboardState extends State<HypDashboard> {
     });
   }
 
+  Future<void> _enrichAndGroup() async {
+    if (_groupScanBusy) return;
+    setState(() => _groupScanBusy = true);
+    final client = http.Client();
+    var refreshed = 0;
+    try {
+      final provider = HitomiGalleryProvider(client);
+      // Limit network pressure. User-confirmed metadata enrichment only.
+      final eligible = widget.library.works.where((work) =>
+          work.title.isEmpty || work.title == '작품 ' + work.workId ||
+          (work.author.isEmpty && work.sourceGroup.isEmpty)).take(80).toList();
+      for (var i = 0; i < eligible.length; i += 3) {
+        final batch = eligible.skip(i).take(3).toList();
+        await Future.wait(batch.map((work) async {
+          try {
+            final info = await provider.fetchInfo(work.workId)
+                .timeout(const Duration(seconds: 10));
+            if (!mounted) return;
+            final newTitle = (work.title.isEmpty ||
+                work.title == '작품 ' + work.workId) && info.title.isNotEmpty
+                ? info.title : work.title;
+            final newAuthor = work.author.isEmpty ? info.author : work.author;
+            final newGroup = work.sourceGroup.isEmpty ? info.group : work.sourceGroup;
+            if (newTitle == work.title && newAuthor == work.author &&
+                newGroup == work.sourceGroup &&
+                work.sourceSeries.isNotEmpty) return;
+            await widget.onUpdateWork(work.copyWith(
+              title: newTitle, author: newAuthor,
+              sourceGroup: newGroup,
+              sourceSeries: work.sourceSeries.isEmpty
+                  ? info.series : work.sourceSeries,
+              tags: work.tags.isEmpty ? info.tags : work.tags,
+              sourceType: work.sourceType.isEmpty ? info.type : work.sourceType,
+              sourceLanguage: work.sourceLanguage.isEmpty
+                  ? info.language : work.sourceLanguage,
+            ));
+            refreshed++;
+          } catch (_) { /* A remote source may be temporarily unavailable. */ }
+        }));
+      }
+    } finally {
+      client.close();
+      if (mounted) setState(() => _groupScanBusy = false);
+    }
+    if (!mounted) return;
+    final proposals = WorkGrouping.suggest(widget.library.works);
+    if (proposals.isEmpty) {
+      await showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+        title: const Text('Auto 묶기 · 탐색 완료'),
+        content: Text('작품 ' + refreshed.toString() +
+            '개 정보를 갱신했지만 추천 묶음이 없어. '
+            '수동으로 여러 작품을 선택해 묶을 수도 있어.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx),
+          child: const Text('확인'))],
+      ));
+    } else {
+      await _showAutoGroupWizard();
+    }
+  }
+
   Future<void> _showAutoGroupWizard() async {
     final suggestions = WorkGrouping.suggest(widget.library.works);
     if (suggestions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: HypText('새로 추천할 시리즈를 찾지 못했어. '
-            '작품 정보의 제목·작가를 확인하거나 선택 묶기를 사용해 줘.')));
+      final retry = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Auto 묶기 · 탐색 결과'),
+          content: Text('전체 ' + widget.library.works.length.toString() +
+              '개 작품을 비교했지만 새 시리즈 후보를 찾지 못했어.\n\n'
+              '서재의 제목·작가·서클·시리즈 정보가 부족하면 후보를 놓칠 수 있어. '
+              '온라인에서 누락된 작품 정보를 보충한 후 재탐색할까?\n'
+              '(기존 묶음과 읽기 기록은 변경하지 않아.)'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('닫기')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('정보 갱신 후 재탐색')),
+          ],
+        ),
+      );
+      if (retry == true && mounted) await _enrichAndGroup();
       return;
     }
     final confirmed = await showDialog<List<AutoGroupReview>>(
@@ -1456,57 +1705,200 @@ class _HypDashboardState extends State<HypDashboard> {
           child: Text(_sortLoadError!,
             style: const TextStyle(color: Colors.orangeAccent, fontSize: 12))),
       const SizedBox(height: 10),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        OutlinedButton.icon(
+      Row(children: [
+        Expanded(child: OutlinedButton.icon(
           key: const Key('library-select-mode'),
           onPressed: _toggleSelectionMode,
           icon: Icon(_selectingWorks
               ? Icons.close : Icons.checklist_outlined),
           label: HypText(_selectingWorks ? '선택 종료' : '선택'),
-        ),
-        OutlinedButton.icon(
+        )),
+        const SizedBox(width: 8),
+        Expanded(child: OutlinedButton.icon(
           key: const Key('library-group-auto'),
-          onPressed: widget.library.works.length < 2
+          onPressed: widget.library.works.length < 2 || _groupScanBusy
               ? null : _showAutoGroupWizard,
           icon: const Icon(Icons.auto_fix_high_outlined),
           label: const HypText('Auto 묶기'),
-        ),
-        OutlinedButton.icon(
+        )),
+      ]),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(child: OutlinedButton.icon(
           key: const Key('library-download-all'),
           onPressed: widget.library.works.isEmpty
               ? null : widget.onDownloadAll,
           icon: const Icon(Icons.download_for_offline_outlined),
           label: const HypText('전체 다운로드'),
-        ),
+        )),
+        const SizedBox(width: 8),
+        Expanded(child: OutlinedButton.icon(
+          key: const Key('library-completed-toggle'),
+          onPressed: () => widget.onSaveReaderSettings(
+            widget.readerSettings.copyWith(
+                completedHidden: !widget.readerSettings.completedHidden)),
+          icon: Icon(widget.readerSettings.completedHidden
+              ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+          label: HypText(widget.readerSettings.completedHidden
+              ? '완독 표시' : '완독 숨기기'),
+        )),
       ]),
-      _selectionControls(_works),
+      _selectionControls(_visibleLibraryWorks),
       const SizedBox(height: 8),
-      _groupedLibraryGrid(_works),
+      if (widget.readerSettings.completedHidden &&
+          _visibleLibraryWorks.isEmpty && widget.library.works.isNotEmpty)
+        Padding(padding: const EdgeInsets.all(12),
+          child: Column(children: [
+            const Text('모든 작품이 완독으로 분류돼 숨겨져 있어.'),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(completedHidden: false)),
+              icon: const Icon(Icons.visibility),
+              label: const Text('완독 작품 다시 표시'),
+            ),
+          ]),
+        )
+      else
+        _groupedLibraryGrid(_visibleLibraryWorks),
     ],
   );
 
-  Widget _searchContent() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Align(
-        alignment: Alignment.centerRight,
-        child: OutlinedButton.icon(
+  Widget _searchContent() {
+    final existingIds = widget.library.works.map((w) => w.workId).toSet();
+    final online = _remoteResults.where((w) =>
+        !existingIds.contains(w.workId)).toList();
+    final showLocal = _searchScope != 'online';
+    final showOnline = _searchScope != 'local';
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const HypSectionTitle(icon: Icons.search_rounded,
+          title: '통합 작품 검색', subtitle: '내 서재와 온라인 작품을 함께 찾아봐.'),
+      const SizedBox(height: 10),
+      Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final entry in const [('all','전체'),('local','내 서재'),('online','온라인')])
+            ChoiceChip(
+              key: Key('search-scope-' + entry.$1),
+              label: Text(entry.$2),
+              selected: _searchScope == entry.$1,
+              onSelected: (_) => setState(() {
+                _searchScope = entry.$1;
+                _changedSearch();
+              }),
+            ),
+          PopupMenuButton<String>(
+            tooltip: '검색 언어 필터',
+            onSelected: (value) {
+              _searchLanguage = value;
+              _changedSearch();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: '', child: Text('모든 언어')),
+              PopupMenuItem(value: 'korean', child: Text('한국어')),
+              PopupMenuItem(value: 'japanese', child: Text('일본어')),
+              PopupMenuItem(value: 'english', child: Text('영어')),
+            ],
+            child: Chip(label: Text(_searchLanguage.isEmpty
+                ? '언어 전체 ▾' : '언어: ' + _searchLanguage + ' ▾')),
+          ),
+        ]),
+      if (showLocal) ...[
+        const SizedBox(height: 13),
+        Text('내 서재 · ' + _results.length.toString() + '개',
+            style: Theme.of(context).textTheme.titleMedium),
+        Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(
           key: const Key('search-select-mode'),
           onPressed: _toggleSelectionMode,
-          icon: Icon(_selectingWorks
-              ? Icons.close : Icons.checklist_outlined),
+          icon: Icon(_selectingWorks ? Icons.close : Icons.checklist_outlined),
           label: HypText(_selectingWorks ? '선택 종료' : '선택'),
+        )),
+        _selectionControls(_results),
+        _gridOrEmpty(_results,
+          emptyTitle: '내 서재에서 찾지 못했어',
+          emptyMessage: '온라인 결과가 나오면 아래에서 확인해 봐.'),
+      ],
+      if (showOnline) ...[
+        const SizedBox(height: 18),
+        Text('온라인 작품 · ' + _remoteTotal.toString() + '개 결과',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        if (_remoteBusy) const LinearProgressIndicator(),
+        if (_remoteError != null) ...[
+          Text('온라인 검색에 실패했어. 내 서재 검색은 정상 동작해.\n' +
+              _remoteError!, style: const TextStyle(color: Colors.orangeAccent)),
+          TextButton.icon(onPressed: () => _fetchOnlineSearch(epoch: _searchEpoch),
+            icon: const Icon(Icons.refresh), label: const Text('다시 검색')),
+        ],
+        if (!_remoteBusy && _remoteError == null && _remoteResults.isEmpty)
+          const Padding(padding: EdgeInsets.all(15),
+            child: Text('온라인 결과가 아직 없어. 제목이나 작가·태그로 검색해 줘.')),
+        for (final work in online) Card(
+          key: Key('online-search-' + work.workId),
+          child: ListTile(
+            leading: const Icon(Icons.menu_book_outlined),
+            title: Text(work.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+            subtitle: Text([
+              if (work.artists.isNotEmpty) work.artists.join(', '),
+              if (work.language.isNotEmpty) work.language,
+              '#' + work.workId,
+            ].join(' · '), maxLines: 2),
+            trailing: IconButton(
+              tooltip: '서재에 추가',
+              onPressed: () => widget.onSaveOnlineSearchWork(work),
+              icon: const Icon(Icons.bookmark_add_outlined),
+            ),
+            onTap: () => _showOnlineWork(work),
+          ),
         ),
-      ),
-      _selectionControls(_results),
-      _fullPage(
-        '검색 결과',
-        '"' + _search.text + '" · ' + _results.length.toString() + '개 작품',
-        Icons.search_rounded,
-        _results,
-      ),
-    ],
-  );
+        if (!_remoteBusy && _remoteResults.length < _remoteTotal &&
+            _remoteResults.isNotEmpty)
+          OutlinedButton.icon(
+            onPressed: () => _fetchOnlineSearch(
+                epoch: _searchEpoch, next: true),
+            icon: const Icon(Icons.expand_more),
+            label: const Text('온라인 결과 더 보기'),
+          ),
+      ],
+    ]);
+  }
+
+  Future<void> _showOnlineWork(OnlineSearchWork work) async {
+    await showModalBottomSheet<void>(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(work.title, style: Theme.of(ctx).textTheme.titleLarge),
+          const SizedBox(height: 10),
+          Text('#' + work.workId),
+          if (work.artists.isNotEmpty) Text('작가: ' + work.artists.join(', ')),
+          if (work.groups.isNotEmpty) Text('서클: ' + work.groups.join(', ')),
+          if (work.tags.isNotEmpty)
+            Text('태그: ' + work.tags.take(20).join(', ')),
+          const SizedBox(height: 15),
+          Wrap(spacing: 8, children: [
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                widget.onSaveOnlineSearchWork(work);
+              },
+              icon: const Icon(Icons.bookmark_add_outlined),
+              label: const Text('서재 추가'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                widget.onReadOnlineSearchWork(work);
+              },
+              icon: const Icon(Icons.menu_book),
+              label: const Text('서재 추가하고 읽기'),
+            ),
+          ]),
+        ]),
+      )),
+    );
+  }
 
   Widget _gridOrEmpty(List<WorkEntry> works, {
     required String emptyTitle,

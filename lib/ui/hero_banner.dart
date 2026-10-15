@@ -12,6 +12,9 @@ class HypHeroBanner extends StatefulWidget {
   final VoidCallback onOpenDownloads;
   final Uint8List? artwork;
   final List<Uint8List?>? rotatingArtworks;
+  final List<String?>? rotatingArtworkKeys;
+  final ValueChanged<String>? onOpenArtwork;
+  final ValueChanged<bool>? onHoverChanged;
 
   const HypHeroBanner({
     super.key,
@@ -19,6 +22,9 @@ class HypHeroBanner extends StatefulWidget {
     required this.onOpenDownloads,
     this.artwork,
     this.rotatingArtworks,
+    this.rotatingArtworkKeys,
+    this.onOpenArtwork,
+    this.onHoverChanged,
   });
 
   @override
@@ -28,12 +34,13 @@ class HypHeroBanner extends StatefulWidget {
 class _HypHeroBannerState extends State<HypHeroBanner> {
   int _index = 0;
   Timer? _rotationTimer;
+  bool _hovered = false;
 
   @override
   void initState() {
     super.initState();
     _rotationTimer = Timer.periodic(const Duration(seconds: 8), (_) {
-      if (mounted && widget.rotatingArtworks != null) _turn(1);
+      if (mounted && !_hovered && widget.rotatingArtworks != null) _turn(1);
     });
   }
 
@@ -64,7 +71,13 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
             : (widget.rotatingArtworks!.isEmpty ? null
                 : widget.rotatingArtworks![
                     _index % widget.rotatingArtworks!.length]);
-        return Container(
+        final artworkKey = widget.rotatingArtworkKeys != null &&
+                _index < widget.rotatingArtworkKeys!.length && currentArt != null
+            ? widget.rotatingArtworkKeys![_index] : null;
+        return MouseRegion(
+          onEnter: (_) { _hovered = true; widget.onHoverChanged?.call(true); },
+          onExit: (_) { _hovered = false; widget.onHoverChanged?.call(false); },
+          child: Container(
           height: compact ? 235 : 240,
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -129,6 +142,14 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
                 color: Colors.white.withValues(alpha: 0.11),
               ),
             ),
+            if (artworkKey != null && widget.onOpenArtwork != null)
+              Positioned.fill(child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  key: const Key('hero-random-cover-open'),
+                  onTap: () => widget.onOpenArtwork!(artworkKey),
+                ),
+              )),
             Padding(
               padding: EdgeInsets.fromLTRB(compact ? 19 : 35, 21, 20, 16),
               child: Column(
@@ -175,7 +196,15 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
                     const SizedBox(width: 14),
                     _arrow(Icons.chevron_right, '다음 소개', () => _turn(1)),
                     const Spacer(),
-                    if (!compact && _index != 0)
+                    if (artworkKey != null && widget.onOpenArtwork != null)
+                      IconButton(
+                        key: const Key('hero-open-random-work'),
+                        tooltip: '현재 표지의 작품 읽기',
+                        onPressed: () => widget.onOpenArtwork!(artworkKey),
+                        icon: const Icon(Icons.menu_book_outlined,
+                            color: Colors.white),
+                      ),
+                    if (!compact && _index != 0 && artworkKey == null)
                       TextButton.icon(
                         onPressed: _index == 1
                             ? widget.onOpenLibrary : widget.onOpenDownloads,
@@ -188,7 +217,7 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
               ),
             ),
           ]),
-        );
+        ));
       });
 
   Widget _arrow(IconData icon, String tooltip, VoidCallback onPressed) {

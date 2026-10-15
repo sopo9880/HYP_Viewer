@@ -35,10 +35,12 @@ import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
 import 'core/candidate_verifier.dart';
 import 'core/online_gallery.dart';
+import 'core/online_search.dart';
 import 'core/shares.dart';
 import 'core/storage.dart';
 import 'core/updates.dart';
 import 'core/work.dart';
+import 'core/reading_history.dart';
 import 'core/youtube.dart';
 import 'core/youtube_public.dart';
 
@@ -75,12 +77,16 @@ class LibraryHome extends StatefulWidget {
   State<LibraryHome> createState() => _LibraryHomeState();
 }
 
-class _LibraryHomeState extends State<LibraryHome> {
+class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   final storage = LibraryStorage();
   final coverStore = const CoverStore();
   final heroArtworkStore = const HeroArtworkStore();
   Uint8List? heroArtwork;
   final readerSettingsStorage = const ReaderSettingsStorage();
+  final readingHistoryStore = const ReadingHistoryStore();
+  List<ReadingSession> readingSessions = [];
+  Future<void> _historyWrites = Future<void>.value();
+  ReadingActivityTracker? _activeReading;
   ReaderSettings readerSettings = const ReaderSettings();
   int coverEpoch = 0;
   Future<void> _libraryWrites = Future<void>.value();
@@ -107,6 +113,7 @@ class _LibraryHomeState extends State<LibraryHome> {
   int downloadedGalleryBytes = 0;
   bool downloadingUpdate = false;
   double updateProgress = 0;
+  String updateStatus = '';
   final urlInput = TextEditingController();
   final commentInput = TextEditingController();
   final numberInput = TextEditingController();
@@ -122,6 +129,8 @@ class _LibraryHomeState extends State<LibraryHome> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadReadingHistory();
     _load();
     _loadOnlineSource();
     _loadReaderSettings();
@@ -134,12 +143,96 @@ class _LibraryHomeState extends State<LibraryHome> {
     });
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _activeReading?.resume();
+    } else {
+      _activeReading?.pause();
+    }
+  }
+
+  Future<void> _loadReadingHistory() async {
+    try {
+      final saved = await readingHistoryStore.load();
+      await _historyWrites;
+      if (mounted) setState(() => readingSessions = saved);
+    } catch (error) {
+      _status('독서 활동 기록 불러오기 실패: ' + error.toString());
+    }
+  }
+
+  Future<void> _commitReadingHistory(
+      List<ReadingSession> Function(List<ReadingSession>) edit) {
+    final task = _historyWrites.then((_) async {
+      final updated = edit(readingSessions);
+      if (updated.length > ReadingHistoryStore.maxSessions) {
+        updated.removeRange(0, updated.length - ReadingHistoryStore.maxSessions);
+      }
+      await readingHistoryStore.save(updated);
+      if (mounted) setState(() => readingSessions = updated);
+    });
+    _historyWrites = task.then<void>((_) {},
+        onError: (Object _, StackTrace __) {});
+    return task;
+  }
+
+  Future<void> _finishReading(ReadingActivityTracker tracker) async {
+    if (identical(_activeReading, tracker)) _activeReading = null;
+    if (!readerSettings.analyticsEnabled) return;
+    try {
+      final record = tracker.finish();
+      await _commitReadingHistory((old) => [...old, record]);
+    } catch (error) {
+      _status('독서 활동 기록 저장 실패: ' + error.toString());
+    }
+  }
+
+  Future<void> _clearReadingHistory() async {
+    try {
+      await _commitReadingHistory((_) => <ReadingSession>[]);
+      _status('독서 활동 기록 삭제 완료. 서재의 읽기 진행률은 유지돼.');
+    } catch (error) {
+      _status('독서 활동 기록 삭제 실패: ' + error.toString());
+    }
+  }
+
+  Future<File> _pendingUpdateFile() async {
+    final dir = await getApplicationSupportDirectory();
+    await dir.create(recursive: true);
+    return File(dir.path + Platform.pathSeparator +
+        'hyp_pending_update_version.txt');
+  }
+
+  Future<void> _checkPendingInstallation(String runningVersion) async {
+    try {
+      final pendingFile = await _pendingUpdateFile();
+      if (!await pendingFile.exists()) return;
+      final pendingVersion = (await pendingFile.readAsString()).trim();
+      if (!RegExp(r'^\d+\.\d+\.\d+$').hasMatch(pendingVersion)) {
+        await pendingFile.delete();
+        return;
+      }
+      if (UpdateService.isNewer(pendingVersion, runningVersion)) {
+        _status('업데이트 v' + pendingVersion +
+            ' 설치가 아직 확인되지 않았어. 설정에서 다시 시도할 수 있어.');
+      } else {
+        await pendingFile.delete();
+        _status('v' + pendingVersion +
+            ' 업데이트가 실제 앱 버전으로 확인됐어.');
+      }
+    } catch (_) {
+      // A missing or inaccessible pending flag must never block startup.
+    }
+  }
+
   Future<void> _loadVersionInfo() async {
     try {
       final info = await PackageInfo.fromPlatform();
       if (mounted) {
-        setState(() => appVersion =
-          'v${info.version} (build ${info.buildNumber})');
+        setState(() => appVersion = 'v' + info.version +
+            ' (build ' + info.buildNumber + ')');
+        await _checkPendingInstallation(info.version);
       }
     } catch (_) {
       // Test hosts and unsupported platforms may not supply package metadata.
@@ -477,6 +570,39 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   Future<void> _saveWork() =>
       _saveSelectedWorks([numberInput.text.trim()]);
+
+  Future<void> _saveOnlineSearchWork(OnlineSearchWork result) async {
+    await _commitLibrary((latest) {
+      if (latest.works.any((w) => w.workId == result.workId)) return latest;
+      final work = WorkEntry.create(
+        workId: result.workId, title: result.title,
+        author: result.artists.join(', '),
+      ).copyWith(
+        tags: result.tags,
+        sourceGroup: result.groups.join(', '),
+        sourceSeries: result.series.join(', '),
+        sourceType: result.type,
+        sourceLanguage: result.language,
+        sourceDate: result.date,
+      );
+      return LibraryBackup(
+        works: [...latest.works, work],
+        collections: latest.collections,
+      );
+    });
+    _status('작품 #' + result.workId + ' 서재에 추가했어.');
+  }
+
+  Future<void> _readOnlineSearchWork(OnlineSearchWork result) async {
+    try {
+      await _saveOnlineSearchWork(result);
+      if (!mounted) return;
+      final work = library.works.firstWhere((w) => w.workId == result.workId);
+      await _readOnline(work);
+    } catch (error) {
+      _status('검색 작품 열기 실패: ' + error.toString());
+    }
+  }
 
   Future<void> _quickAddNumber(String code) async {
     // The top search field accepts either a Shorts URL or a gallery ID.
@@ -996,6 +1122,8 @@ class _LibraryHomeState extends State<LibraryHome> {
           includesLibrary: choices[0],
           bannerImage: banner,
           covers: covers,
+          readingSessions: choices[0] ? readingSessions : const [],
+          includesReadingHistory: choices[0],
         ).encode();
       }
       final extension = excel ? 'xlsx' : 'json';
@@ -1091,6 +1219,9 @@ class _LibraryHomeState extends State<LibraryHome> {
                       ? '앱 설정 포함됨' : '앱 설정 없음 (기존 형식)'),
                   if (incoming.hasImages)
                     const HypText('표지·배너 이미지 포함됨'),
+                  if (incoming.includesReadingHistory)
+                    HypText('독서 활동 기록 ' + incoming.readingSessions.length.toString() +
+                        '개 포함됨'),
                   const SizedBox(height: 10),
                   ListTile(
                     key: const Key('backup-mode-add'),
@@ -1198,6 +1329,22 @@ class _LibraryHomeState extends State<LibraryHome> {
       }
       final imageErrors = await _restoreBackupImages(
           incoming, selected, previousLibrary);
+      if (incoming.includesReadingHistory &&
+          selected != AppRestoreMode.replaceSettings) {
+        await _commitReadingHistory((current) {
+          if (selected == AppRestoreMode.replaceEverything) {
+            return [...incoming.readingSessions];
+          }
+          final all = <String, ReadingSession>{
+            for (final session in current) session.id: session,
+          };
+          for (final session in incoming.readingSessions) {
+            all[session.id] = session;
+          }
+          return all.values.toList()
+            ..sort((a,b) => a.startedAt.compareTo(b.startedAt));
+        });
+      }
       if (mounted && plan.changesLibrary) {
         setState(() => libraryNavigationEpoch++);
       }
@@ -1389,14 +1536,22 @@ class _LibraryHomeState extends State<LibraryHome> {
             ? remote.title.trim() : work.title,
       );
       if (!mounted) return;
+      final reading = ReadingActivityTracker(work.workId, readerWork.currentPage);
+      _activeReading = reading;
+      try {
       await Navigator.push<void>(
         context,
         MaterialPageRoute(builder: (ctx) => GalleryReader(
           work: readerWork,
           archive: remote,
           persistentCacheDirectory: persistentCache,
-          onPageChanged: (page) { _touchRead(work, page: page); },
+          onPageChanged: (page) {
+            reading.pageChanged(page);
+            _touchRead(work, page: page);
+          },
           onFinishedReading: (total) {
+            reading.completed = true;
+            reading.pageChanged(total);
             unawaited(_touchRead(work, page: total,
                 pageCount: total, completed: true));
           },
@@ -1413,6 +1568,9 @@ class _LibraryHomeState extends State<LibraryHome> {
           onChooseCover: (page, bytes) => _usePageAsCover(work, page, bytes),
         )),
       );
+      } finally {
+        await _finishReading(reading);
+      }
     } catch (e) {
       _status('앱 내 온라인 읽기 실패: ' + e.toString() +
           ' / 작품 메뉴의 웹 리더로 열기를 이용할 수 있어.');
@@ -2013,15 +2171,21 @@ class _LibraryHomeState extends State<LibraryHome> {
       final book = archive ?? await galleryStore.read(work.workId);
       if (!mounted) return;
       await _touchRead(work, pageCount: book.pageCount);
+      final reading = ReadingActivityTracker(work.workId, work.currentPage);
+      _activeReading = reading;
+      try {
       await Navigator.push<void>(
         context,
         MaterialPageRoute(builder: (ctx) => GalleryReader(
           work: work,
           archive: book,
           onPageChanged: (page) {
+            reading.pageChanged(page);
             _touchRead(work, page: page);
           },
           onFinishedReading: (total) {
+            reading.completed = true;
+            reading.pageChanged(total);
             unawaited(_touchRead(work, page: total,
                 pageCount: total, completed: true));
           },
@@ -2036,6 +2200,9 @@ class _LibraryHomeState extends State<LibraryHome> {
           onChooseCover: (page, bytes) => _usePageAsCover(work, page, bytes),
         )), 
       );
+    } finally {
+        await _finishReading(reading);
+      }
     } catch (e) {
       _status('읽기 실패: ' + e.toString() + ' / CBZ 또는 ZIP 파일을 먼저 연결해줘.');
     }
@@ -2048,6 +2215,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     setState(() {
       downloadingUpdate = true;
       updateProgress = 0;
+      updateStatus = '설치 파일을 내려받는 중이야.';
       message = '설치 파일을 내려받는 중이야.';
     });
     try {
@@ -2056,6 +2224,9 @@ class _LibraryHomeState extends State<LibraryHome> {
         asset,
         onProgress: (value) {
           if (mounted) setState(() => updateProgress = value.clamp(0.0, 1.0));
+        },
+        onStatus: (status) {
+          if (mounted) setState(() => updateStatus = status);
         },
       );
       if (!mounted) return;
@@ -2106,13 +2277,20 @@ class _LibraryHomeState extends State<LibraryHome> {
         ) == true;
       }
       if (install == true) {
-        await UpdateService(client).launchInstaller(installer);
+        final pending = await _pendingUpdateFile();
+        await pending.writeAsString(release.version, flush: true);
+        try {
+          await UpdateService(client).launchInstaller(installer);
+        } catch (_) {
+          if (await pending.exists()) await pending.delete();
+          rethrow;
+        }
         if (Platform.isWindows) {
           exit(0);
         }
-        _status('Android 설치 화면을 열었어. 시스템에서 설치를 승인해줘.');
+        _status('Android 설치 화면을 열었어. 승인 후 앱 버전이 변경되면 설치를 확인할게.');
       } else {
-        _status('검증된 설치 파일을 임시 폴더에 보관했어.');
+        _status('검증된 설치 파일을 앱 보관함에 저장했어. 다시 다운로드할 필요 없어.');
       }
     } catch (e) {
       _status('업데이트 실패: ' + e.toString());
@@ -2183,6 +2361,7 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _noticesTimer?.cancel();
     for (final ctrl in [urlInput, commentInput, numberInput, titleInput, authorInput, apiKeyInput, onlineSourceInput]) {
       ctrl.dispose();
@@ -2193,6 +2372,8 @@ class _LibraryHomeState extends State<LibraryHome> {
   @override
   Widget build(BuildContext context) => HypDashboard(
     library: library,
+    readingSessions: readingSessions,
+    onClearReadingHistory: _clearReadingHistory,
     galleryStore: galleryStore,
     coverStore: coverStore,
     coverEpoch: coverEpoch,
@@ -2213,6 +2394,7 @@ class _LibraryHomeState extends State<LibraryHome> {
     appVersion: appVersion,
     downloadingUpdate: downloadingUpdate,
     updateProgress: updateProgress,
+    updateStatus: updateStatus,
     downloadingGalleryKey: downloadingGalleryKey,
     downloadedGalleryPages: downloadedGalleryPages,
     totalGalleryPages: totalGalleryPages,
@@ -2221,6 +2403,8 @@ class _LibraryHomeState extends State<LibraryHome> {
     onFetch: _fetch,
     onSaveWork: _saveWork,
     onQuickAddNumber: _quickAddNumber,
+    onSaveOnlineSearchWork: _saveOnlineSearchWork,
+    onReadOnlineSearchWork: _readOnlineSearchWork,
     onSaveSelectedWorks: _saveSelectedWorks,
     onVerifyCandidateCodes: _verifyCandidateCodes,
     onCrossLineFallback: _crossLineFallback,

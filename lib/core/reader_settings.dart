@@ -23,6 +23,8 @@ class ReaderSettings {
   final String popularityPeriod; // today, week, month, year
   final bool librarySortDescending;
   final bool recentCollapsed;
+  final bool completedHidden;
+  final bool analyticsEnabled;
   final List<String> expandedSettings;
   final bool autoCoverEnabled;
   final bool volumeKeyNavigation;
@@ -50,6 +52,8 @@ class ReaderSettings {
     this.popularityPeriod = 'month',
     this.librarySortDescending = false,
     this.recentCollapsed = false,
+    this.completedHidden = false,
+    this.analyticsEnabled = true,
     this.expandedSettings = const [],
     this.autoCoverEnabled = false,
     this.volumeKeyNavigation = false,
@@ -80,6 +84,8 @@ class ReaderSettings {
     String? popularityPeriod,
     bool? librarySortDescending,
     bool? recentCollapsed,
+    bool? completedHidden,
+    bool? analyticsEnabled,
     List<String>? expandedSettings,
     bool? autoCoverEnabled,
     bool? volumeKeyNavigation,
@@ -106,6 +112,8 @@ class ReaderSettings {
     popularityPeriod: popularityPeriod ?? this.popularityPeriod,
     librarySortDescending: librarySortDescending ?? this.librarySortDescending,
     recentCollapsed: recentCollapsed ?? this.recentCollapsed,
+    completedHidden: completedHidden ?? this.completedHidden,
+    analyticsEnabled: analyticsEnabled ?? this.analyticsEnabled,
     expandedSettings: expandedSettings ?? this.expandedSettings,
     autoCoverEnabled: autoCoverEnabled ?? this.autoCoverEnabled,
     volumeKeyNavigation: volumeKeyNavigation ?? this.volumeKeyNavigation,
@@ -134,6 +142,8 @@ class ReaderSettings {
     'popularityPeriod': popularityPeriod,
     'librarySortDescending': librarySortDescending,
     'recentCollapsed': recentCollapsed,
+    'completedHidden': completedHidden,
+    'analyticsEnabled': analyticsEnabled,
     'expandedSettings': expandedSettings,
     'autoCoverEnabled': autoCoverEnabled,
     'volumeKeyNavigation': volumeKeyNavigation,
@@ -174,6 +184,8 @@ class ReaderSettings {
             ? data['librarySort'] as String : 'newest',
         librarySortDescending: data['librarySortDescending'] == true,
         recentCollapsed: data['recentCollapsed'] == true,
+        completedHidden: data['completedHidden'] == true,
+        analyticsEnabled: data['analyticsEnabled'] != false,
         expandedSettings: data['expandedSettings'] is List
             ? (data['expandedSettings'] as List).whereType<String>()
                 .take(25).toSet().toList() : const [],

@@ -3,10 +3,24 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hyp_viewer/core/app_backup.dart';
+import 'package:hyp_viewer/core/reading_history.dart';
 import 'package:hyp_viewer/core/reader_settings.dart';
 import 'package:hyp_viewer/core/work.dart';
 
 void main() {
+  test('JSON backup round-trips real on-device reading sessions', () {
+    final now = DateTime.utc(2026, 10, 15);
+    final item = ReadingSession(workId: '100', startedAt: now,
+        endedAt: now.add(const Duration(seconds: 15)), startPage: 1,
+        endPage: 2, activeSeconds: 15, completed: false);
+    final backup = AppBackup(library: LibraryBackup(
+      works: [WorkEntry.create(workId: '100')], collections: const []),
+      readingSessions: [item], includesReadingHistory: true);
+    final imported = AppBackup.decode(utf8.decode(backup.encode()));
+    expect(imported.includesReadingHistory, true);
+    expect(imported.readingSessions.single.activeSeconds, 15);
+  });
+
   final pc = LibraryBackup(
     works: [WorkEntry.create(workId: '1111111', title: 'PC')
         .copyWith(favorite: true, currentPage: 18)],
