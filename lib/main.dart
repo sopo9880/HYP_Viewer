@@ -43,6 +43,10 @@ import 'core/work.dart';
 import 'core/reading_history.dart';
 import 'core/youtube.dart';
 import 'core/youtube_public.dart';
+import 'core/source_links.dart';
+import 'core/work_editions.dart';
+import 'core/work_edition_service.dart';
+import 'core/update_prompt.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -123,6 +127,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   LibraryBackup library = const LibraryBackup(works: [], collections: []);
   List<NumberCandidate> candidates = [];
   final Map<String, CandidateVerification> _candidateCache = {};
+  final Map<String, String> _candidateSourceUrls = {};
+  int finderClearEpoch = 0;
+  late final Future<void> _settingsLoad;
+  bool _updateDismissedThisLaunch = false;
+  bool _updateDialogOpen = false;
   bool busy = false;
   String message = '';
 
@@ -133,7 +142,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     _loadReadingHistory();
     _load();
     _loadOnlineSource();
-    _loadReaderSettings();
+    _settingsLoad = _loadReaderSettings();
     _loadVersionInfo();
     _loadHeroArtwork();
     _listenForSharedShorts();
@@ -472,6 +481,19 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
   }
 
+  void _clearFinder() {
+    if (busy) return;
+    setState(() {
+      for (final ctrl in [urlInput, commentInput, numberInput,
+          titleInput, authorInput]) { ctrl.clear(); }
+      candidates = [];
+      _candidateSourceUrls.clear();
+      _candidateCache.clear();
+      finderClearEpoch++;
+      message = '';
+    });
+  }
+
   Future<void> _listenForSharedShorts() async {
     await SharedShorts.start((url) {
       if (!mounted) return;
@@ -483,7 +505,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         numberInput.clear();
         titleInput.clear();
         authorInput.clear();
-        message = '쇼츠 링크를 받았어. 공개 댓글을 자동으로 조회할게.';
+        message = '공유 링크를 받았어. 공개 내용을 분석할게.';
       });
       _fetch();
     });
@@ -522,31 +544,63 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _fetch() async {
-    final videoId = ShortsLink.videoId(urlInput.text);
-    if (videoId == null) {
-      _status('정확한 YouTube Shorts 링크를 입력해줘.');
+    final raw = urlInput.text.trim();
+    if (RegExp(r'^\d{1,12}$').hasMatch(raw)) {
+      await _quickAddNumber(raw);
+      return;
+    }
+    final links = SourceLink.extract(raw, limit: 10);
+    if (links.isEmpty) {
+      _status('유효한 HTTPS 링크 또는 작품 번호를 입력해줘.');
       return;
     }
     setState(() => busy = true);
     final client = http.Client();
+    final blocks = <String>[];
+    final errors = <String>[];
+    final mapped = <String, String>{};
     try {
       final key = apiKeyInput.text.trim();
-      final data = key.isEmpty
-          ? await YoutubePublicClient(client).fetch(videoId)
-          : await YoutubeClient(client).fetch(videoId, key);
-      // Shorts titles often describe multiple DIFFERENT works; their real
-      // titles are fetched individually when the user saves the codes.
-      titleInput.clear();
-      commentInput.text = [data.description, ...data.comments]
-          .where((s) => s.trim().isNotEmpty).join('\n\n');
-      _analyze();
-      if (data.comments.isEmpty) {
-        _status('영상 설명란은 읽었지만 공개 댓글을 가져오지 못했어. '
-            '댓글이 필요하면 유튜브에서 직접 복사해줘.');
+      for (final link in links) {
+        String content = '';
+        try {
+          if (link.kind == SourceKind.hitomiWork) {
+            content = link.url;
+          } else if (link.kind == SourceKind.youtubeVideo) {
+            final result = key.isEmpty
+                ? await YoutubePublicClient(client).fetch(link.videoId)
+                : await YoutubeClient(client).fetch(link.videoId, key);
+            content = [result.description, ...result.comments]
+                .where((value) => value.trim().isNotEmpty).join('\n\n');
+          } else if (link.canPreview) {
+            content = await PublicSourcePreview(client).fetch(link);
+          } else {
+            errors.add('원문 자동 분석 미지원: ' + link.uri.host);
+          }
+        } catch (error) {
+          errors.add(link.uri.host + ': ' + error.toString());
+        }
+        if (content.isEmpty) continue;
+        blocks.add(content);
+        for (final candidate in NumberExtractor.extract(
+            content, source: link.url)) {
+          mapped.putIfAbsent(candidate.code, () => link.url);
+        }
       }
-    } catch (e) {
-      _status('댓글 자동 조회 실패: ' + e.toString() +
-          ' / 유튜브에서 댓글을 복사해 직접 붙여넣을 수 있어.');
+      final shared = raw.replaceAll(RegExp(r'https://\S+'), '').trim();
+      if (shared.isNotEmpty) blocks.add(shared);
+      commentInput.text = blocks.join('\n\n');
+      _candidateSourceUrls
+        ..clear()
+        ..addAll(mapped);
+      _analyze();
+      if (errors.isNotEmpty) {
+        _status('분석된 후보 ' + candidates.length.toString() + '개. ' +
+            '일부 링크는 원문을 읽지 못했어: ' +
+            errors.take(2).join(' / ') + ' 직접 내용을 붙여넣을 수 있어.');
+      } else if (candidates.isEmpty) {
+        _status('번호가 없어. 공개 설명·본문에 없을 수 있으니 댓글을 직접 붙여넣어줘.');
+      }
     } finally {
       client.close();
       if (mounted) setState(() => busy = false);
@@ -1007,31 +1061,27 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _openOriginal(WorkEntry work) async {
-    final uri = Uri.tryParse(work.videoUrl);
-    if (uri == null || uri.scheme != 'https' ||
-        !['www.youtube.com', 'youtube.com', 'm.youtube.com']
-            .contains(uri.host.toLowerCase())) {
-      _status('원본 쇼츠 링크가 유효하지 않아.');
+    final source = SourceLink.parse(work.videoUrl);
+    if (source == null) {
+      _status('보관된 원본 링크가 없어.');
       return;
     }
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await launchUrl(source.uri, mode: LaunchMode.externalApplication);
   }
 
   Future<void> _openShortsInput() async {
-    final id = ShortsLink.videoId(urlInput.text);
-    if (id == null) {
-      _status('정확한 YouTube Shorts 링크를 입력해줘.');
+    final links = SourceLink.extract(urlInput.text);
+    if (links.isEmpty) {
+      _status('유효한 HTTPS 링크를 입력해줘.');
       return;
     }
     try {
-      final opened = await launchUrl(
-        Uri.parse('https://www.youtube.com/shorts/$id'),
-        mode: LaunchMode.externalApplication,
-      );
-      if (!opened) throw Exception('유튜브 앱이나 브라우저를 열지 못했어.');
-      _status('유튜브에서 댓글을 복사한 다음 앱에 붙여넣어줘.');
-    } catch (e) {
-      _status('유튜브 열기 실패: ' + e.toString());
+      final opened = await launchUrl(links.first.uri,
+          mode: LaunchMode.externalApplication);
+      if (!opened) throw Exception('브라우저를 열지 못했어.');
+      _status('웹에서 본문·댓글을 복사해 앱에 붙여넣을 수 있어.');
+    } catch (error) {
+      _status('원본 링크 열기 실패: ' + error.toString());
     }
   }
 
@@ -2302,6 +2352,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   Future<void> _automaticUpdateCheck() async {
     try {
+      await _settingsLoad;
       final root = await getApplicationSupportDirectory();
       final file = File(root.path + Platform.pathSeparator + 'update_check_at.txt');
       final now = DateTime.now().toUtc();
@@ -2317,7 +2368,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _checkRelease({bool silent = false}) async {
-    if (downloadingUpdate) return;
+    if (downloadingUpdate || _updateDialogOpen) return;
+    if (silent) await _settingsLoad;
     final client = http.Client();
     try {
       final current = (await PackageInfo.fromPlatform()).version;
@@ -2326,17 +2378,24 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         if (!silent) _status('현재 더 새로운 릴리스가 없어.');
         return;
       }
-      if (!mounted) return;
+      if (!mounted || !UpdatePrompt.shouldShow(readerSettings,
+          next.version, DateTime.now(), automatic: silent,
+          dismissedThisLaunch: _updateDismissedThisLaunch)) return;
       final asset = next.installerFor(defaultTargetPlatform);
-      final choice = await showDialog<String>(context: context, builder: (ctx) =>
+      _updateDialogOpen = true;
+      String? choice;
+      try {
+        choice = await showDialog<String>(context: context, builder: (ctx) =>
         AlertDialog(
           title: HypText('업데이트 v' + next.version),
           content: HypText(next.notes.isEmpty
               ? '새 버전이 공개됐어. 설치 파일을 다운로드할까?'
               : next.notes),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx),
-                child: const HypText('취소')),
+            TextButton(onPressed: () => Navigator.pop(ctx, 'later'),
+                child: const HypText('나중에')),
+            TextButton(onPressed: () => Navigator.pop(ctx, 'snooze'),
+                child: const HypText('7일간 보지 않기')),
             TextButton(onPressed: () => Navigator.pop(ctx, 'web'),
                 child: const HypText('릴리스 보기')),
             if (asset != null) FilledButton(
@@ -2347,7 +2406,15 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           ],
         ),
       );
-      if (choice == 'web') {
+      } finally {
+        _updateDialogOpen = false;
+      }
+      if (choice == 'snooze') {
+        await _saveReaderSettings(UpdatePrompt.snooze(
+            readerSettings, next.version, DateTime.now()));
+      } else if (choice == null || choice == 'later') {
+        if (silent) _updateDismissedThisLaunch = true;
+      } else if (choice == 'web') {
         await launchUrl(Uri.parse(next.url), mode: LaunchMode.externalApplication);
       } else if (choice == 'download' && asset != null) {
         await _downloadInstaller(next, asset);
@@ -2400,6 +2467,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     totalGalleryPages: totalGalleryPages,
     downloadedGalleryBytes: downloadedGalleryBytes,
     onAnalyze: _analyze,
+    onClearFinder: _clearFinder,
+    finderClearEpoch: finderClearEpoch,
     onFetch: _fetch,
     onSaveWork: _saveWork,
     onQuickAddNumber: _quickAddNumber,
