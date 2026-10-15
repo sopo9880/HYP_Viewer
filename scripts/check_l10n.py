@@ -98,6 +98,43 @@ def check():
         raise ValueError("Untranslated static UI labels:\n" +
                          "\n".join(missing_static[:35]))
 
+    # Full-surface audit: old pages must not escape localization by using
+    # Text('한국어'), a literal tooltip, or untranslated field labels.
+    # Native-script choices ("한국어" in the language picker) are exempt.
+    raw_label = re.compile(
+        r"""(?:\bText\s*\(\s*|(?:tooltip|labelText|hintText|helperText)\s*:\s*)
+        (?:const\s*)?(['"])([^'"\n]*[가-힣][^'"\n]*)\1""",
+        re.X,
+    )
+    allowed_native = {"한국어"}
+    untranslated_raw = []
+    for page in [ROOT / "lib" / "main.dart",
+                 *(ROOT / "lib" / "ui").glob("*.dart")]:
+        source = page.read_text(encoding="utf-8")
+        for match in raw_label.finditer(source):
+            literal = match.group(2)
+            if literal in allowed_native:
+                continue
+            line = source.count("\n", 0, match.start()) + 1
+            untranslated_raw.append(
+                f"{page.relative_to(ROOT)}:{line}: {literal[:110]}"
+            )
+    if untranslated_raw:
+        raise ValueError("Untranslated UI text/tooltips/fields in existing pages:\n" +
+                         "\n".join(untranslated_raw[:50]))
+
+    # A translated locale must never reuse raw Korean fallback sentences.
+    # Work titles and user library metadata are not part of these catalogues.
+    for language in ("en", "ja"):
+        leftover = [
+            key for key, value in messages[language].items()
+            if re.search(r"[가-힣]", value)
+        ]
+        if leftover:
+            raise ValueError(
+                f"{language}: Korean text leaked into ARB: {leftover[:30]}"
+            )
+
     diff = None
     for base in ("origin/main", "main"):
         result = subprocess.run(
