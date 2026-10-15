@@ -566,7 +566,7 @@
   "onlineSafeLink": "When saved, verified editions can join the existing stack.",
   "youtubeCommentsPartial": "Only some public comments were collected. Paste any missing comment text manually.",
   "readerTooltipPrevious": "Previous Page (PageUp)",
-  "readerTooltipNext": "Next Page (PageDown / Space)",
+  "readerTooltipNext": "Next page (PageDown / arrow key)",
   "readerTooltipSaveOffline": "Save Online Images as CBZ",
   "readerTooltipSetCover": "Set Current Page as Library Cover",
   "readerTooltipHideTools": "Hide Page Controls",

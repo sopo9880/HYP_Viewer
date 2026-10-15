@@ -3,6 +3,20 @@ import 'package:hyp_viewer/core/work.dart';
 import 'package:hyp_viewer/core/work_editions.dart';
 
 void main() {
+  test('same title/creator cannot auto-link conflicting known series', () {
+    final left = work('111111', 'Shared Title', 'japanese',
+        author: 'Maker', series: 'Original A');
+    final right = work('222222', 'Shared Title', 'english',
+        author: 'Maker', series: 'Original B');
+    expect(WorkEditions.compare(left, right).score, 0);
+    final grouped = right.copyWith(sourceSeries: 'Original A',
+        groupId: 'group_b');
+    expect(WorkEditions.compare(
+        left.copyWith(groupId: 'group_a'), grouped).autoLink, false);
+    expect(WorkEditions.compare(
+        left, right.copyWith(sourceSeries: '')).autoLink, true);
+  });
+
   WorkEntry work(String code, String title, String language, {
     String author = 'Creator', int pages = 20, String series = 'Book',
   }) => WorkEntry.create(workId: code, title: title, author: author)

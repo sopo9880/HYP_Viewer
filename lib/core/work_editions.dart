@@ -51,6 +51,18 @@ abstract final class WorkEditions {
 
   static EditionMatch compare(WorkEntry a, WorkEntry b) {
     if (a.workId == b.workId) return const EditionMatch(100, '동일 ID');
+    // Explicitly different user-series identities are never equivalent
+    // editions, even if the creator and short title happen to match.
+    if (a.groupId.isNotEmpty && b.groupId.isNotEmpty &&
+        a.groupId != b.groupId) {
+      return const EditionMatch(0, '서로 다른 사용자 시리즈');
+    }
+    if (a.sourceSeries.trim().isNotEmpty &&
+        b.sourceSeries.trim().isNotEmpty &&
+        a.sourceSeries.trim().toLowerCase() !=
+            b.sourceSeries.trim().toLowerCase()) {
+      return const EditionMatch(0, '서로 다른 원본 시리즈');
+    }
     final ca = WorkGrouping.episodeNumber(a);
     final cb = WorkGrouping.episodeNumber(b);
     if (ca != null && cb != null && ca != cb) {

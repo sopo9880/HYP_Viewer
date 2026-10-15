@@ -566,7 +566,7 @@
   "onlineSafeLink": "保存時に確認済みの言語版グループへの追加を試みます。",
   "youtubeCommentsPartial": "公開コメントの一部のみ取得しました。欠けたコメントは手動で貼り付けてください。",
   "readerTooltipPrevious": "前のページ（PageUp）",
-  "readerTooltipNext": "次のページ（PageDown / Space）",
+  "readerTooltipNext": "次のページ (PageDown / 方向キー)",
   "readerTooltipSaveOffline": "オンライン画像をCBZとして保存",
   "readerTooltipSetCover": "現在のページを本棚の表紙に設定",
   "readerTooltipHideTools": "ページ操作を隠す",

@@ -566,7 +566,7 @@
   "onlineSafeLink": "저장 시 기존 언어판 묶음에 연결을 시도해.",
   "youtubeCommentsPartial": "공개 댓글 일부만 수집했어. 누락된 댓글의 번호는 직접 붙여넣어줘.",
   "readerTooltipPrevious": "이전 페이지 (PageUp)",
-  "readerTooltipNext": "다음 페이지 (PageDown / Space)",
+  "readerTooltipNext": "다음 페이지 (PageDown / 방향키)",
   "readerTooltipSaveOffline": "온라인 이미지를 CBZ로 저장",
   "readerTooltipSetCover": "현재 페이지를 서재 표지로 지정",
   "readerTooltipHideTools": "페이지 도구 숨기기",
