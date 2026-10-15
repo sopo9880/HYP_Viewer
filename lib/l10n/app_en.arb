@@ -312,5 +312,13 @@
   "insightActivity14": "Reading sessions over last 14 days (since tracking began)",
   "insightSessionsNoDates": "Legacy read counts have no dates, so daily history cannot be reconstructed.",
   "insightNotEnough": "Not enough data yet.",
-  "insightNoMatchingWorks": "No matching works."
+  "insightNoMatchingWorks": "No matching works.",
+  "editionCoverPercent": "Cover similarity {percent}%",
+  "@editionCoverPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  }
 }
