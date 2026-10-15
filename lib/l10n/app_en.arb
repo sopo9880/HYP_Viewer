@@ -326,5 +326,155 @@
   "legacyCompletionApply": "Mark Selected as Finished",
   "legacyCompletionEmpty": "No works need completion review.",
   "youtubeChooseVideos": "Choose Videos from YouTube Collection",
-  "youtubeAnalyzeSelected": "Analyze Selected (up to 5 Videos)"
+  "youtubeAnalyzeSelected": "Analyze Selected (up to 5 Videos)",
+  "searchSeries": "Series",
+  "searchTag": "General Tags",
+  "searchAdvanced": "Advanced Query",
+  "searchAllFields": "All Fields",
+  "searchLocalCount": "My Library · {count} Results",
+  "@searchLocalCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchResultMatches": "Matched fields: {fields}",
+  "@searchResultMatches": {
+    "placeholders": {
+      "fields": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsHeroUploadNote": "PNG, JPG or WebP (up to 12 MB). The image stays on this device and can optionally be included in an integrated JSON backup.",
+  "settingsTapZonesNote": "Left 30%: previous page. Right 30%: next page. Middle 40%: show/hide controls. Your previous setting is preserved.",
+  "settingsDataSaverNote": "Reduces initial full loading and requests only visible pages and one ahead, with one concurrent network request.",
+  "tooltipUpdate": "Check for Updates",
+  "tooltipMore": "More Options",
+  "tooltipDismiss": "Dismiss Notification",
+  "tooltipBackLibrary": "Back to Library",
+  "tooltipManageGroup": "Manage Group",
+  "tooltipGroupName": "Group Name",
+  "tooltipMoveUp": "Move Up",
+  "tooltipMoveDown": "Move Down",
+  "tooltipSortDirection": "Reverse Sort Order",
+  "tooltipPopularPeriod": "Hitomi Popularity Period",
+  "tooltipRefreshPopular": "Refresh Popularity Ranking",
+  "tooltipSearchLanguage": "Search Language Filter",
+  "tooltipAddLibrary": "Add to Library",
+  "tooltipSearchLibrary": "Search Work ID or Title",
+  "settingsKeyboardHint": "Viewer keyboard: ← / →, PageUp / PageDown, Space, Home / End, Esc (close). Choose covers from each work's library menu.",
+  "searchLanguageChip": "Language: {language} ▾",
+  "@searchLanguageChip": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralTitle": "Settings",
+  "settingsGeneralSubtitle": "Manage reader controls, covers, download sources, and app data.",
+  "workInfoUnavailable": "Unavailable",
+  "workInfoNotProvided": "Not provided by the source metadata",
+  "workInfoNoHistory": "No History",
+  "workInfoFromPage": "From page {page}",
+  "@workInfoFromPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "workInfoProgress": "From page {page} · {percent}%",
+  "@workInfoProgress": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "workInfoHeader": "Work Information",
+  "workInfoOriginalId": "Work ID",
+  "workInfoSourceLink": "Original URL",
+  "workInfoTitle": "Title",
+  "workInfoAuthor": "Artist",
+  "workInfoCircle": "Group / Circle",
+  "workInfoSeries": "Original / Series",
+  "workInfoLanguage": "Language",
+  "workInfoType": "Type",
+  "workInfoAdded": "Publication Date",
+  "workInfoTags": "Tags",
+  "workInfoCharacters": "Characters",
+  "workInfoPages": "Pages",
+  "workInfoViews": "Views",
+  "workInfoLastOpen": "Last Read",
+  "workInfoOpenCount": "Read Count",
+  "workInfoProgressLabel": "Reading Progress",
+  "workInfoAddedToLibrary": "Added to Library",
+  "androidSecurityNotice": "Samsung Galaxy's security auto-blocker may prevent certain APK installations. It protects your device.\n\nThe app cannot disable these protections. If installation fails, verify the APK publisher, GitHub Release URL, and SHA-256 checksum first. Review device security settings yourself. Disabling protections is not recommended.",
+  "coverCropHelp": "Drag the photo or pinch to zoom, then save the area inside the rectangle as your cover.",
+  "coverCropImageFailed": "Unable to open the image.",
+  "groupCardVolumes": "{count} Volumes",
+  "@groupCardVolumes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "groupCardWorks": "Series · {count} Works",
+  "@groupCardWorks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "candidateChecking": "Checking Works: {checked} / {total}",
+  "@candidateChecking": {
+    "placeholders": {
+      "checked": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "candidateSave": "Save {count} Selected Works",
+  "@candidateSave": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "autoGroupExistingCount": "{count} existing works are retained.",
+  "@autoGroupExistingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "autoGroupOthers": "{count} More Works",
+  "@autoGroupOthers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shortsCandidateCount": "Found Candidate IDs: {count}",
+  "@shortsCandidateCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -326,5 +326,155 @@
   "legacyCompletionApply": "選択作品を読了にする",
   "legacyCompletionEmpty": "確認が必要な読了候補はありません。",
   "youtubeChooseVideos": "YouTubeリストから動画を選択",
-  "youtubeAnalyzeSelected": "選択動画を解析（最大5件）"
+  "youtubeAnalyzeSelected": "選択動画を解析（最大5件）",
+  "searchSeries": "シリーズ",
+  "searchTag": "一般タグ",
+  "searchAdvanced": "詳細クエリ",
+  "searchAllFields": "全項目",
+  "searchLocalCount": "本棚・{count}件",
+  "@searchLocalCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchResultMatches": "一致項目: {fields}",
+  "@searchResultMatches": {
+    "placeholders": {
+      "fields": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsHeroUploadNote": "PNG・JPG・WebP（最大12MB）。画像はこの端末に保存され、統合JSONバックアップに任意で含められます。",
+  "settingsTapZonesNote": "左側30％：前ページ、右側30％：次ページ、中央40％：操作UIの表示切替。既存の設定は維持されます。",
+  "settingsDataSaverNote": "全ページの一括読み込みを抑え、表示中と次の1ページを中心に取得します。同時通信も1件に制限します。",
+  "tooltipUpdate": "更新を確認",
+  "tooltipMore": "その他のメニュー",
+  "tooltipDismiss": "通知を閉じる",
+  "tooltipBackLibrary": "本棚に戻る",
+  "tooltipManageGroup": "グループを管理",
+  "tooltipGroupName": "グループ名",
+  "tooltipMoveUp": "上へ",
+  "tooltipMoveDown": "下へ",
+  "tooltipSortDirection": "並び順を反転",
+  "tooltipPopularPeriod": "Hitomi人気期間",
+  "tooltipRefreshPopular": "人気ランキングを更新",
+  "tooltipSearchLanguage": "検索言語フィルター",
+  "tooltipAddLibrary": "本棚に追加",
+  "tooltipSearchLibrary": "作品番号またはタイトルで検索",
+  "settingsKeyboardHint": "ビューアーのキーボード：←／→、PageUp／PageDown、Space、Home／End、Esc（閉じる）。表紙は本棚の作品メニューから選べます。",
+  "searchLanguageChip": "言語: {language} ▾",
+  "@searchLanguageChip": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralTitle": "設定",
+  "settingsGeneralSubtitle": "ビューアー操作、表紙、追加ダウンロード元、アプリデータを管理します。",
+  "workInfoUnavailable": "確認不可",
+  "workInfoNotProvided": "元のメタデータにはありません",
+  "workInfoNoHistory": "履歴なし",
+  "workInfoFromPage": "{page}ページから",
+  "@workInfoFromPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "workInfoProgress": "{page}ページから・{percent}%",
+  "@workInfoProgress": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "workInfoHeader": "作品情報",
+  "workInfoOriginalId": "作品番号",
+  "workInfoSourceLink": "元リンク",
+  "workInfoTitle": "タイトル",
+  "workInfoAuthor": "作家",
+  "workInfoCircle": "グループ・サークル",
+  "workInfoSeries": "原作・シリーズ",
+  "workInfoLanguage": "言語",
+  "workInfoType": "種類",
+  "workInfoAdded": "公開日",
+  "workInfoTags": "タグ",
+  "workInfoCharacters": "登場人物",
+  "workInfoPages": "ページ数",
+  "workInfoViews": "閲覧数",
+  "workInfoLastOpen": "最後に閲覧",
+  "workInfoOpenCount": "閲覧回数",
+  "workInfoProgressLabel": "読書進捗",
+  "workInfoAddedToLibrary": "本棚に追加した日",
+  "androidSecurityNotice": "Samsung Galaxyのセキュリティ自動ブロック機能により、一部のAPKをインストールできない場合があります。これは端末を保護する重要な機能です。\n\nアプリから保護機能を自動解除することはできません。インストールできない場合、APKの発行元・GitHubリリースURL・SHA-256を先に確認し、端末の設定をご自身で確認してください。保護機能の無効化は推奨しません。",
+  "coverCropHelp": "写真をドラッグするか2本指で拡大・縮小し、枠内を表紙として保存します。",
+  "coverCropImageFailed": "画像を開けませんでした。",
+  "groupCardVolumes": "{count}巻",
+  "@groupCardVolumes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "groupCardWorks": "シリーズ・{count}作品",
+  "@groupCardWorks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "candidateChecking": "作品を確認中: {checked} / {total}",
+  "@candidateChecking": {
+    "placeholders": {
+      "checked": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "candidateSave": "選択した{count}作品を一括保存",
+  "@candidateSave": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "autoGroupExistingCount": "既存の{count}作品は保持されます。",
+  "@autoGroupExistingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "autoGroupOthers": "ほか{count}作品",
+  "@autoGroupOthers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shortsCandidateCount": "検出した番号候補: {count}件",
+  "@shortsCandidateCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

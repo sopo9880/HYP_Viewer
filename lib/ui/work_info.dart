@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/hitomi_gallery.dart';
 import '../core/i18n.dart';
+import '../l10n/app_localizations.dart';
 import '../core/work.dart';
 
 /// Detailed, user-controlled metadata sheet. Offline information is always
@@ -58,54 +59,57 @@ class _WorkInfoDialogState extends State<WorkInfoDialog> {
   Widget _infoLine(String label, String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 5),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SizedBox(width: 116, child: HypText(label, style:
+      SizedBox(width: 116, child: Text(label, style:
           TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
-      Expanded(child: SelectableText(value.isEmpty ? '확인 불가' : value)),
+      Expanded(child: SelectableText(value.isEmpty
+          ? AppLocalizations.of(context)!.workInfoUnavailable : value)),
     ]),
   );
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final work = widget.work;
     final total = info?.pageCount ?? work.totalPages;
     final percentage = work.completed ? 100 : total > 0
         ? (((work.currentPage - 1).clamp(0, total) / total) * 100).round()
         : null;
     return AlertDialog(
-      title: const HypText('작품 정보'),
+      title: Text(l.workInfoHeader),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 550, maxHeight: 570),
         child: SizedBox(width: 470, child: SingleChildScrollView(
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min, children: [
-              _infoLine('작품 번호', work.workId),
+              _infoLine(l.workInfoOriginalId, work.workId),
               if (work.videoUrl.isNotEmpty)
-                _infoLine('원본 링크', work.videoUrl),
-              _infoLine('제목', info?.title.isNotEmpty == true
+                _infoLine(l.workInfoSourceLink, work.videoUrl),
+              _infoLine(l.workInfoTitle, info?.title.isNotEmpty == true
                   ? info!.title : work.title),
-              _infoLine('작가', info?.author.isNotEmpty == true
+              _infoLine(l.workInfoAuthor, info?.author.isNotEmpty == true
                   ? info!.author : work.author),
-              _infoLine('그룹 / 서클', info?.group.isNotEmpty == true
+              _infoLine(l.workInfoCircle, info?.group.isNotEmpty == true
                   ? info!.group : work.sourceGroup),
-              _infoLine('원작 / 시리즈', info?.series.isNotEmpty == true
+              _infoLine(l.workInfoSeries, info?.series.isNotEmpty == true
                   ? info!.series : work.sourceSeries),
-              _infoLine('언어', info?.language.isNotEmpty == true
+              _infoLine(l.workInfoLanguage, info?.language.isNotEmpty == true
                   ? info!.language : work.sourceLanguage),
-              _infoLine('유형', info?.type.isNotEmpty == true
+              _infoLine(l.workInfoType, info?.type.isNotEmpty == true
                   ? info!.type : work.sourceType),
-              _infoLine('등록 날짜', info?.date.isNotEmpty == true
+              _infoLine(l.workInfoAdded, info?.date.isNotEmpty == true
                   ? info!.date : work.sourceDate),
-              _infoLine('태그', (info?.tags ?? work.tags).join(', ')),
-              _infoLine('등장인물', (info?.characters ?? []).join(', ')),
-              _infoLine('페이지 수', total > 0 ? '$total' : '확인 불가'),
-              _infoLine('조회수', '원본 메타데이터에서 제공되지 않음'),
+              _infoLine(l.workInfoTags, (info?.tags ?? work.tags).join(', ')),
+              _infoLine(l.workInfoCharacters, (info?.characters ?? []).join(', ')),
+              _infoLine(l.workInfoPages,
+                  total > 0 ? total.toString() : l.workInfoUnavailable),
+              _infoLine(l.workInfoViews, l.workInfoNotProvided),
               const Divider(),
-              _infoLine('마지막 열람', work.lastOpenedAt ?? '기록 없음'),
-              _infoLine('열람 횟수', work.openCount.toString()),
-              _infoLine('읽기 진행도', percentage == null
-                  ? work.currentPage.toString() + '페이지부터'
-                  : work.currentPage.toString() + '페이지부터 · $percentage%'),
-              _infoLine('서재 추가일', work.addedAt),
+              _infoLine(l.workInfoLastOpen, work.lastOpenedAt ?? l.workInfoNoHistory),
+              _infoLine(l.workInfoOpenCount, work.openCount.toString()),
+              _infoLine(l.workInfoProgressLabel, percentage == null
+                  ? l.workInfoFromPage(work.currentPage)
+                  : l.workInfoProgress(work.currentPage, percentage)),
+              _infoLine(l.workInfoAddedToLibrary, work.addedAt),
               if (error != null) ...[
                 const SizedBox(height: 8),
                 HypText('메타데이터 조회 실패: ' + error!,

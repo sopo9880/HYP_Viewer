@@ -39,6 +39,7 @@ void main() {
     final result = await OnlineWorkSearch(client).searchUnified('Pochi');
     expect(seen, containsAll([
       'Pochi', 'artist:Pochi', 'group:Pochi',
+      'series:Pochi', 'tag:Pochi',
       'female:Pochi', 'male:Pochi',
     ]));
     expect(result.works.map((entry) => entry.workId).toSet(),
@@ -60,6 +61,55 @@ void main() {
     await OnlineWorkSearch(client).searchUnified(
         'artist:Pochi', language: 'japanese');
     expect(seen, ['artist:Pochi']);
+    client.close();
+  });
+
+  test('query plan covers all supported categories without guessing count', () {
+    expect(OnlineWorkSearch.planQueries('Pochi').map((e) => e.$1).toList(),
+      ['general','artist','group','series','tag','female','male']);
+    expect(OnlineWorkSearch.planQueries('artist:Pochi'),
+      [('advanced','artist:Pochi')]);
+    expect(OnlineWorkSearch.planQueries('Original | Translated')
+      .map((entry) => entry.$2).toList().take(2),
+      ['Original','Translated']);
+  });
+
+  test('international results prefer all-language provider only', () async {
+    final seen = <String>[];
+    final client = MockClient((request) async {
+      seen.add(request.url.host);
+      return http.Response.bytes(utf8.encode(jsonEncode({'results': [
+        {'id': 123456, 'title': '日本語', 'language': 'japanese'}
+      ], 'count': 1})), 200, headers: {
+        'content-type': 'application/json; charset=utf-8',
+      });
+    });
+    final search = OnlineWorkSearch(client);
+    final r = await search.search('日本語', language: 'japanese');
+    expect(r.works.single.language, 'japanese');
+    expect(seen, ['inst.psec.dev']);
+    client.close();
+  });
+
+  test('international provider failure has explicitly limited fallback', () async {
+    final seen = <String>[];
+    final client = MockClient((request) async {
+      seen.add(request.url.host);
+      if (request.url.host == 'inst.psec.dev') {
+        return http.Response('temporarily unavailable', 503);
+      }
+      return http.Response(jsonEncode({
+        'results': [{'id': 999, 'title': 'Fallback candidate',
+                     'language': 'japanese'}],
+        'count': 1,
+      }), 200);
+    });
+    final response = await OnlineWorkSearch(client)
+        .searchUnified('Fallback', language: 'japanese');
+    expect(response.works.single.workId, '999');
+    expect(seen.first, 'inst.psec.dev');
+    expect(seen, contains('heliotrope.saebasol.org'));
+    expect(response.warnings.join(' '), contains('누락'));
     client.close();
   });
 

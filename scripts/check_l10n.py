@@ -43,6 +43,10 @@ def check():
         "insightsTitle", "insightsSubtitle",
         "editionCoverPercent", "legacyCompletionReview",
         "youtubeChooseVideos", "searchFetchedUnique",
+        "searchAllFields", "searchResultMatches", "searchSeries", "searchTag",
+        "searchLanguageChip", "settingsTapZonesNote", "settingsHeroUploadNote",
+        "workInfoHeader", "workInfoProgress", "workInfoLanguage",
+        "androidSecurityNotice", "tooltipSearchLanguage",
     }
     if required - reference:
         raise ValueError(f"Missing core UI localization keys: {sorted(required - reference)}")
@@ -55,6 +59,38 @@ def check():
         expected = set(placeholder.findall(translations[0]))
         if any(set(placeholder.findall(item)) != expected for item in translations[1:]):
             raise ValueError(f"Placeholder mismatch: {key}")
+    # Check unchanged legacy pages too. Previously only changed lines were
+    # inspected, so whole panels could silently remain untranslated.
+    # Only static HypText literals are checked here. Dynamic user-authored
+    # titles are intentionally left verbatim; runtime messages require ARB.
+    legacy_source = (ROOT / "lib" / "core" / "i18n.dart").read_text(encoding="utf-8")
+    extra_source = (ROOT / "lib" / "core" / "i18n_extra.dart").read_text(encoding="utf-8")
+    legacy_keys = set(re.findall(r"(?m)^\s*'([^']+)'\s*:\s*\[", legacy_source))
+    legacy_keys.update(
+        re.findall(r'(?m)^\s*"((?:[^"\\]|\\.)+)"\s*:\s*\[', extra_source)
+    )
+    static_text = re.compile(
+        r"""HypText\s*\(\s*((?:(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")\s*)+)""",
+        re.S,
+    )
+    quoted = re.compile(r"""'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*" """.strip())
+    missing_static = []
+    for page in [ROOT / "lib" / "main.dart", *(ROOT / "lib" / "ui").glob("*.dart")]:
+        content = page.read_text(encoding="utf-8")
+        for item in static_text.finditer(content):
+            literal = "".join(fragment[1:-1] for fragment in
+                              quoted.findall(item.group(1)))
+            suffix = content[item.end():].lstrip()
+            # Expressions that embed variables or concatenate user data
+            # need separate runtime treatment; don't mistake them for keys.
+            if "$" in literal or suffix.startswith("+"):
+                continue
+            if re.search(r"[가-힣]", literal) and literal not in legacy_keys:
+                missing_static.append(f"{page.relative_to(ROOT)}: {literal[:100]}")
+    if missing_static:
+        raise ValueError("Untranslated static UI labels:\n" +
+                         "\n".join(missing_static[:35]))
+
     diff = None
     for base in ("origin/main", "main"):
         result = subprocess.run(

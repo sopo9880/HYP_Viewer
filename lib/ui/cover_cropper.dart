@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import '../core/i18n.dart';
+import '../l10n/app_localizations.dart';
 import 'package:flutter/rendering.dart';
 
 /// All editing happens in a fixed portrait preview. The exact cropped
@@ -74,8 +75,7 @@ class _CropCoverDialogState extends State<_CropCoverDialog> {
     title: const HypText('표지 자르기'),
     content: SingleChildScrollView(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const HypText('사진을 드래그하거나 두 손가락으로 확대·축소해 '
-            '사각형 안의 부분을 표지로 저장해.'),
+        Text(AppLocalizations.of(context)!.coverCropHelp),
         const SizedBox(height: 12),
         DecoratedBox(
           decoration: BoxDecoration(
@@ -103,7 +103,7 @@ class _CropCoverDialogState extends State<_CropCoverDialog> {
                     height: height,
                     fit: BoxFit.cover,
                     errorBuilder: (_, error, __) =>
-                        const Center(child: HypText('이미지를 열지 못했어.')),
+                        Center(child: Text(AppLocalizations.of(context)!.coverCropImageFailed)),
                   ),
                 ),
               ),

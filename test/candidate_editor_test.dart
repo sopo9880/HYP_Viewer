@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:hyp_viewer/l10n/app_localizations.dart';
 import 'package:hyp_viewer/core/candidate_verifier.dart';
 import 'package:hyp_viewer/core/number_extractor.dart';
 import 'package:hyp_viewer/ui/candidate_editor.dart';
@@ -12,6 +14,14 @@ void main() {
     List<String> saved = [];
     final requested = <List<String>>[];
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('ko'),
+      supportedLocales: const [Locale('ko'), Locale('en'), Locale('ja')],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(body: SingleChildScrollView(child: CandidateEditor(
         suggestions: const [
           NumberCandidate(code: '2900756', episode: '1편',
@@ -66,6 +76,14 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     var saved = <String>[];
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('ko'),
+      supportedLocales: const [Locale('ko'), Locale('en'), Locale('ja')],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(body: SingleChildScrollView(child: CandidateEditor(
         suggestions: const [], busy: false,
         onSave: (codes) async { saved = codes; },
@@ -88,6 +106,14 @@ void main() {
     var fallbackCalls = 0;
     final checked = <String>[];
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('ko'),
+      supportedLocales: const [Locale('ko'), Locale('en'), Locale('ja')],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(body: SingleChildScrollView(child: CandidateEditor(
         busy: false,
         suggestions: const [
@@ -127,6 +153,14 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     var fallbackCalls = 0;
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('ko'),
+      supportedLocales: const [Locale('ko'), Locale('en'), Locale('ja')],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(body: SingleChildScrollView(child: CandidateEditor(
         busy: false,
         suggestions: const [

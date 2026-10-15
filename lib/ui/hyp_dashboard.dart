@@ -18,12 +18,15 @@ import '../core/i18n.dart';
 import '../l10n/app_localizations.dart';
 import '../core/number_extractor.dart';
 import '../core/online_search.dart';
+import '../core/online_edition_groups.dart';
 import '../core/reading_history.dart';
 import 'reading_insights.dart';
 import 'candidate_editor.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
 import '../core/work_editions.dart';
+import '../core/local_search.dart';
+import 'reader_navigation_focus.dart';
 import '../core/cover_similarity.dart';
 import 'work_edition_card.dart';
 import 'hero_banner.dart';
@@ -252,9 +255,12 @@ class _HypDashboardState extends State<HypDashboard> {
   int _remotePage = 0;
   bool _remoteHasMore = false;
   Map<String, int> _remoteFieldTotals = const {};
+  Map<String, List<String>> _remoteFieldMatches = const {};
+  String _remoteFieldFilter = '';
   List<String> _remoteWarnings = const [];
   final Map<String, (DateTime, OnlineSearchResult)> _remoteCache = {};
   final FocusNode _searchFocus = FocusNode();
+  final FocusNode _dashboardFocus = FocusNode(debugLabel: 'dashboard-shortcuts');
   HypPage _page = HypPage.home;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey _backupSectionKey = GlobalKey();
@@ -435,6 +441,7 @@ class _HypDashboardState extends State<HypDashboard> {
     _search.removeListener(_changedSearch);
     _search.dispose();
     _searchFocus.dispose();
+    _dashboardFocus.dispose();
     super.dispose();
   }
 
@@ -465,6 +472,8 @@ class _HypDashboardState extends State<HypDashboard> {
     _remoteTotal = 0;
     _remoteHasMore = false;
     _remoteFieldTotals = const {};
+    _remoteFieldMatches = const {};
+    _remoteFieldFilter = '';
     _remoteWarnings = const [];
     _remoteBusy = false;
     if (mounted) setState(() {});
@@ -516,7 +525,16 @@ class _HypDashboardState extends State<HypDashboard> {
       _remotePage = result.page;
       _remoteHasMore = result.hasNextPage;
       _remoteFieldTotals = result.fieldTotals;
-      _remoteWarnings = result.warnings;
+      _remoteFieldMatches = <String, List<String>>{
+        if (next) ..._remoteFieldMatches,
+        for (final entry in result.matchedFields.entries)
+          entry.key: {...?_remoteFieldMatches[entry.key],
+             ...entry.value}.toList(),
+      };
+      _remoteWarnings = [
+        if (next) ..._remoteWarnings,
+        ...result.warnings,
+      ];
       final seen = <String>{};
       _remoteResults = [...next ? _remoteResults : <OnlineSearchWork>[],
         ...result.works].where((work) => seen.add(work.workId)).toList();
@@ -525,6 +543,7 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   void _navigate(HypPage page) {
+    _dashboardFocus.requestFocus();
     _openedGroupId = null;
     _lastHomeBack = null;
     _search.clear();
@@ -637,6 +656,13 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
 
+  Future<void> _openReaderWith(Future<void> Function() action) =>
+      ReaderNavigationFocus.show(
+        returnFocus: _dashboardFocus,
+        isMounted: () => mounted,
+        openReader: action,
+      );
+
   String _coverSignature(LibraryBackup backup) => backup.works
       .map((w) => w.key + ':' + w.coverMode + ':' +
           w.coverPreset.toString() + ':' + w.coverPage.toString())
@@ -726,25 +752,8 @@ class _HypDashboardState extends State<HypDashboard> {
   List<WorkEntry> get _downloaded =>
       _works.where((w) => _offlineKeys.contains(w.key)).toList();
 
-  List<WorkEntry> get _results {
-    final term = _search.text.trim().toLowerCase();
-    if (term.isEmpty) return _works;
-    return _works.where((w) {
-      final code = w.sourceLanguage.toLowerCase().trim();
-      final allowed = switch (_searchLanguage) {
-        'korean' => const {'korean', 'ko'},
-        'japanese' => const {'japanese', 'ja'},
-        'english' => const {'english', 'en'},
-        'chinese' => const {'chinese', 'zh', 'zh-cn', 'zh-tw'},
-        _ => <String>{},
-      };
-      if (_searchLanguage.isNotEmpty && !allowed.contains(code)) return false;
-      return [
-        w.title, w.author, w.workId, w.sourceGroup, w.sourceSeries,
-        w.sourceType, w.sourceLanguage, ...w.tags, ...w.collections,
-      ].join(' ').toLowerCase().contains(term);
-    }).toList();
-  }
+  List<WorkEntry> get _results => LocalWorkSearch.queryLibrary(
+      _works, _search.text, language: _searchLanguage);
 
   KeyEventResult _onKeyboardShortcut(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent ||
@@ -778,6 +787,7 @@ class _HypDashboardState extends State<HypDashboard> {
       if (!didPop) _handleSystemBack();
     },
     child: Focus(
+    focusNode: _dashboardFocus,
     autofocus: true,
     onKeyEvent: _onKeyboardShortcut,
     child: LayoutBuilder(builder: (context, size) {
@@ -794,12 +804,12 @@ class _HypDashboardState extends State<HypDashboard> {
         title: const HypText('HYP Viewer'),
         actions: [
           IconButton(
-            tooltip: '업데이트 확인',
+            tooltip: AppLocalizations.of(context)!.tooltipUpdate,
             onPressed: widget.onCheckRelease,
             icon: const Icon(Icons.system_update_alt_rounded),
           ),
           PopupMenuButton<String>(
-            tooltip: '추가 메뉴',
+            tooltip: AppLocalizations.of(context)!.tooltipMore,
             onSelected: _toolsAction,
             itemBuilder: (_) => _toolsMenu,
           ),
@@ -874,7 +884,7 @@ class _HypDashboardState extends State<HypDashboard> {
                             Expanded(child: HypText(widget.message, maxLines: 4,
                                 overflow: TextOverflow.ellipsis)),
                             IconButton(
-                              tooltip: '알림 닫기',
+                              tooltip: AppLocalizations.of(context)!.tooltipDismiss,
                               onPressed: widget.onDismissMessage,
                               icon: const Icon(Icons.close_rounded, size: 18),
                             ),
@@ -1042,7 +1052,7 @@ class _HypDashboardState extends State<HypDashboard> {
       _toolIcon(Icons.system_update_alt, '앱 업데이트', widget.onCheckRelease),
       const SizedBox(width: 8),
       PopupMenuButton<String>(
-        tooltip: '추가 메뉴',
+        tooltip: AppLocalizations.of(context)!.tooltipMore,
         color: HypColors.raised,
         onSelected: _toolsAction,
         itemBuilder: (_) => _toolsMenu,
@@ -1123,9 +1133,9 @@ class _HypDashboardState extends State<HypDashboard> {
         onClearHistory: widget.onClearReadingHistory,
         onOpenWork: (work) {
           if (_offlineKeys.contains(work.key)) {
-            widget.onOpenGallery(work);
+            _openReaderWith(() => widget.onOpenGallery(work));
           } else {
-            widget.onReadOnline(work);
+            _openReaderWith(() => widget.onReadOnline(work));
           }
         },
       ),
@@ -1151,8 +1161,8 @@ class _HypDashboardState extends State<HypDashboard> {
           final matching = widget.library.works.where((work) => work.key == key);
           if (matching.isEmpty) return;
           final work = matching.first;
-          if (_offlineKeys.contains(work.key)) widget.onOpenGallery(work);
-          else widget.onReadOnline(work);
+          if (_offlineKeys.contains(work.key)) _openReaderWith(() => widget.onOpenGallery(work));
+          else _openReaderWith(() => widget.onReadOnline(work));
         },
         onOpenLibrary: () => _navigate(HypPage.library),
         onOpenDownloads: () => _navigate(HypPage.downloads),
@@ -1354,8 +1364,8 @@ class _HypDashboardState extends State<HypDashboard> {
       )),
     );
     if (selected == null || !mounted) return;
-    if (_offlineKeys.contains(selected.key)) widget.onOpenGallery(selected);
-    else widget.onReadOnline(selected);
+    if (_offlineKeys.contains(selected.key)) _openReaderWith(() => widget.onOpenGallery(selected));
+    else _openReaderWith(() => widget.onReadOnline(selected));
   }
 
   Widget _editionTile(List<WorkEntry> members) {
@@ -1373,8 +1383,8 @@ class _HypDashboardState extends State<HypDashboard> {
       totalPages: _pageCounts[work.key],
       coverBytes: _coverImages[work.key],
       onOpen: () {
-        if (_offlineKeys.contains(work.key)) widget.onOpenGallery(work);
-        else widget.onReadOnline(work);
+        if (_offlineKeys.contains(work.key)) _openReaderWith(() => widget.onOpenGallery(work));
+        else _openReaderWith(() => widget.onReadOnline(work));
       },
       onAction: (action) => _workAction(action, work),
       selectionMode: _selectingWorks && _canSelectWorks,
@@ -1441,7 +1451,7 @@ class _HypDashboardState extends State<HypDashboard> {
           children: [
             Row(children: [
               IconButton(key: const Key('library-group-back'),
-                tooltip: '서재로 돌아가기',
+                tooltip: AppLocalizations.of(context)!.tooltipBackLibrary,
                 onPressed: () => setState(() => _openedGroupId = null),
                 icon: const Icon(Icons.arrow_back)),
               Expanded(child: HypText(
@@ -1451,7 +1461,7 @@ class _HypDashboardState extends State<HypDashboard> {
                 style: Theme.of(context).textTheme.titleMedium)),
               PopupMenuButton<String>(
                 key: Key('work-group-menu-' + _openedGroupId!),
-                tooltip: '묶음 관리',
+                tooltip: AppLocalizations.of(context)!.tooltipManageGroup,
                 onSelected: (action) => _groupAction(
                     action, _openedGroupId!, selected),
                 itemBuilder: (_) => const [
@@ -1967,14 +1977,14 @@ class _HypDashboardState extends State<HypDashboard> {
                   trailing: Row(mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        tooltip: '위로',
+                        tooltip: AppLocalizations.of(context)!.tooltipMoveUp,
                         onPressed: index == 0 ? null : () => update(() {
                           final item = ordered.removeAt(index);
                           ordered.insert(index - 1, item);
                         }),
                         icon: const Icon(Icons.arrow_upward)),
                       IconButton(
-                        tooltip: '아래로',
+                        tooltip: AppLocalizations.of(context)!.tooltipMoveDown,
                         onPressed: index == ordered.length - 1
                             ? null : () => update(() {
                           final item = ordered.removeAt(index);
@@ -2113,7 +2123,7 @@ class _HypDashboardState extends State<HypDashboard> {
         )),
         IconButton(
           key: const Key('library-sort-direction'),
-          tooltip: '정렬 방향 바꾸기',
+          tooltip: AppLocalizations.of(context)!.tooltipSortDirection,
           onPressed: () => widget.onSaveReaderSettings(
               widget.readerSettings.copyWith(
                 librarySortDescending:
@@ -2127,8 +2137,8 @@ class _HypDashboardState extends State<HypDashboard> {
           Expanded(child: DropdownButtonFormField<String>(
             key: const Key('library-popularity-period'),
             initialValue: widget.readerSettings.popularityPeriod,
-            decoration: const InputDecoration(isDense: true,
-                labelText: '히토미 인기 기간'),
+            decoration: InputDecoration(isDense: true,
+                labelText: AppLocalizations.of(context)!.tooltipPopularPeriod),
             items: const [
               DropdownMenuItem(value: 'today', child: HypText('일간')),
               DropdownMenuItem(value: 'week', child: HypText('주간')),
@@ -2140,7 +2150,7 @@ class _HypDashboardState extends State<HypDashboard> {
                 widget.readerSettings.copyWith(popularityPeriod: period));
             },
           )),
-          IconButton(tooltip: '인기 순위 새로고침',
+          IconButton(tooltip: AppLocalizations.of(context)!.tooltipRefreshPopular,
               onPressed: _popularityBusy ? null :
                   () => _loadPopularity(refresh: true),
               icon: const Icon(Icons.refresh)),
@@ -2226,10 +2236,36 @@ class _HypDashboardState extends State<HypDashboard> {
     ],
   );
 
+  static String _nativeLanguageName(String code) => switch (code) {
+    'korean' => '한국어',
+    'japanese' => '日本語',
+    'english' => 'English',
+    'chinese' => '中文',
+    _ => code,
+  };
+
+  String _searchFieldLabel(BuildContext context, String field) {
+    final l = AppLocalizations.of(context)!;
+    return switch (field) {
+      'general' => l.searchGeneral,
+      'artist' => l.searchArtist,
+      'group' => l.searchGroup,
+      'series' => l.searchSeries,
+      'tag' => l.searchTag,
+      'female' => l.searchFemale,
+      'male' => l.searchMale,
+      'advanced' => l.searchAdvanced,
+      _ => field,
+    };
+  }
+
   Widget _searchContent() {
     final existingIds = widget.library.works.map((w) => w.workId).toSet();
     final online = _remoteResults.where((w) =>
-        !existingIds.contains(w.workId)).toList();
+        !existingIds.contains(w.workId) &&
+        (_remoteFieldFilter.isEmpty ||
+         (_remoteFieldMatches[w.workId] ?? const <String>[])
+             .contains(_remoteFieldFilter))).toList();
     final showLocal = _searchScope != 'online';
     final showOnline = _searchScope != 'local';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -2250,25 +2286,27 @@ class _HypDashboardState extends State<HypDashboard> {
               }),
             ),
           PopupMenuButton<String>(
-            tooltip: '검색 언어 필터',
+            tooltip: AppLocalizations.of(context)!.tooltipSearchLanguage,
             onSelected: (value) {
               setState(() => _searchLanguage = value);
               _changedSearch();
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: '', child: HypText('모든 언어')),
-              PopupMenuItem(value: 'korean', child: HypText('한국어')),
-              PopupMenuItem(value: 'japanese', child: HypText('일본어')),
+              PopupMenuItem(value: 'korean', child: Text('한국어')),
+              PopupMenuItem(value: 'japanese', child: Text('日本語')),
               PopupMenuItem(value: 'english', child: HypText('English')),
               PopupMenuItem(value: 'chinese', child: HypText('中文')),
             ],
-            child: Chip(label: HypText(_searchLanguage.isEmpty
-                ? '언어 전체 ▾' : '언어: ' + _searchLanguage + ' ▾')),
+            child: Chip(label: Text(_searchLanguage.isEmpty
+                ? HypI18n.t(context, '언어 전체 ▾')
+                : AppLocalizations.of(context)!.searchLanguageChip(
+                    _nativeLanguageName(_searchLanguage)))),
           ),
         ]),
       if (showLocal) ...[
         const SizedBox(height: 13),
-        HypText('내 서재 · ' + _results.length.toString() + '개',
+        Text(AppLocalizations.of(context)!.searchLocalCount(_results.length),
             style: Theme.of(context).textTheme.titleMedium),
         Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(
           key: const Key('search-select-mode'),
@@ -2277,26 +2315,38 @@ class _HypDashboardState extends State<HypDashboard> {
           label: HypText(_selectingWorks ? '선택 종료' : '선택'),
         )),
         _selectionControls(_results),
-        _gridOrEmpty(_results,
-          emptyTitle: '내 서재에서 찾지 못했어',
-          emptyMessage: '온라인 결과가 나오면 아래에서 확인해 봐.'),
+        if (_results.isEmpty)
+          _gridOrEmpty(_results,
+            emptyTitle: '내 서재에서 찾지 못했어',
+            emptyMessage: '온라인 결과가 나오면 아래에서 확인해 봐.')
+        else if (_selectingWorks)
+          // In bulk-selection mode each physical edition is selectable.
+          _gridOrEmpty(_results,
+            emptyTitle: '내 서재에서 찾지 못했어',
+            emptyMessage: '온라인 결과가 나오면 아래에서 확인해 봐.')
+        else
+          // Normal search mirrors the shelf's logical edition-stack cards.
+          _editionAwareGrid(_results),
       ],
       if (showOnline) ...[
         const SizedBox(height: 18),
-        HypText('온라인 작품 · ' + _remoteTotal.toString() + '개 고유 결과 수집',
+        Text(AppLocalizations.of(context)!.searchFetchedUnique(_remoteTotal),
             style: Theme.of(context).textTheme.titleMedium),
         if (_remoteFieldTotals.isNotEmpty)
           Wrap(spacing: 6, runSpacing: 3, children: [
+            FilterChip(
+              label: Text(AppLocalizations.of(context)!.searchAllFields),
+              selected: _remoteFieldFilter.isEmpty,
+              onSelected: (_) => setState(() => _remoteFieldFilter = ''),
+            ),
             for (final entry in _remoteFieldTotals.entries)
-              Chip(label: HypText(
-                switch (entry.key) {
-                  'general' => '일반·제목',
-                  'artist' => '작가',
-                  'group' => '서클',
-                  'female' => '여성 태그',
-                  'male' => '남성 태그',
-                  _ => entry.key,
-                } + ': ' + entry.value.toString() + '건 (중복 가능)')),
+              FilterChip(
+                label: Text(AppLocalizations.of(context)!.searchFieldCount(
+                    _searchFieldLabel(context, entry.key), entry.value)),
+                selected: _remoteFieldFilter == entry.key,
+                onSelected: (chosen) => setState(() =>
+                    _remoteFieldFilter = chosen ? entry.key : ''),
+              ),
           ]),
         if (_remoteWarnings.isNotEmpty)
           const HypText('일부 분야 검색이 실패했어. 조회된 결과만 표시해.'),
@@ -2311,22 +2361,46 @@ class _HypDashboardState extends State<HypDashboard> {
         if (!_remoteBusy && _remoteError == null && _remoteResults.isEmpty)
           const Padding(padding: EdgeInsets.all(15),
             child: HypText('온라인 결과가 아직 없어. 제목이나 작가·태그로 검색해 줘.')),
-        for (final work in online) Card(
-          key: Key('online-search-' + work.workId),
+        for (final group in OnlineEditionGroups.cluster(online)) Card(
+          key: group.length > 1
+              ? Key('online-edition-stack-' + group.first.workId)
+              : Key('online-search-' + group.first.workId),
           child: ListTile(
-            leading: const Icon(Icons.menu_book_outlined),
-            title: HypText(work.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-            subtitle: HypText([
-              if (work.artists.isNotEmpty) work.artists.join(', '),
-              if (work.language.isNotEmpty) work.language,
-              '#' + work.workId,
-            ].join(' · '), maxLines: 2),
+            leading: Icon(group.length > 1
+                ? Icons.layers_outlined : Icons.menu_book_outlined),
+            title: HypText(group.first.title,
+                maxLines: 2, overflow: TextOverflow.ellipsis),
+            subtitle: Text(group.length > 1
+                ? [
+                    AppLocalizations.of(context)!.editionCount(group.length),
+                    group.map((w) => WorkEditions.languageName(w.language))
+                        .toSet().join(' · '),
+                  ].join(' · ')
+                : [
+                    if (group.first.artists.isNotEmpty)
+                      group.first.artists.join(', '),
+                    if (group.first.language.isNotEmpty) group.first.language,
+                    '#' + group.first.workId,
+                    if ((_remoteFieldMatches[group.first.workId] ??
+                         const <String>[]).isNotEmpty)
+                      AppLocalizations.of(context)!.searchResultMatches(
+                        _remoteFieldMatches[group.first.workId]!
+                          .map((field) => _searchFieldLabel(context, field))
+                          .join(', ')),
+                  ].join(' · '), maxLines: 3),
             trailing: IconButton(
-              tooltip: '서재에 추가',
-              onPressed: () => widget.onSaveOnlineSearchWork(work),
-              icon: const Icon(Icons.bookmark_add_outlined),
+              tooltip: group.length > 1
+                  ? AppLocalizations.of(context)!.editionChoose
+                  : AppLocalizations.of(context)!.tooltipAddLibrary,
+              onPressed: group.length > 1
+                  ? () => _showOnlineEditionCandidates(group)
+                  : () => widget.onSaveOnlineSearchWork(group.first),
+              icon: Icon(group.length > 1 ? Icons.language
+                  : Icons.bookmark_add_outlined),
             ),
-            onTap: () => _showOnlineWork(work),
+            onTap: group.length > 1
+                ? () => _showOnlineEditionCandidates(group)
+                : () => _showOnlineWork(group.first),
           ),
         ),
         if (!_remoteBusy && _remoteHasMore && _remoteResults.isNotEmpty)
@@ -2338,6 +2412,41 @@ class _HypDashboardState extends State<HypDashboard> {
           ),
       ],
     ]);
+  }
+
+  Future<void> _showOnlineEditionCandidates(
+      List<OnlineSearchWork> candidates) async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context, isScrollControlled: true,
+      builder: (sheet) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(AppLocalizations.of(sheet)!.editionChoose,
+              style: Theme.of(sheet).textTheme.titleMedium),
+          const SizedBox(height: 12),
+          SizedBox(height: 320, child: ListView.builder(
+            itemCount: candidates.length,
+            itemBuilder: (_, index) {
+              final work = candidates[index];
+              return ListTile(
+                key: Key('online-edition-choice-' + work.workId),
+                title: Text(work.title, maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+                subtitle: Text(WorkEditions.languageName(work.language) +
+                    ' · #' + work.workId),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _showOnlineWork(work);
+                  });
+                },
+              );
+            },
+          )),
+        ]),
+      )),
+    );
   }
 
   Future<void> _showOnlineWork(OnlineSearchWork work) async {
@@ -2367,7 +2476,7 @@ class _HypDashboardState extends State<HypDashboard> {
             FilledButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
-                widget.onReadOnlineSearchWork(work);
+                _openReaderWith(() => widget.onReadOnlineSearchWork(work));
               },
               icon: const Icon(Icons.menu_book),
               label: const HypText('서재 추가하고 읽기'),
@@ -2398,9 +2507,9 @@ class _HypDashboardState extends State<HypDashboard> {
       coverImages: _coverImages,
       onOpen: (work) {
         if (_offlineKeys.contains(work.key)) {
-          widget.onOpenGallery(work);
+          _openReaderWith(() => widget.onOpenGallery(work));
         } else {
-          widget.onReadOnline(work);
+          _openReaderWith(() => widget.onReadOnline(work));
         }
       },
       onAction: _workAction,
@@ -2413,11 +2522,11 @@ class _HypDashboardState extends State<HypDashboard> {
 
   void _workAction(String action, WorkEntry work) async {
     if (action == 'offline') {
-      await widget.onOpenGallery(work);
+      await _openReaderWith(() => widget.onOpenGallery(work));
     } else if (action == 'online') {
-      await widget.onReadOnline(work);
+      await _openReaderWith(() => widget.onReadOnline(work));
     } else if (action == 'page') {
-      await widget.onReadWebPage(work);
+      await _openReaderWith(() => widget.onReadWebPage(work));
     } else if (action == 'download') {
       await widget.onDownloadOnline(work);
       await _refreshOffline();
@@ -2841,9 +2950,8 @@ class _HypDashboardState extends State<HypDashboard> {
               ),
           ]),
           const SizedBox(height: 7),
-          const HypText('PNG · JPG · WebP (최대 12MB). 이미지 자체는 '
-              '이 기기에 저장되며 JSON 통합 백업에서 선택적으로 포함할 수 있어.',
-              style: TextStyle(fontSize: 12, color: HypColors.muted)),
+          Text(AppLocalizations.of(context)!.settingsHeroUploadNote,
+              style: const TextStyle(fontSize: 12, color: HypColors.muted)),
         ],
       )),
       const SizedBox(height: 10),
@@ -2904,8 +3012,7 @@ class _HypDashboardState extends State<HypDashboard> {
               key: const Key('reader-tap-navigation-setting'),
               contentPadding: EdgeInsets.zero,
               title: const HypText('화면 좌우 터치로 페이지 넘기기 (기본 켜짐)'),
-              subtitle: const HypText('왼쪽 30%는 이전 페이지, 오른쪽 30%는 다음 페이지. '
-                  '가운데 40%는 화면 UI 숨김·표시. 기존에 꺼둔 설정은 유지돼.'),
+              subtitle: Text(AppLocalizations.of(context)!.settingsTapZonesNote),
               value: widget.readerSettings.tapNavigation,
               onChanged: (v) => widget.onSaveReaderSettings(
                   widget.readerSettings.copyWith(tapNavigation: v)),
@@ -3036,18 +3143,14 @@ class _HypDashboardState extends State<HypDashboard> {
             key: const Key('data-saver-setting'),
             contentPadding: EdgeInsets.zero,
             title: const HypText('데이터 절약 모드'),
-            subtitle: const HypText('켜면 -1 전체 로딩을 잠시 멈추고 '
-                '보이는 페이지와 다음 1장 위주로 요청해. '
-                '동시 네트워크 요청도 1개로 제한해.'),
+            subtitle: Text(AppLocalizations.of(context)!.settingsDataSaverNote),
             value: widget.readerSettings.dataSaverMode,
             onChanged: (v) => widget.onSaveReaderSettings(
               widget.readerSettings.copyWith(dataSaverMode: v)),
           ),
           const SizedBox(height: 8),
-          const HypText(
-            '키보드(뷰어): ← / →, PageUp / PageDown, Space, Home / End, '
-            'Esc(닫기). 서재의 작품 메뉴에서 표지 선택 가능.',
-            style: TextStyle(fontSize: 12, color: HypColors.muted),
+          Text(AppLocalizations.of(context)!.settingsKeyboardHint,
+            style: const TextStyle(fontSize: 12, color: HypColors.muted),
           ),
         ],
       )),
