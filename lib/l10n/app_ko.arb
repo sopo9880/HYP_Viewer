@@ -554,5 +554,14 @@
         "type": "int"
       }
     }
-  }
+  },
+  "onlineLinkedShelf": "서재의 '{title}'와 같은 작품 후보",
+  "@onlineLinkedShelf": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "onlineSafeLink": "저장 시 기존 언어판 묶음에 연결을 시도해."
 }
