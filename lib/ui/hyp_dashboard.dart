@@ -2597,6 +2597,7 @@ class _HypDashboardState extends State<HypDashboard> {
                 labelText: HypI18n.t(context, '선호 작품 언어')),
             items: const [
               DropdownMenuItem(value: 'auto', child: HypText('자동 선택')),
+              DropdownMenuItem(value: 'recent', child: HypText('마지막 열람 언어판')),
               DropdownMenuItem(value: 'korean', child: Text('한국어')),
               DropdownMenuItem(value: 'japanese', child: Text('日本語')),
               DropdownMenuItem(value: 'english', child: Text('English')),
