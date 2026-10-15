@@ -425,15 +425,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const HypText('안드로이드 설치 보안 안내'),
-        content: const HypText(
-          '삼성 갤럭시의 보안 위험 자동 차단 기능은 일부 APK 설치를 '
-          '막을 수 있어. 이는 기기를 보호하는 중요한 기능이야.\\n\\n'
-          '앱에서는 보안 차단을 자동 해제할 수 없어. '
-          '설치에 문제가 있다면 APK의 게시자, GitHub 릴리스 주소, '
-          'SHA-256 체크섬을 먼저 확인하고, '
-          '기기의 보안 설정은 직접 검토해줘. '
-          '보호 기능을 끄는 것은 권장하지 않아.',
-        ),
+        content: Text(AppLocalizations.of(ctx)!.androidSecurityNotice),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
               child: const HypText('알겠어')),
