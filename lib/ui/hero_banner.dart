@@ -199,7 +199,7 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
                     if (artworkKey != null && widget.onOpenArtwork != null)
                       IconButton(
                         key: const Key('hero-open-random-work'),
-                        tooltip: '현재 표지의 작품 읽기',
+                        tooltip: HypI18n.t(context, '현재 표지의 작품 읽기'),
                         onPressed: () => widget.onOpenArtwork!(artworkKey),
                         icon: const Icon(Icons.menu_book_outlined,
                             color: Colors.white),

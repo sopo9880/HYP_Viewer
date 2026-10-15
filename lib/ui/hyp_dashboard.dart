@@ -1389,7 +1389,7 @@ class _HypDashboardState extends State<HypDashboard> {
                   ' · ' + work.title, maxLines: 1,
                   overflow: TextOverflow.ellipsis),
               subtitle: HypText('#' + work.workId + ' · ' +
-                  (work.completed ? '완독' : '읽는 중')),
+                  HypI18n.t(context, work.completed ? '완독' : '읽는 중')),
               onTap: () => Navigator.pop(sheet, work),
               trailing: PopupMenuButton<String>(
                 onSelected: (action) {
@@ -1630,7 +1630,8 @@ class _HypDashboardState extends State<HypDashboard> {
             TextField(
               key: const Key('group-name-input'),
               controller: input,
-              decoration: const InputDecoration(labelText: '묶음 이름')),
+              decoration: InputDecoration(
+                labelText: HypI18n.t(context, '묶음 이름'))),
           ]),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx),
@@ -2470,8 +2471,8 @@ class _HypDashboardState extends State<HypDashboard> {
                 width: 460, height: 380,
                 child: Column(children: [
                   TextField(controller: input,
-                    decoration: const InputDecoration(
-                      labelText: '작품 번호 또는 제목로 검색'),
+                    decoration: InputDecoration(
+                      labelText: HypI18n.t(context, '작품 번호 또는 제목으로 검색')),
                     onChanged: (_) => update(() {})),
                   const SizedBox(height: 8),
                   Expanded(child: ListView.builder(
