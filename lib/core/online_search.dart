@@ -174,14 +174,17 @@ class OnlineWorkSearch {
     int page = 1,
     String language = '',
     void Function(int completed, int total)? onProgress,
-    /// Immutable snapshots for immediate incremental rendering.
     void Function(OnlineSearchResult snapshot)? onPartial,
   }) async {
     final queries = planQueries(raw);
     final unique = <String, OnlineSearchWork>{};
     final matched = <String, Set<String>>{};
     final counts = <String, int>{};
-    final warnings = <String>[];
+    final warnings = <String>{};
+    final normalizedTerms = raw.toLowerCase().split('|')
+        .map((value) => value.trim())
+        .where((value) => value.length >= 2 && !value.contains(':'))
+        .toList();
     var successes = 0;
     var hasMore = false;
     var completed = 0;
@@ -190,30 +193,64 @@ class OnlineWorkSearch {
       'group': 7, 'tag': 4, 'female': 4, 'male': 4,
     };
 
+    OnlineSearchWork combine(OnlineSearchWork old, OnlineSearchWork next) {
+      List<String> merge(List<String> first, List<String> second) =>
+          {...first, ...second}.where((item) => item.trim().isNotEmpty).toList();
+      final oldPlaceholder = old.title.startsWith('작품 ');
+      final title = oldPlaceholder && !next.title.startsWith('작품 ')
+          ? next.title : old.title;
+      return OnlineSearchWork(
+        workId: old.workId,
+        title: title,
+        titleAliases: merge(old.titleAliases, [
+          ...next.titleAliases,
+          if (next.title != title) next.title,
+          if (old.title != title && !oldPlaceholder) old.title,
+        ]),
+        artists: merge(old.artists, next.artists),
+        groups: merge(old.groups, next.groups),
+        series: merge(old.series, next.series),
+        tags: merge(old.tags, next.tags),
+        language: old.language.isEmpty ? next.language : old.language,
+        type: old.type.isEmpty ? next.type : old.type,
+        date: old.date.isEmpty ? next.date : old.date,
+      );
+    }
+
     OnlineSearchResult snapshot() {
       final ordered = unique.values.toList();
-      int score(OnlineSearchWork work) =>
-          (matched[work.workId] ?? const <String>{}).fold<int>(
-              0, (sum, field) => sum + (weights[field] ?? 1));
+      int score(OnlineSearchWork work) {
+        var result = (matched[work.workId] ?? const <String>{})
+            .fold<int>(0, (sum, field) => sum + (weights[field] ?? 1));
+        final titles = [work.title, ...work.titleAliases]
+            .map((title) => title.toLowerCase()).toList();
+        for (final term in normalizedTerms) {
+          if (titles.any((title) => title == term)) {
+            result += 50;
+          } else if (titles.any((title) => title.contains(term))) {
+            result += 20;
+          }
+          if (work.artists.any((artist) =>
+              artist.toLowerCase() == term)) result += 35;
+        }
+        return result;
+      }
       ordered.sort((a, b) {
         final relevance = score(b).compareTo(score(a));
-        if (relevance != 0) return relevance;
-        return a.workId.compareTo(b.workId);
+        return relevance != 0 ? relevance : a.workId.compareTo(b.workId);
       });
-      // Never share mutable maps with UI state or the 10-minute cache.
       return OnlineSearchResult(ordered, unique.length, page,
           fieldTotals: Map<String, int>.of(counts),
           matchedFields: matched.map((id, fields) =>
               MapEntry(id, fields.toList())),
-          warnings: List<String>.of(warnings),
+          warnings: warnings.toList(),
           hasNextPage: hasMore);
     }
 
-    // Keep at most three provider requests running at the same time. Each
-    // completed category is emitted without waiting for slower categories.
+    // Keep at most three requests running; broadcast immutable snapshots as
+    // each field completes without holding UI rendering for slower fields.
     for (var i = 0; i < queries.length; i += 3) {
-      final batch = queries.skip(i).take(3);
-      await Future.wait(batch.map((entry) async {
+      await Future.wait(queries.skip(i).take(3).map((entry) async {
         try {
           final result = await search(entry.$2,
               page: page, language: language);
@@ -221,12 +258,13 @@ class OnlineWorkSearch {
           for (final warning in result.warnings) {
             warnings.add(entry.$1 + ': ' + warning);
           }
-          counts.update(entry.$1, (n) => n + result.total,
+          counts.update(entry.$1, (count) => count + result.total,
               ifAbsent: () => result.total);
           hasMore = hasMore || result.works.isNotEmpty &&
               (result.total > page * 25 || result.works.length >= 25);
           for (final work in result.works) {
-            unique.putIfAbsent(work.workId, () => work);
+            final old = unique[work.workId];
+            unique[work.workId] = old == null ? work : combine(old, work);
             matched.putIfAbsent(work.workId, () => <String>{})
                 .add(entry.$1);
           }
