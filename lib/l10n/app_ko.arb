@@ -544,5 +544,5 @@
   "readingStatsDevice": "HYP Viewer · 기기 안에 저장된 실제 열람 세션 기준",
   "readingStatsCollect": "활성 시간·날짜·페이지 정보를 기기 안에만 보관해.",
   "readingStatsEraseHint": "서재·완독 표시·기존 열람 횟수는 유지돼.",
-  "readingStatsEraseConfirm": "端末に保存された日付別読書セッションをすべて削除しますか？"
+  "readingStatsEraseConfirm": "기기에 저장된 날짜별 독서 세션을 전부 삭제할까? 이 작업은 되돌릴 수 없어."
 }
