@@ -2357,11 +2357,17 @@ class _HypDashboardState extends State<HypDashboard> {
           child: ListTile(
             leading: const Icon(Icons.menu_book_outlined),
             title: HypText(work.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-            subtitle: HypText([
+            subtitle: Text([
               if (work.artists.isNotEmpty) work.artists.join(', '),
               if (work.language.isNotEmpty) work.language,
               '#' + work.workId,
-            ].join(' · '), maxLines: 2),
+              if ((_remoteFieldMatches[work.workId] ?? const <String>[])
+                  .isNotEmpty)
+                AppLocalizations.of(context)!.searchResultMatches(
+                  _remoteFieldMatches[work.workId]!
+                    .map((field) => _searchFieldLabel(context, field))
+                    .join(', ')),
+            ].join(' · '), maxLines: 3),
             trailing: IconButton(
               tooltip: AppLocalizations.of(context)!.tooltipAddLibrary,
               onPressed: () => widget.onSaveOnlineSearchWork(work),
