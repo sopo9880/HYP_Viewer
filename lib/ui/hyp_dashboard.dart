@@ -24,6 +24,7 @@ import 'candidate_editor.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
 import '../core/work_editions.dart';
+import '../core/cover_similarity.dart';
 import 'work_edition_card.dart';
 import 'hero_banner.dart';
 import 'hyp_theme.dart';
@@ -1546,8 +1547,46 @@ class _HypDashboardState extends State<HypDashboard> {
           language: entry.language, inLibrary: false, remote: entry,
           match: WorkEditions.compare(work, candidate)));
     }
+    // Only compare covers after metadata/chapters have narrowed candidates.
+    // Missing images are neutral; never use visual similarity to auto-link.
+    final coverScores = <String, double>{};
+    final knownCover = _coverImages[work.key];
+    if (knownCover != null) {
+      final compareClient = http.Client();
+      try {
+        var remoteChecks = 0;
+        for (final candidate in items.take(24)) {
+          Uint8List? other;
+          if (candidate.inLibrary) {
+            final record = local.where((entry) =>
+                entry.workId == candidate.id).firstOrNull;
+            if (record != null) other = _coverImages[record.key];
+          } else if (candidate.match.score >= 45 && remoteChecks < 3) {
+            remoteChecks++;
+            try {
+              final gallery = await HitomiGalleryProvider(compareClient)
+                  .load(candidate.id, dataSaver: true);
+              if (gallery.pageCount > 0) {
+                other = await gallery.loadPage(0);
+              }
+            } catch (_) {
+              // The remote image is optional, not a reason to hide a match.
+            }
+          }
+          if (other != null) {
+            final similarity = await CoverSimilarity.compare(knownCover, other);
+            if (similarity != null) coverScores[candidate.id] = similarity;
+          }
+        }
+      } finally {
+        compareClient.close();
+      }
+    }
     items.sort((a, b) {
-      final score = b.match.score.compareTo(a.match.score);
+      final coverA = coverScores[a.id] ?? 0;
+      final coverB = coverScores[b.id] ?? 0;
+      final score = (b.match.score + coverB * 8).compareTo(
+          a.match.score + coverA * 8);
       if (score != 0) return score;
       return a.inLibrary == b.inLibrary ? a.id.compareTo(b.id) :
           a.inLibrary ? -1 : 1;
@@ -1578,7 +1617,10 @@ class _HypDashboardState extends State<HypDashboard> {
                     (item.match.autoLink ? labels.editionLikelyMatch :
                         labels.editionManualReview) +
                     ' · ' + item.match.score.toString() + '/100' +
-                    ' · ' + item.match.reason),
+                    ' · ' + item.match.reason +
+                    (coverScores[item.id] == null ? '' :
+                        ' · ' + labels.editionCoverPercent(
+                            (coverScores[item.id]! * 100).round()))),
                 onTap: () => Navigator.pop(dialog,
                     (id: item.id, remote: item.remote)),
               ),
