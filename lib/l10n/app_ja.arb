@@ -320,5 +320,9 @@
         "type": "int"
       }
     }
-  }
+  },
+  "legacyCompletionReview": "読了候補を確認",
+  "legacyCompletionHint": "最終ページまで進んだ未読了作品です。確認して選択してください。",
+  "legacyCompletionApply": "選択作品を読了にする",
+  "legacyCompletionEmpty": "確認が必要な読了候補はありません。"
 }
