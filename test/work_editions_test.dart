@@ -23,6 +23,37 @@ void main() {
     final b = work('222222', 'Other Story', 'korean');
     expect(WorkEditions.compare(a, b).autoLink, false);
   });
+  test('translated titles can match with strong same-chapter evidence', () {
+    final japanese = work('111111', 'Sora no Kaze 3話', 'japanese',
+        author: 'Maker', series: 'Sora')
+        .copyWith(sourceGroup: 'Circle', totalPages: 22);
+    final korean = work('222222', '하늘의 바람 3화', 'korean',
+        author: 'Maker', series: 'Sora')
+        .copyWith(sourceGroup: 'Circle', totalPages: 23);
+    expect(WorkEditions.compare(japanese, korean).autoLink, true);
+  });
+
+  test('completion hiding retains unfinished language edition', () {
+    final japanese = work('111111', 'Story', 'japanese')
+        .copyWith(editionGroupId: 'edition_a', completed: true);
+    final korean = work('222222', 'Story', 'korean')
+        .copyWith(editionGroupId: 'edition_a', completed: false);
+    final items = [japanese, korean];
+    expect(WorkEditions.visibleOnShelf(items, true).length, 2);
+    expect(WorkEditions.visibleOnShelf(
+      [japanese, korean.copyWith(completed: true)], true), isEmpty);
+    expect(WorkEditions.visibleOnShelf(items, false).length, 2);
+  });
+
+  test('edition lookup adds creator/series discovery queries', () {
+    final entry = work('111111', 'Original', 'japanese',
+        author: 'Artist', series: 'Franchise').copyWith(sourceGroup: 'Circle');
+    final queries = WorkEditions.searchQueries(entry, 'Original');
+    expect(queries, contains('artist:Artist'));
+    expect(queries, contains('group:Circle'));
+    expect(queries, contains('series:Franchise'));
+  });
+
   test('manual complete/uncomplete does not lose progress or sibling editions', () {
     final a=work('111111','A Title','japanese')
         .copyWith(editionGroupId:'edition_111111',currentPage:9);
