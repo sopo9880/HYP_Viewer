@@ -293,10 +293,83 @@ abstract final class HypExtraTranslations {
     "온라인 결과: ": ["Online Results: ", "オンライン結果: "],
   };
 
+  /// Full-message translations prevent Korean suffixes from appearing after
+  /// otherwise localized counts, notifications and recovery dialogues.
+  static final List<(RegExp, String, String)> _dynamicFormats = [
+    (RegExp(r'^작품 #(\d+) 서재에 추가했어\.$'),
+      'Added work #{1} to your library.', '作品#{1}を本棚に追加しました。'),
+    (RegExp(r'^언어판 (\d+)개를 같은 작품으로 묶었어\.$'),
+      'Linked {1} language editions.', '{1}件の言語版をまとめました。'),
+    (RegExp(r'^선택한 묶음 (\d+)개 적용을 요청했어\.$'),
+      'Applied {1} selected groups.', '選択した{1}件のグループを反映しました。'),
+    (RegExp(r'^(\d+)페이지를 서재 표지로 지정했어\.$'),
+      'Set page {1} as the library cover.', '{1}ページを本棚の表紙に設定しました。'),
+    (RegExp(r'^작품 (\d+)개를 묶었어\.$'),
+      'Grouped {1} works.', '{1}作品をまとめました。'),
+    (RegExp(r'^기존 묶음에 (\d+)개 작품을 추가했어\.$'),
+      'Added {1} works to the existing series.', '既存のシリーズに{1}作品を追加しました。'),
+    (RegExp(r'^이전 다운로드 (\d+)개를 이어서 진행해\.$'),
+      'Resuming {1} pending downloads.', '{1}件のダウンロードを再開します。'),
+    (RegExp(r'^(\d+)개 CBZ를 삭제했어\. 서재 기록은 유지했어\.$'),
+      'Deleted {1} CBZ files; library records are preserved.',
+      '{1}件のCBZを削除しました。本棚の記録は保持します。'),
+    (RegExp(r'^(\d+)개 CBZ를 선택한 폴더로 내보냈어\. 원본 파일은 유지했어\.$'),
+      'Exported {1} CBZ files; originals are preserved.',
+      '{1}件のCBZを出力しました。元ファイルは保持します。'),
+    (RegExp(r'^오프라인 저장 완료! (\d+)페이지를 인터넷 없이 읽을 수 있어\.$'),
+      'Saved offline! Read {1} pages without an internet connection.',
+      'オフライン保存完了。{1}ページをネット接続なしで読めます。'),
+    (RegExp(r'^다운로드 대기: (\d+)개 작품\. 백그라운드에서도 순서대로 다운로드해\.$'),
+      '{1} works queued. Background transfers continue in order.',
+      '{1}作品を待機中。バックグラウンドで順番に保存します。'),
+    (RegExp(r'^작품 (\d+)개를 서재에 저장했어\.$'),
+      'Saved {1} works to your library.', '{1}作品を本棚に保存しました。'),
+    (RegExp(r'^서재·설정 복원 완료\. 이미지 (\d+)개는 복원에 실패했어\.$'),
+      'Library and settings restored; {1} images could not be restored.',
+      '本棚と設定を復元しましたが、{1}件の画像を復元できませんでした。'),
+    (RegExp(r'^이전 저장본에서 (\d+)개 작품을 복구했어\.$'),
+      'Restored {1} works from the previous backup.',
+      '以前のバックアップから{1}作品を復元しました。'),
+    (RegExp(r'^독서 활동 기록 (\d+)개 포함됨$'),
+      '{1} reading sessions included', '読書セッション{1}件を含む'),
+    (RegExp(r'^백업 작품: (\d+)개$'),
+      'Works in backup: {1}', 'バックアップ作品: {1}件'),
+    (RegExp(r'^(\d+)개 작품을 하나의 세트로 묶어\.$'),
+      'Group {1} works into one set.', '{1}作品を一つのセットにまとめます。'),
+    (RegExp(r'^작품 (\d+)개 정보를 갱신했지만 추천 묶음이 없어\..*$'),
+      'Checked {1} works but found no safe grouping suggestions. You can group works manually.',
+      '{1}作品を確認しましたが、安全なグループ候補はありません。手動でまとめられます。'),
+    (RegExp(r'^전체 (\d+)개 작품을 비교했지만 새 시리즈 후보를 찾지 못했어\.[\s\S]*$'),
+      'Compared {1} works but found no new series. Review missing title and creator metadata.',
+      '{1}作品を比較しましたが、新しいシリーズ候補はありません。タイトルや作者情報を確認してください。'),
+    (RegExp(r'^작품 #(\d+) 다운로드 실패: (.+)$'),
+      'Download failed for work #{1}: {2}', '作品#{1}のダウンロードに失敗: {2}'),
+    (RegExp(r'^업데이트 v([0-9.]+)$'),
+      'Update v{1}', 'アップデート v{1}'),
+    (RegExp(r'^외 (\d+)개$'),
+      'and {1} more', 'ほか{1}件'),
+  ];
+
+  static String? _translateFormat(String text, String language) {
+    for (final rule in _dynamicFormats) {
+      final match = rule.$1.firstMatch(text);
+      if (match == null) continue;
+      var localized = language == 'ja' ? rule.$3 : rule.$2;
+      for (var index = 1; index <= match.groupCount; index++) {
+        localized = localized.replaceAll(
+          '{' + index.toString() + '}', match.group(index) ?? '');
+      }
+      return localized;
+    }
+    return null;
+  }
+
   static String? translate(String text, String language) {
     final index = language == 'ja' ? 1 : 0;
     final exact = labels[text];
     if (exact != null) return exact[index];
+    final formatted = _translateFormat(text, language);
+    if (formatted != null) return formatted;
     for (final entry in prefixes.entries) {
       if (text.startsWith(entry.key)) {
         return entry.value[index] + text.substring(entry.key.length);
