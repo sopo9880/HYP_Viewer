@@ -1,5 +1,6 @@
 import 'work.dart';
 import 'work_editions.dart';
+import 'work_grouping.dart';
 
 /// Keep each edition's own workId, currentPage, cover and offline files.
 /// Only visual relationships are changed; schemaVersion 1 backups remain readable.
@@ -18,8 +19,16 @@ abstract final class WorkEditionService {
               incoming.sourceLanguage.toLowerCase() &&
           WorkEditions.compare(old, incoming).autoLink).toList();
       if (found.isEmpty) continue;
+      // Multiple competing chapter groups are ambiguous: never pick the
+      // first arbitrary work and silently merge unrelated editions.
+      if (found.map(WorkEditions.groupKey).toSet().length != 1) continue;
       final anchor = found.first;
-      entries = _join(entries, anchor, incoming);
+      try {
+        entries = _join(entries, anchor, incoming);
+      } on StateError {
+        // Incompatible existing series must never block adding a new work.
+        continue;
+      }
     }
     return LibraryBackup(works: entries, collections: original.collections);
   }
@@ -31,6 +40,18 @@ abstract final class WorkEditionService {
     final edition = entries.where((w) => w.workId == editionId).toList();
     if (anchor.isEmpty || edition.isEmpty || anchorId == editionId) {
       throw StateError('서재에 존재하는 서로 다른 작품 두 개를 선택해줘.');
+    }
+    final leftChapter = WorkGrouping.episodeNumber(anchor.first);
+    final rightChapter = WorkGrouping.episodeNumber(edition.first);
+    if (leftChapter != null && rightChapter != null &&
+        leftChapter != rightChapter) {
+      throw StateError('서로 다른 회차는 언어판으로 묶을 수 없어.');
+    }
+    if (anchor.first.sourceLanguage.trim().isNotEmpty &&
+        edition.first.sourceLanguage.trim().isNotEmpty &&
+        anchor.first.sourceLanguage.toLowerCase() ==
+            edition.first.sourceLanguage.toLowerCase()) {
+      throw StateError('같은 언어끼리는 언어판 묶음으로 만들 수 없어.');
     }
     if (anchor.first.groupId.isNotEmpty &&
         edition.first.groupId.isNotEmpty &&
