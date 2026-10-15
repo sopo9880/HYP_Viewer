@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 
+import 'work_editions.dart';
+
 /// Public metadata mirror, not an official Hitomi API. Provider outages
 /// affect online search only; local library search must remain independent.
 class OnlineSearchWork {
@@ -323,6 +325,13 @@ class OnlineWorkSearch {
           if (item is! Map<String, dynamic>) continue;
           try {
             final work = OnlineSearchWork.fromJson(item);
+            // The metadata server is a community mirror. A source may
+            // ignore a language filter, so reject only *known* conflicting
+            // languages while retaining records whose language is unknown.
+            final requested = WorkEditions.canonicalLanguage(language);
+            final actual = WorkEditions.canonicalLanguage(work.language);
+            if (requested.isNotEmpty && actual.isNotEmpty &&
+                requested != actual) continue;
             if (seen.add(work.workId)) entries.add(work);
           } on FormatException { /* Skip a malformed item. */ }
         }

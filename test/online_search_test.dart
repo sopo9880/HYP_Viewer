@@ -6,6 +6,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hyp_viewer/core/online_search.dart';
 
 void main() {
+  test('ignore explicit language conflicts without losing unknown records',
+      () async {
+    final client = MockClient((request) async =>
+        http.Response(jsonEncode({
+          'results': [
+            {'id': 1001, 'title': 'Korean edition', 'language': 'ko'},
+            {'id': 1002, 'title': 'Japanese edition', 'language': 'jpn'},
+            {'id': 1003, 'title': 'Unknown language'},
+          ],
+          'count': 3,
+        }), 200));
+    final result = await OnlineWorkSearch(client).search(
+        'Story', language: 'korean');
+    expect(result.works.map((w) => w.workId), ['1001', '1003']);
+    client.close();
+  });
+
 
   test('unified search publishes results before slow categories finish',
       () async {
