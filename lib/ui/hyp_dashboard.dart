@@ -1471,17 +1471,33 @@ class _HypDashboardState extends State<HypDashboard> {
     final client = http.Client();
     final queries = WorkEditions.searchQueries(work, query);
     try {
-      final batches = await Future.wait(queries.map((term) async {
-        try {
-          return await OnlineWorkSearch(client).search(term);
-        } catch (error) {
-          errors.add('$term: $error');
-          return null;
-        }
-      }));
+      final batches = <OnlineSearchResult>[];
+      final searcher = OnlineWorkSearch(client);
+      // Bounded parallelism: two alias/creator queries at a time.
+      // Load an additional page if the provider reports more candidates.
+      for (var start = 0; start < queries.length; start += 2) {
+        final pair = queries.skip(start).take(2);
+        final found = await Future.wait(pair.map((term) async {
+          final pages = <OnlineSearchResult>[];
+          try {
+            final first = await searcher.search(term);
+            pages.add(first);
+            if (first.works.isNotEmpty && first.total > first.works.length) {
+              try {
+                pages.add(await searcher.search(term, page: 2));
+              } catch (error) {
+                errors.add(term + ' page 2: ' + error.toString());
+              }
+            }
+          } catch (error) {
+            errors.add(term + ': ' + error.toString());
+          }
+          return pages;
+        }));
+        for (final group in found) { batches.addAll(group); }
+      }
       final seen = <String>{};
       for (final batch in batches) {
-        if (batch == null) continue;
         for (final result in batch.works) {
           if (result.workId != work.workId &&
               seen.add(result.workId) &&
@@ -1560,7 +1576,9 @@ class _HypDashboardState extends State<HypDashboard> {
                 subtitle: Text('#' + item.id + ' · ' +
                     WorkEditions.languageName(item.language) + ' · ' +
                     (item.match.autoLink ? labels.editionLikelyMatch :
-                        labels.editionManualReview)),
+                        labels.editionManualReview) +
+                    ' · ' + item.match.score.toString() + '/100' +
+                    ' · ' + item.match.reason),
                 onTap: () => Navigator.pop(dialog,
                     (id: item.id, remote: item.remote)),
               ),
