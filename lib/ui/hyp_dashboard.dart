@@ -261,6 +261,7 @@ class _HypDashboardState extends State<HypDashboard> {
   final Set<String> _popularityTried = {};
   bool _popularityBusy = false;
   bool _publicationBusy = false;
+  bool _groupScanBusy = false;
   bool _publicationTried = false;
   String? _sortLoadError;
 
@@ -1330,12 +1331,87 @@ class _HypDashboardState extends State<HypDashboard> {
     });
   }
 
+  Future<void> _enrichAndGroup() async {
+    if (_groupScanBusy) return;
+    setState(() => _groupScanBusy = true);
+    final client = http.Client();
+    var refreshed = 0;
+    try {
+      final provider = HitomiGalleryProvider(client);
+      // Limit network pressure. User-confirmed metadata enrichment only.
+      final eligible = widget.library.works.where((work) =>
+          work.title.isEmpty || work.title == '작품 ' + work.workId ||
+          (work.author.isEmpty && work.sourceGroup.isEmpty)).take(80).toList();
+      for (var i = 0; i < eligible.length; i += 3) {
+        final batch = eligible.skip(i).take(3).toList();
+        await Future.wait(batch.map((work) async {
+          try {
+            final info = await provider.fetchInfo(work.workId)
+                .timeout(const Duration(seconds: 10));
+            if (!mounted) return;
+            final newTitle = (work.title.isEmpty ||
+                work.title == '작품 ' + work.workId) && info.title.isNotEmpty
+                ? info.title : work.title;
+            final newAuthor = work.author.isEmpty ? info.author : work.author;
+            final newGroup = work.sourceGroup.isEmpty ? info.group : work.sourceGroup;
+            if (newTitle == work.title && newAuthor == work.author &&
+                newGroup == work.sourceGroup &&
+                work.sourceSeries.isNotEmpty) return;
+            await widget.onUpdateWork(work.copyWith(
+              title: newTitle, author: newAuthor,
+              sourceGroup: newGroup,
+              sourceSeries: work.sourceSeries.isEmpty
+                  ? info.series : work.sourceSeries,
+              tags: work.tags.isEmpty ? info.tags : work.tags,
+              sourceType: work.sourceType.isEmpty ? info.type : work.sourceType,
+              sourceLanguage: work.sourceLanguage.isEmpty
+                  ? info.language : work.sourceLanguage,
+            ));
+            refreshed++;
+          } catch (_) { /* A remote source may be temporarily unavailable. */ }
+        }));
+      }
+    } finally {
+      client.close();
+      if (mounted) setState(() => _groupScanBusy = false);
+    }
+    if (!mounted) return;
+    final proposals = WorkGrouping.suggest(widget.library.works);
+    if (proposals.isEmpty) {
+      await showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+        title: const Text('Auto 묶기 · 탐색 완료'),
+        content: Text('작품 ' + refreshed.toString() +
+            '개 정보를 갱신했지만 추천 묶음이 없어. '
+            '수동으로 여러 작품을 선택해 묶을 수도 있어.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx),
+          child: const Text('확인'))],
+      ));
+    } else {
+      await _showAutoGroupWizard();
+    }
+  }
+
   Future<void> _showAutoGroupWizard() async {
     final suggestions = WorkGrouping.suggest(widget.library.works);
     if (suggestions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: HypText('새로 추천할 시리즈를 찾지 못했어. '
-            '작품 정보의 제목·작가를 확인하거나 선택 묶기를 사용해 줘.')));
+      final retry = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Auto 묶기 · 탐색 결과'),
+          content: Text('전체 ' + widget.library.works.length.toString() +
+              '개 작품을 비교했지만 새 시리즈 후보를 찾지 못했어.\n\n'
+              '서재의 제목·작가·서클·시리즈 정보가 부족하면 후보를 놓칠 수 있어. '
+              '온라인에서 누락된 작품 정보를 보충한 후 재탐색할까?\n'
+              '(기존 묶음과 읽기 기록은 변경하지 않아.)'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('닫기')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('정보 갱신 후 재탐색')),
+          ],
+        ),
+      );
+      if (retry == true && mounted) await _enrichAndGroup();
       return;
     }
     final confirmed = await showDialog<List<AutoGroupReview>>(
@@ -1639,7 +1715,7 @@ class _HypDashboardState extends State<HypDashboard> {
         const SizedBox(width: 8),
         Expanded(child: OutlinedButton.icon(
           key: const Key('library-group-auto'),
-          onPressed: widget.library.works.length < 2
+          onPressed: widget.library.works.length < 2 || _groupScanBusy
               ? null : _showAutoGroupWizard,
           icon: const Icon(Icons.auto_fix_high_outlined),
           label: const HypText('Auto 묶기'),

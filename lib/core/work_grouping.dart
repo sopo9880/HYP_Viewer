@@ -132,9 +132,16 @@ class WorkGrouping {
     final first = normalizedSeries(a.title);
     final second = normalizedSeries(b.title);
     if (first == second) return true;
-    // A fuzzy title match MUST have independent creator evidence.
-    return _sameKnownCreator(a, b) &&
-        _similarity(first, second) >= 0.88;
+    // Similar titles must have independent creator evidence. A shared
+    // sourceSeries alone can mean a parody/franchise, not a sequel.
+    final creator = _sameKnownCreator(a, b);
+    final exactSourceSeries = a.sourceSeries.trim().isNotEmpty &&
+        b.sourceSeries.trim().isNotEmpty &&
+        a.sourceSeries.trim().toLowerCase() ==
+        b.sourceSeries.trim().toLowerCase();
+    final score = _similarity(first, second);
+    return creator && (score >= 0.88 ||
+        (exactSourceSeries && score >= 0.66));
   }
 
   /// Original chapter order can still be explicitly overridden by groupOrder.
