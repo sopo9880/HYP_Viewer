@@ -56,6 +56,13 @@ class ShortsFinderPanel extends StatefulWidget {
 class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
   bool _showDetails = false;
   bool _userCollapsed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _showDetails = widget.candidates.isNotEmpty;
+  }
+
   bool _revealApiKey = false;
   final GlobalKey _quickCandidateAnchor = GlobalKey();
   final GlobalKey<CandidateEditorState> _editorKey =
@@ -284,7 +291,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             TextButton.icon(
               onPressed: widget.onOpenYoutube,
               icon: const Icon(Icons.open_in_new, size: 19),
-              label: const HypText('유튜브 열고 댓글 복사'),
+              label: const HypText('원본 링크 열고 내용 복사'),
             ),
           ]),
           const SizedBox(height: 6),

@@ -224,7 +224,7 @@ class HypWorkCard extends StatelessWidget {
                         ),
                         if (work.videoUrl.isNotEmpty)
                           const PopupMenuItem(
-                              value: 'original', child: HypText('소개 쇼츠')),
+                              value: 'original', child: HypText('원본 링크')),
                         const PopupMenuDivider(),
                         const PopupMenuItem(
                           value: 'delete_work',

@@ -49,6 +49,12 @@ void main() {
     expect(grouped.single.workIds, ['50001', '50002']);
   });
 
+  test('custom chapter sort preserves group order', () {
+    final a = WorkEntry.create(workId:'123456', title:'Story 2').copyWith(groupOrder: 2);
+    final b = WorkEntry.create(workId:'123457', title:'Story 1').copyWith(groupOrder: 1);
+    expect(WorkSorting.sort([a,b],LibrarySort.chapter).first.workId, '123457');
+    expect(WorkSorting.sort([a,b],LibrarySort.chapter,descending:true).first.workId, '123456');
+  });
   test('sorting uses added date not read-update date and numeric ids', () {
     final a = WorkEntry.create(workId: '100').copyWith(
         addedAt: '2025-01-01T00:00:00Z', openCount: 5);

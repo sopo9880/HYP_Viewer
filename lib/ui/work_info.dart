@@ -77,6 +77,8 @@ class _WorkInfoDialogState extends State<WorkInfoDialog> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min, children: [
               _infoLine('작품 번호', work.workId),
+              if (work.videoUrl.isNotEmpty)
+                _infoLine('원본 링크', work.videoUrl),
               _infoLine('제목', info?.title.isNotEmpty == true
                   ? info!.title : work.title),
               _infoLine('작가', info?.author.isNotEmpty == true

@@ -1,6 +1,12 @@
 /// Additional 0.4 translations for on-device UI; titles remain verbatim.
 abstract final class HypExtraTranslations {
   static const Map<String, List<String>> labels = {
+    "원본 링크 열고 내용 복사": ["Open Source and Copy Text", "元のリンクを開いて内容をコピー"],
+    "원본 링크": ["Source Link", "元のリンク"],
+    "한국어": ["한국어", "한국어"],
+    "日本語": ["日本語", "日本語"],
+    "English": ["English", "English"],
+    "中文": ["中文", "中文"],
     "내 독서": ["My Reading", "読書記録"],
     "뒤로가기를 한 번 더 누르면 앱이 종료됩니다.": ["Press Back again to exit.", "もう一度戻るとアプリを終了します。"],
     "백업 설정": ["Backup Settings", "バックアップ設定"],
@@ -112,6 +118,7 @@ abstract final class HypExtraTranslations {
     "선택한 작품을 서재에 저장": ["Save Selected to Library", "選択した作品を本棚に保存"],
     "실제 존재하는 번호라도 댓글의 의도와 다를 수 있어. 사용자가 선택한 번호만 서재에 저장돼.": ["An existing gallery ID may be unrelated to a comment. Only chosen IDs are saved.", "存在する作品番号でもコメントの意図と違う場合があります。選択した番号のみ保存します。"],
   };
+    // Existing user data (titles, comments, URLs) is not translated.
   static const Map<String, List<String>> prefixes = {
     "현재 버전: ": ["Current Version: ", "現在のバージョン: "],
     "온라인 검색 실패: ": ["Online Search Failed: ", "オンライン検索失敗: "],
