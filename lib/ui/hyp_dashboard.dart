@@ -1672,7 +1672,7 @@ class _HypDashboardState extends State<HypDashboard> {
     for (final entry in remote) {
       final candidate = WorkEntry.create(
           workId: entry.workId, title: entry.title,
-          author: entry.artists.join(', ''),
+          author: entry.artists.join(', '),
           titleAliases: entry.titleAliases,
         ).copyWith(
             sourceLanguage: entry.language,
