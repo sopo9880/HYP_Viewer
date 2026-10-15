@@ -554,5 +554,14 @@
         "type": "int"
       }
     }
-  }
+  },
+  "onlineLinkedShelf": "Possibly matches '{title}' in your library",
+  "@onlineLinkedShelf": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "onlineSafeLink": "When saved, verified editions can join the existing stack."
 }
