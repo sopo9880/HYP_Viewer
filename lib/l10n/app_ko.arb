@@ -476,5 +476,73 @@
         "type": "int"
       }
     }
-  }
+  },
+  "editionAliasTitles": "원제·번역 제목 별칭 (한 줄에 하나)",
+  "editionAliasHelp": "확인된 제목만 입력해. 임의 번역은 자동 묶음에 사용하지 않아.",
+  "workSourceHistory": "작품 발견 출처 URL (한 줄에 하나)",
+  "workSourcesHelp": "https 링크만 최대 32개 보존해. 기존 출처와 읽기 기록은 유지돼.",
+  "editionAliasCount": "확인된 제목·별칭 {count}개",
+  "@editionAliasCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "editionKnownEvidence": "서재에 연결된 언어판의 제목까지 검색해.",
+  "workSourceCount": "확인된 출처 {count}개",
+  "@workSourceCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "workSourceOpen": "원본 출처 보기",
+  "workSourceInvalid": "링크 형식이 올바르지 않아. HTTPS 주소만 입력해.",
+  "searchProgress": "검색 {current}/{total} 분야 완료",
+  "@searchProgress": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "searchPartialSources": "일부 검색 분야를 확인하지 못했어. 표시된 건수는 전체 결과가 아닐 수 있어.",
+  "sourceIncomplete": "공개 원문 전체를 확인하지 못했어. 누락된 내용은 직접 붙여넣어줘.",
+  "readerRetrying": "이미지 서버 연결을 다시 확인하는 중…",
+  "readerFailedPage": "{page}페이지를 불러오지 못했어.",
+  "@readerFailedPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "readerFailureHttp": "이미지 서버 응답이 불안정해. 대기 후 다시 시도하거나 웹 리더로 열어줘.",
+  "readingStatsSummary": "내 서재 {works}개 · 완독 {completed}개 · 누적 열람 {opens}회 · 새 독서 세션 {sessions}회",
+  "@readingStatsSummary": {
+    "placeholders": {
+      "works": {
+        "type": "int"
+      },
+      "completed": {
+        "type": "int"
+      },
+      "opens": {
+        "type": "int"
+      },
+      "sessions": {
+        "type": "int"
+      }
+    }
+  },
+  "readingStatsPrivacy": "JSON 백업으로 서재와 독서 기록을 함께 내보낼 수 있어. 외부 분석 서버로 기록을 전송하지 않아.",
+  "readingStatsDevice": "HYP Viewer · 기기 안에 저장된 실제 열람 세션 기준",
+  "readingStatsCollect": "활성 시간·날짜·페이지 정보를 기기 안에만 보관해.",
+  "readingStatsEraseHint": "서재·완독 표시·기존 열람 횟수는 유지돼.",
+  "readingStatsEraseConfirm": "端末に保存された日付別読書セッションをすべて削除しますか？"
 }
