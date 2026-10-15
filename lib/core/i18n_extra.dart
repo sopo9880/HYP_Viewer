@@ -1,6 +1,28 @@
 /// Additional 0.4 translations for on-device UI; titles remain verbatim.
 abstract final class HypExtraTranslations {
   static const Map<String, List<String>> labels = {
+    "작품·CBZ·읽기 기록은 그대로 두고 그룹 표시만 해제할까?": ["Keep the work, CBZ, and reading history and remove only its grouping?","作品・CBZ・読書履歴を残して、グループ表示だけ解除しますか？"],
+    "추천 묶음을 펼쳐 표지·제목·번호를 확인해 줘. 개별 작품을 제외하거나 이름과 순서를 바꿀 수 있어. 확인 전에는 서재가 바뀌지 않아.": ["Expand the suggested group to review its covers, titles and IDs. You can exclude works or adjust its name and order. Nothing changes until you confirm.","おすすめのグループを展開して表紙・タイトル・番号を確認してください。作品の除外や名前・順序の変更ができます。確認前に本棚は変更されません。"],
+    "HYP Viewer 관리자 공지": ["HYP Viewer Announcements","HYP Viewer管理者のお知らせ"],
+    "안드로이드 설치 보안 안내": ["Android Installation Security Guide","Androidインストールのセキュリティ案内"],
+    "보안 설정 확인": ["Review Security Settings","セキュリティ設定を確認"],
+    "새 번호가 이미 서재에 있어. 기존 즐겨찾기·진행도·컬렉션을 합치고 두 작품을 병합할까? CBZ와 표지 파일은 자동으로 옮기지 않아.": ["That work ID is already in your library. Merge favorites, progress and collections? CBZ and cover files will not be moved automatically.","この作品番号はすでに本棚にあります。お気に入り・進捗・コレクションを統合しますか？CBZや表紙ファイルは自動移動しません。"],
+    "선택한 오프라인 파일 삭제": ["Delete Selected Offline Files","選択したオフラインファイルを削除"],
+    "CBZ 파일 삭제": ["Delete CBZ Files","CBZファイルを削除"],
+    "이전 서재 복구": ["Restore Previous Library","以前の本棚を復元"],
+    "웹 리더 시작 페이지": ["Web Reader Starting Page","Webリーダーの開始ページ"],
+    "1페이지는 #1-, 2페이지부터는 #2-3처럼 열어. 외부 브라우저에서 넘긴 페이지는 자동 기록되지 않아.": ["Page 1 opens with #1- and page 2 onward with #2-3. External browser page changes are not tracked.","1ページ目は#1-、2ページ目以降は#2-3で開きます。外部ブラウザーのページ移動は自動記録されません。"],
+    "웹에서 열기": ["Open in Browser","ブラウザーで開く"],
+    "온라인 작품을 오프라인으로 저장": ["Save Online Work for Offline Reading","オンライン作品をオフラインに保存"],
+    "다운로드는 작품별로 직접 승인해야 해. 사이트가 접근을 제한하면 우회하지 않고 실패해.": ["Approve downloads for each work. Site restrictions are respected and may prevent downloads.","ダウンロードは作品ごとに許可が必要です。サイトのアクセス制限は回避しません。"],
+    "오프라인 다운로드": ["Offline Download","オフラインダウンロード"],
+    "보안 설정 확인 후 설치": ["Install After Security Review","セキュリティ設定を確認してインストール"],
+    "보안 설정 화면에서 앱으로 돌아왔어. HYP Viewer는 보안 위험 자동 차단이나 출처 확인 기능을 자동으로 끄지 않아. 설치를 계속하면 Android의 시스템 설치 승인 화면이 열려. 계속할까?": ["You have returned from Android security settings. HYP Viewer never disables security blocking or source verification. Continue to Android's system installer confirmation?","Androidのセキュリティ設定から戻りました。HYP Viewerは保護機能や提供元確認を自動解除しません。システムのインストール確認画面へ進みますか？"],
+    "설치 화면 열기": ["Open Installer","インストーラーを開く"],
+    "업데이트 파일 검증 완료": ["Update File Verified","更新ファイルを検証しました"],
+    "다운로드한 파일의 SHA-256을 확인했어. Windows 설치 프로그램을 열기 전에 앱을 종료할게. 계속할까?": ["The downloaded file's SHA-256 was verified. The app will close before launching the Windows installer. Continue?","ダウンロードファイルのSHA-256を検証しました。Windowsインストーラーを開く前にアプリを終了します。続けますか？"],
+    "설치 시작": ["Start Installation","インストール開始"],
+    "릴리스 보기": ["View Release","リリースを見る"],
     "원본 링크 열고 내용 복사": ["Open Source and Copy Text", "元のリンクを開いて内容をコピー"],
     "원본 링크": ["Source Link", "元のリンク"],
     "한국어": ["한국어", "한국어"],
@@ -145,6 +167,12 @@ abstract final class HypExtraTranslations {
   };
     // Existing user data (titles, comments, URLs) is not translated.
   static const Map<String, List<String>> prefixes = {
+    "표지 저장 실패: ": ["Cover Save Failed: ","表紙保存失敗: "],
+    "기존 번호: #": ["Old ID: #","以前の番号: #"],
+    "내 서재 ": ["My Library ","本棚 "],
+    "선택된 작품: ": ["Selected Works: ","選択作品: "],
+    "온라인 검색에 실패했어. 내 서재 검색은 정상 동작해.\n": ["Online search failed. Local library search still works.\n","オンライン検索に失敗しました。本棚内の検索は利用できます。\n"],
+
     "현재 버전: ": ["Current Version: ", "現在のバージョン: "],
     "온라인 검색 실패: ": ["Online Search Failed: ", "オンライン検索失敗: "],
     "작가: ": ["Creator: ", "作者: "],
