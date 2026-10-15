@@ -4,6 +4,13 @@ import 'package:hyp_viewer/core/online_search.dart';
 import 'package:hyp_viewer/core/work_edition_service.dart';
 
 void main() {
+  WorkEntry make(String id, String lang, {String title = 'Shared Title',
+      String seriesId = '', int page = 1}) =>
+    WorkEntry.create(workId: id, title: title, author: 'Maker').copyWith(
+        sourceLanguage: lang, groupId: seriesId, groupTitle: 'Series',
+        groupOrder: 2, currentPage: page);
+
+
 
   test('multi-select links several editions in one preserved library', () {
     final original = make('111111', 'japanese', page: 13);
@@ -42,11 +49,6 @@ void main() {
     expect(source.works.every((work) => work.editionGroupId.isEmpty), true);
   });
 
-  WorkEntry make(String id, String lang, {String title = 'Shared Title',
-      String seriesId = '', int page = 1}) =>
-    WorkEntry.create(workId: id, title: title, author: 'Maker').copyWith(
-        sourceLanguage: lang, groupId: seriesId, groupTitle: 'Series',
-        groupOrder: 2, currentPage: page);
   test('auto-link two different languages, preserve series and progress', () {
     final base = make('111111','japanese',seriesId:'series_1',page:10);
     final translated = make('222222','korean',page:4);
