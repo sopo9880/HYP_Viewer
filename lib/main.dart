@@ -1015,6 +1015,16 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _setCompleted(WorkEntry work, bool completed) async {
+    try {
+      await _commitLibrary((latest) =>
+          latest.withCompleted(work.workId, completed));
+      _status(completed ? '완독 처리했어.' : '완독 표시를 해제했어.');
+    } catch (error) {
+      _status('완독 상태 변경 실패: ' + error.toString());
+    }
+  }
+
   Future<void> _updateWork(WorkEntry work) async {
     try {
       await _commitLibrary((latest) => LibraryBackup(
@@ -1032,6 +1042,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             groupId: w.groupId,
             groupTitle: w.groupTitle,
             groupOrder: w.groupOrder,
+            editionGroupId: w.editionGroupId,
           );
         }).toList(),
         collections: latest.collections,
@@ -2512,6 +2523,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     downloadCanPause: readerTransfer != null,
     onImportGallery: _importGallery,
     onUpdateWork: _updateWork,
+    onSetCompleted: _setCompleted,
     onSavePublicationDates: _savePublicationDates,
     onChooseCover: _chooseCover,
     onSaveReaderSettings: _saveReaderSettings,

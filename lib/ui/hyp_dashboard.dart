@@ -132,6 +132,7 @@ class HypDashboard extends StatefulWidget {
   final bool downloadCanPause;
   final Future<void> Function(WorkEntry) onImportGallery;
   final Future<void> Function(WorkEntry) onUpdateWork;
+  final Future<void> Function(WorkEntry, bool) onSetCompleted;
   final Future<void> Function(Map<String, String>) onSavePublicationDates;
   final Future<void> Function(WorkEntry) onChooseCover;
   final Future<void> Function(ReaderSettings) onSaveReaderSettings;
@@ -218,6 +219,7 @@ class HypDashboard extends StatefulWidget {
     required this.downloadCanPause,
     required this.onImportGallery,
     required this.onUpdateWork,
+    required this.onSetCompleted,
     required this.onSavePublicationDates,
     required this.onChooseCover,
     required this.onSaveReaderSettings,
@@ -2191,7 +2193,7 @@ class _HypDashboardState extends State<HypDashboard> {
     } else if (action == 'favorite') {
       await widget.onUpdateWork(work.copyWith(favorite: !work.favorite));
     } else if (action == 'completed') {
-      await widget.onUpdateWork(work.copyWith(completed: !work.completed));
+      await widget.onSetCompleted(work, !work.completed);
     } else if (action == 'find_editions') {
       await _findOtherEditions(work);
     } else if (action == 'unlink_edition') {

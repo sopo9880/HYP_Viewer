@@ -23,6 +23,20 @@ void main() {
     final b = work('222222', 'Other Story', 'korean');
     expect(WorkEditions.compare(a, b).autoLink, false);
   });
+  test('manual complete/uncomplete does not lose progress or sibling editions', () {
+    final a=work('111111','A Title','japanese')
+        .copyWith(editionGroupId:'edition_111111',currentPage:9);
+    final b=work('222222','A Title | 한국어','korean')
+        .copyWith(editionGroupId:'edition_111111',currentPage:2);
+    final original=LibraryBackup(works:[a,b],collections:const []);
+    final completed=original.withCompleted('111111',true);
+    expect(completed.works[0].completed,true);
+    expect(completed.works[1].completed,false);
+    final undone=completed.withCompleted('111111',false);
+    expect(undone.works[0].currentPage,9);
+    expect(undone.works[0].editionGroupId,'edition_111111');
+    expect(undone.works[1].currentPage,2);
+  });
   test('edition group survives JSON backup and preserves separate progress', () {
     final a = work('111111','A Title','japanese')
         .copyWith(editionGroupId: 'edition_111111', currentPage: 12);

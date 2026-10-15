@@ -248,6 +248,14 @@ class LibraryBackup {
   final List<String> collections;
   const LibraryBackup({required this.works, required this.collections});
 
+  /// A manual completion change affects only this edition. Never reset
+  /// page position, favorite status, local files or sibling translations.
+  LibraryBackup withCompleted(String workId, bool completed) => LibraryBackup(
+    works: works.map((work) => work.workId == workId
+        ? work.copyWith(completed: completed) : work).toList(),
+    collections: collections,
+  );
+
   /// Remove only the requested work from the saved library. Other entries,
   /// their reading progress, favorites and collection definitions stay intact.
   LibraryBackup withoutWork(String workId) => withoutWorks({workId});
