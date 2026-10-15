@@ -540,46 +540,95 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<List<YoutubeCollectionItem>?> _chooseYoutubeCollection(
-      List<YoutubeCollectionItem> items) async {
-    if (items.isEmpty || !mounted) return null;
+      YoutubeCollectionReader reader, YoutubeCollectionPage first,
+      {required bool playlist}) async {
+    if (first.videos.isEmpty || !mounted) return null;
     final selected = <String>{};
+    final items = <YoutubeCollectionItem>[...first.videos];
+    var current = first;
+    var loadingMore = false;
+    String? nextError;
+    final seenTokens = <String>{};
+    Future<void> fetchNext(StateSetter refresh, BuildContext dialog) async {
+      if (!current.hasMore || loadingMore || items.length >= 300) return;
+      if (!seenTokens.add(current.continuation!)) return;
+      refresh(() { loadingMore = true; nextError = null; });
+      try {
+        final next = await reader.listNext(current, playlist: playlist);
+        if (!dialog.mounted) return;
+        refresh(() {
+          final known = items.map((e) => e.videoId).toSet();
+          items.addAll(next.videos.where((e) => known.add(e.videoId)));
+          current = next;
+          if (next.videos.isEmpty) current = YoutubeCollectionPage(items);
+        });
+      } catch (error) {
+        if (dialog.mounted) refresh(() {
+          nextError = error.toString();
+          // A failed page can be retried without repeating old results.
+          seenTokens.remove(current.continuation);
+        });
+      } finally {
+        if (dialog.mounted) refresh(() => loadingMore = false);
+      }
+    }
     return showDialog<List<YoutubeCollectionItem>>(
       context: context,
       builder: (dialog) => StatefulBuilder(
-        builder: (context, refresh) => AlertDialog(
-          title: Text(AppLocalizations.of(context)!.youtubeChooseVideos),
-          content: SizedBox(width: 550, height: 420,
-            child: ListView.builder(
-              itemCount: items.length,
-              itemBuilder: (_, index) {
-                final item = items[index];
-                return CheckboxListTile(
-                  dense: true,
-                  value: selected.contains(item.videoId),
-                  title: Text(item.title, maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
-                  subtitle: Text(item.videoId),
-                  onChanged: (value) => refresh(() {
-                    if (value == true && selected.length < 5) {
-                      selected.add(item.videoId);
-                    } else if (value != true) {
-                      selected.remove(item.videoId);
-                    }
-                  }),
-                );
-              },
-            )),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialog),
-                child: const HypText('취소')),
-            FilledButton(
-              onPressed: selected.isEmpty ? null : () => Navigator.pop(
-                dialog, items.where((item) =>
-                    selected.contains(item.videoId)).toList()),
-              child: Text(AppLocalizations.of(context)!.youtubeAnalyzeSelected),
+        builder: (context, refresh) {
+          final l = AppLocalizations.of(context)!;
+          return AlertDialog(
+            title: Text(l.youtubeChooseVideos),
+            content: SizedBox(width: 550, height: 440,
+              child: Column(children: [
+                Text(l.youtubeVideosLoaded(items.length)),
+                const SizedBox(height: 8),
+                Expanded(child: ListView.builder(
+                  itemCount: items.length,
+                  itemBuilder: (_, index) {
+                    final item = items[index];
+                    return CheckboxListTile(
+                      dense: true, value: selected.contains(item.videoId),
+                      title: Text(item.title, maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                      subtitle: Text(item.videoId),
+                      onChanged: (value) => refresh(() {
+                        if (value == true && selected.length < 5) {
+                          selected.add(item.videoId);
+                        } else if (value != true) {
+                          selected.remove(item.videoId);
+                        }
+                      }),
+                    );
+                  },
+                )),
+                if (nextError != null)
+                  Text(l.youtubeMoreUnavailable,
+                      style: const TextStyle(color: Colors.orangeAccent)),
+                if (current.hasMore && items.length < 300)
+                  TextButton.icon(
+                    onPressed: loadingMore ? null :
+                        () => fetchNext(refresh, dialog),
+                    icon: loadingMore
+                        ? const SizedBox(width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.expand_more),
+                    label: Text(l.youtubeMoreVideos),
+                  ),
+              ]),
             ),
-          ],
-        ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog),
+                  child: const HypText('취소')),
+              FilledButton(
+                onPressed: selected.isEmpty ? null : () => Navigator.pop(
+                  dialog, items.where((item) =>
+                      selected.contains(item.videoId)).toList()),
+                child: Text(l.youtubeAnalyzeSelected),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -613,11 +662,13 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           if (link.kind == SourceKind.hitomiWork) {
             content = link.url;
           } else if (link.kind == SourceKind.youtubeCollection) {
-            final entries = await YoutubeCollectionReader(client).list(link);
-            if (entries.isEmpty) {
+            final collection = YoutubeCollectionReader(client);
+            final firstPage = await collection.listFirst(link);
+            if (firstPage.videos.isEmpty) {
               errors.add('YouTube 영상 목록을 읽지 못했어. 직접 영상 주소를 공유해줘.');
             } else {
-              final selected = await _chooseYoutubeCollection(entries);
+              final selected = await _chooseYoutubeCollection(
+                  collection, firstPage, playlist: link.uri.path == '/playlist');
               for (final video in selected ?? <YoutubeCollectionItem>[]) {
                 try {
                   final result = key.isEmpty
