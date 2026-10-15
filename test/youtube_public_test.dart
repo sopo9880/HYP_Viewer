@@ -222,6 +222,22 @@ void main() {
     client.close();
   });
 
+  test('preserves public description if YouTube comments are blocked',
+      () async {
+    final client = MockClient((request) async {
+      if (request.method == 'GET') {
+        return watchResponse(html(initial: section('comments-one'),
+            description: '설명에 포함된 작품 번호 2711759'));
+      }
+      return http.Response('access denied', 403);
+    });
+    final result = await YoutubePublicClient(client).fetch(videoId);
+    expect(result.description, contains('2711759'));
+    expect(result.comments, isEmpty);
+    expect(result.mayBeIncomplete, true);
+    client.close();
+  });
+
   test('clearly fails when public web configuration is unavailable', () async {
     final client = MockClient((request) async =>
         watchResponse(html(initial: section('one'), withConfig: false)));
