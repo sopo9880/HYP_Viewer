@@ -74,6 +74,26 @@ void main() {
     expect(merged.titleAliases, contains('Translation 1'));
   });
 
+  test('removing an old primary link stays removed after JSON export', () {
+    final old = WorkEntry.create(
+      workId: '2711759',
+      title: 'Kept',
+      videoId: 'abcD123xyZ0',
+      videoUrl: 'https://www.youtube.com/watch?v=abcD123xyZ0',
+    ).copyWith(currentPage: 27, favorite: true);
+    expect(old.sourceUrls.length, 1);
+    final edited = old.copyWith(
+        videoUrl: '', videoId: '', sourceUrls: []);
+    final backup = LibraryBackup(
+      works: [edited], collections: const []);
+    final restored = LibraryBackup.decode(backup.encode()).works.single;
+    expect(restored.videoUrl, isEmpty);
+    expect(restored.videoId, isEmpty);
+    expect(restored.sourceUrls, isEmpty);
+    expect(restored.currentPage, 27);
+    expect(restored.favorite, isTrue);
+  });
+
   test('merge retains favorites and highest reading page', () {
     final base = WorkEntry.create(workId: '123456', videoId: 'abcdefghi12')
         .copyWith(currentPage: 33);
