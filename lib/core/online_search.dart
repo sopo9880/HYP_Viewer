@@ -118,32 +118,41 @@ class OnlineWorkSearch {
     if (input.isEmpty || input.length > 150) {
       throw const FormatException('검색어는 1~150자로 입력해줘.');
     }
-    final advanced = RegExp(r'^[a-z][a-z_]*:', caseSensitive: false)
-        .hasMatch(input);
-    if (advanced) return [('advanced', input)];
-    final alternatives = input.split('|')
-        .map((part) => part.trim()).where((part) => part.isNotEmpty)
-        .take(5).toList();
+    if (RegExp(r'^[a-z][a-z_]*:', caseSensitive: false).hasMatch(input)) {
+      return [('advanced', input)];
+    }
+    // Independently query each user-provided original/translated title.
+    final alternatives = <String>[];
+    for (final part in input.split('|')) {
+      final term = part.trim();
+      if (term.isNotEmpty && !alternatives.any(
+          (existing) => existing.toLowerCase() == term.toLowerCase())) {
+        alternatives.add(term);
+      }
+      if (alternatives.length >= 5) break;
+    }
     final planned = <(String, String)>[];
     void add(String field, String value) {
       if (value.isNotEmpty && value.length <= 150 &&
-          !planned.any((existing) => existing.$2 == value)) {
+          !planned.any((existing) =>
+              existing.$2.toLowerCase() == value.toLowerCase())) {
         planned.add((field, value));
       }
     }
     for (final term in alternatives) {
       add('general', term);
     }
-    // These field operators match the upstream Hitomi query syntax.
-    // Providers may still reject individual operators: failure is isolated.
-    final base = alternatives.first;
-    if (base.length > 1) {
-      for (final field in ['artist', 'group', 'series', 'tag',
-                           'female', 'male']) {
-        add(field, '$field:$base');
+    for (var i = 0; i < alternatives.length && i < 2; i++) {
+      final term = alternatives[i];
+      if (term.length < 2) continue;
+      final fields = i == 0
+          ? const ['artist', 'group', 'series', 'tag', 'female', 'male']
+          : const ['artist', 'group', 'series', 'tag'];
+      for (final field in fields) {
+        add(field, '$field:$term');
       }
     }
-    return planned;
+    return planned.take(16).toList();
   }
 
   /// Prefer a genuinely all-language index for multi-language searches.
