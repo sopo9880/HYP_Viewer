@@ -883,6 +883,13 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           ));
         },
         onEdit: () => _editWorkDetails(work),
+        onFindOtherEditions: () async {
+          if (!mounted) return;
+          setState(() {
+            _requestedEditionId = work.workId;
+            _editionRequestEpoch++;
+          });
+        },
       ),
     );
   }
@@ -2452,6 +2459,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  String? _requestedEditionId;
+  int _editionRequestEpoch = 0;
+
   @override
   Widget build(BuildContext context) => HypDashboard(
     library: library,
@@ -2474,6 +2484,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     message: message,
     navigationEpoch: navigationEpoch,
     libraryNavigationEpoch: libraryNavigationEpoch,
+    editionLookupId: _requestedEditionId,
+    editionLookupEpoch: _editionRequestEpoch,
     appVersion: appVersion,
     downloadingUpdate: downloadingUpdate,
     updateProgress: updateProgress,
