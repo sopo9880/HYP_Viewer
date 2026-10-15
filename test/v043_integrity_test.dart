@@ -82,6 +82,7 @@ void main() {
       totalPages: 22, editionGroupId: 'edition_sky_2');
     final remote = OnlineSearchWork(
       workId: '200', title: '하늘 바람 2화',
+      titleAliases: const ['Sky Wind 2'],
       artists: const ['Original Maker'],
       groups: const ['Artist Circle'],
       series: const ['Wind'],
