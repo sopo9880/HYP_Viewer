@@ -33,6 +33,25 @@ void main() {
     expect(LocalWorkSearch.matches(source,'id:1234567'), true);
   });
 
+  test('search expands a matching saved translation to its linked siblings', () {
+    final jp = source.copyWith(
+      workId: '1234567', editionGroupId: 'edition_1234567',
+      title: '日本語の物語', sourceLanguage: 'japanese');
+    final ko = source.copyWith(
+      workId: '2345678', editionGroupId: 'edition_1234567',
+      title: '한국어 이야기', sourceLanguage: 'korean');
+    final unrelated = source.copyWith(
+      workId: '3456789', editionGroupId: '',
+      title: 'Another Story', sourceLanguage: 'english');
+    final all = [jp, ko, unrelated];
+    expect(LocalWorkSearch.queryLibrary(all, '日本語の物語')
+        .map((w) => w.workId), ['1234567', '2345678']);
+    expect(LocalWorkSearch.queryLibrary(all, '日本語の物語',
+        language: 'korean'), isEmpty);
+    expect(LocalWorkSearch.queryLibrary(all, '한국어 이야기',
+        language: 'korean').map((w) => w.workId), ['2345678']);
+  });
+
   test('language aliases work even when query is blank', () {
     expect(LocalWorkSearch.matches(source,'',language:'japanese'), true);
     expect(LocalWorkSearch.matches(source,'',language:'korean'), false);
