@@ -52,8 +52,11 @@ class YoutubeClient {
     final commentResponse = await client.get(commentUri).timeout(const Duration(seconds: 12));
     final comments = <String>[];
     if (commentResponse.statusCode != 200) {
-      throw Exception('YouTube 댓글 조회 실패 (HTTP ${commentResponse.statusCode}). '
-          'API 권한·할당량 또는 영상의 댓글 허용 여부를 확인해줘.');
+      // Public metadata is still useful; explain that comments could not
+      // be read instead of discarding the entire video's description.
+      return YoutubeResults(metadata['title'] as String? ?? '',
+          metadata['description'] as String? ?? '', const [],
+          mayBeIncomplete: true);
     }
     final commentData = jsonDecode(commentResponse.body) as Map<String, dynamic>;
     for (final item in commentData['items'] as List? ?? []) {
