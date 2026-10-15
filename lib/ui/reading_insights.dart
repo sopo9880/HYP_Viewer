@@ -483,7 +483,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               HypText(reportTitle, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 6),
-              HypText('HYP Viewer · 기기 안에 저장된 실제 열람 세션 기준'),
+              Text(language.readingStatsDevice),
               const SizedBox(height: 8),
               _bars(periodTotals, count: 12),
               Text(language.insightSessionPeriod(_period == 'all'
@@ -504,7 +504,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(language.insightCollectActivity),
-          subtitle: const HypText('활성 시간·날짜·페이지 정보를 기기 안에만 보관해.'),
+          subtitle: Text(language.readingStatsCollect),
           value: widget.settings.analyticsEnabled,
           onChanged: (enabled) => widget.onSaveSettings(
               widget.settings.copyWith(analyticsEnabled: enabled)),
@@ -514,13 +514,13 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.delete_outline),
           title: Text(language.insightClearActivity),
-          subtitle: const HypText('서재·완독 표시·기존 열람 횟수는 유지돼.'),
+          subtitle: Text(language.readingStatsEraseHint),
           onTap: () async {
             final approved = await showDialog<bool>(
               context: context,
               builder: (ctx) => AlertDialog(
                 title: const HypText('독서 활동 기록 삭제'),
-                content: const HypText('기기에 저장된 날짜별 독서 세션을 전부 삭제할까? 이 작업은 되돌릴 수 없어.'),
+                content: Text(language.readingStatsEraseConfirm),
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(ctx, false),
                       child: const HypText('취소')),
@@ -534,15 +534,13 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         ),
         TextButton.icon(
           onPressed: () => Clipboard.setData(ClipboardData(
-              text: '내 서재 ' + works.length.toString() +
-                '개 · 완독 ' + completed.toString() +
-                '개 · 누적 열람 ' + totalOpens.toString() +
-                '회 · 새 독서 세션 ' + sessions.length.toString() + '회')),
+              text: language.readingStatsSummary(
+                  works.length, completed, totalOpens, sessions.length))),
           icon: const Icon(Icons.copy),
           label: Text(language.insightCopySummary),
         ),
-        const HypText('앱의 JSON 백업에서 서재와 활동 기록을 함께 내보낼 수 있어. 다른 분석 서버로 열람 기록을 전송하지 않아.',
-          style: TextStyle(fontSize: 11, color: HypColors.muted)),
+        Text(language.readingStatsPrivacy,
+          style: const TextStyle(fontSize: 11, color: HypColors.muted)),
       ]), icon: Icons.tune),
     ]);
   }
