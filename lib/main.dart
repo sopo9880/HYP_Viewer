@@ -553,7 +553,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       context: context,
       builder: (dialog) => StatefulBuilder(
         builder: (context, refresh) => AlertDialog(
-          title: const HypText('YouTube 목록에서 영상 선택'),
+          title: Text(AppLocalizations.of(context)!.youtubeChooseVideos),
           content: SizedBox(width: 550, height: 420,
             child: ListView.builder(
               itemCount: items.length,
@@ -582,7 +582,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               onPressed: selected.isEmpty ? null : () => Navigator.pop(
                 dialog, items.where((item) =>
                     selected.contains(item.videoId)).toList()),
-              child: const HypText('선택한 영상 분석 (최대 5개)'),
+              child: Text(AppLocalizations.of(context)!.youtubeAnalyzeSelected),
             ),
           ],
         ),
