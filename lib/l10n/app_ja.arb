@@ -374,5 +374,45 @@
     }
   },
   "settingsGeneralTitle": "設定",
-  "settingsGeneralSubtitle": "ビューアー操作、表紙、追加ダウンロード元、アプリデータを管理します。"
+  "settingsGeneralSubtitle": "ビューアー操作、表紙、追加ダウンロード元、アプリデータを管理します。",
+  "workInfoUnavailable": "確認不可",
+  "workInfoNotProvided": "元のメタデータにはありません",
+  "workInfoNoHistory": "履歴なし",
+  "workInfoFromPage": "{page}ページから",
+  "@workInfoFromPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "workInfoProgress": "{page}ページから・{percent}%",
+  "@workInfoProgress": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "workInfoHeader": "作品情報",
+  "workInfoOriginalId": "作品番号",
+  "workInfoSourceLink": "元リンク",
+  "workInfoTitle": "タイトル",
+  "workInfoAuthor": "作家",
+  "workInfoCircle": "グループ・サークル",
+  "workInfoSeries": "原作・シリーズ",
+  "workInfoLanguage": "言語",
+  "workInfoType": "種類",
+  "workInfoAdded": "公開日",
+  "workInfoTags": "タグ",
+  "workInfoCharacters": "登場人物",
+  "workInfoPages": "ページ数",
+  "workInfoViews": "閲覧数",
+  "workInfoLastOpen": "最後に閲覧",
+  "workInfoOpenCount": "閲覧回数",
+  "workInfoProgressLabel": "読書進捗",
+  "workInfoAddedToLibrary": "本棚に追加した日"
 }
