@@ -346,5 +346,33 @@
         "type": "String"
       }
     }
-  }
+  },
+  "settingsHeroUploadNote": "PNG · JPG · WebP (최대 12MB). 이미지 자체는 이 기기에 저장되며 JSON 통합 백업에서 선택적으로 포함할 수 있어.",
+  "settingsTapZonesNote": "왼쪽 30%는 이전 페이지, 오른쪽 30%는 다음 페이지. 가운데 40%는 화면 UI 숨김·표시. 기존에 꺼둔 설정은 유지돼.",
+  "settingsDataSaverNote": "켜면 -1 전체 로딩을 잠시 멈추고 보이는 페이지와 다음 1장 위주로 요청해. 동시 네트워크 요청도 1개로 제한해.",
+  "tooltipUpdate": "업데이트 확인",
+  "tooltipMore": "추가 메뉴",
+  "tooltipDismiss": "알림 닫기",
+  "tooltipBackLibrary": "서재로 돌아가기",
+  "tooltipManageGroup": "묶음 관리",
+  "tooltipGroupName": "묶음 이름",
+  "tooltipMoveUp": "위로",
+  "tooltipMoveDown": "아래로",
+  "tooltipSortDirection": "정렬 방향 바꾸기",
+  "tooltipPopularPeriod": "히토미 인기 기간",
+  "tooltipRefreshPopular": "인기 순위 새로고침",
+  "tooltipSearchLanguage": "검색 언어 필터",
+  "tooltipAddLibrary": "서재에 추가",
+  "tooltipSearchLibrary": "작품 번호 또는 제목로 검색",
+  "settingsKeyboardHint": "키보드(뷰어): ← / →, PageUp / PageDown, Space, Home / End, Esc(닫기). 서재의 작품 메뉴에서 표지 선택 가능.",
+  "searchLanguageChip": "언어: {language} ▾",
+  "@searchLanguageChip": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralTitle": "설정",
+  "settingsGeneralSubtitle": "뷰어 조작, 기본 표지, 추가 다운로드 소스와 앱 데이터를 관리해."
 }
