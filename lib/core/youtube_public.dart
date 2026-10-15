@@ -66,9 +66,15 @@ class YoutubePublicClient {
     if (token == null) {
       // Some watch pages only supply a comment token through the first next
       // request made with videoId.
-      batch = await _next(key, context, videoId: id);
-      _appendComments(batch, comments, seen);
-      token = _commentToken(batch);
+      try {
+        batch = await _next(key, context, videoId: id);
+        _appendComments(batch, comments, seen);
+        token = _commentToken(batch);
+      } catch (_) {
+        if (description.isEmpty) rethrow;
+        return YoutubeResults(title, description, comments,
+            mayBeIncomplete: true);
+      }
     }
 
     final visited = <String>{};
@@ -95,6 +101,7 @@ class YoutubePublicClient {
     }
     return YoutubeResults(title, description, comments,
         mayBeIncomplete: interrupted ||
+            (comments.isEmpty && description.isNotEmpty) ||
             (token != null && token.isNotEmpty && !visited.contains(token)) ||
             comments.length >= 100);
   }
