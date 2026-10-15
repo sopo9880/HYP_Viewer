@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:hyp_viewer/l10n/app_localizations.dart';
 import 'package:hyp_viewer/core/number_extractor.dart';
 import 'package:hyp_viewer/ui/shorts_finder_panel.dart';
 
@@ -21,6 +23,14 @@ void main() {
     String? added;
     var fetchCount = 0;
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('ko'),
+      supportedLocales: const [Locale('ko'), Locale('en'), Locale('ja')],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(body: SingleChildScrollView(
         child: ShortsFinderPanel(
           url: url, apiKey: apiKey, comment: comment,
@@ -73,6 +83,14 @@ void main() {
     });
     var saved = <String>[];
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('ko'),
+      supportedLocales: const [Locale('ko'), Locale('en'), Locale('ja')],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(
         body: SingleChildScrollView(child: ShortsFinderPanel(
           url: url, apiKey: apiKey, comment: comment,
