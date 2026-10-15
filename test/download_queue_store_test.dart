@@ -25,8 +25,8 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('hyp-download-guard');
     addTearDown(() => dir.delete(recursive: true));
     final queue = DownloadQueueStore(baseDirectory: dir);
-    await expectLater(queue.add('../evil'), throwsFormatException);
-    await expectLater(queue.add('123', source: 'external'),
+    expect(() => queue.add('../evil'), throwsFormatException);
+    expect(() => queue.add('123', source: 'external'),
         throwsArgumentError);
     expect(await queue.load(), isEmpty);
   });
