@@ -414,5 +414,6 @@
   "workInfoLastOpen": "Last Read",
   "workInfoOpenCount": "Read Count",
   "workInfoProgressLabel": "Reading Progress",
-  "workInfoAddedToLibrary": "Added to Library"
+  "workInfoAddedToLibrary": "Added to Library",
+  "androidSecurityNotice": "Samsung Galaxy's security auto-blocker may prevent certain APK installations. It protects your device.\n\nThe app cannot disable these protections. If installation fails, verify the APK publisher, GitHub Release URL, and SHA-256 checksum first. Review device security settings yourself. Disabling protections is not recommended."
 }
