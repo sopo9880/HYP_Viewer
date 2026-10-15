@@ -564,5 +564,47 @@
     }
   },
   "onlineSafeLink": "When saved, verified editions can join the existing stack.",
-  "youtubeCommentsPartial": "Only some public comments were collected. Paste any missing comment text manually."
+  "youtubeCommentsPartial": "Only some public comments were collected. Paste any missing comment text manually.",
+  "readerTooltipPrevious": "Previous Page (PageUp)",
+  "readerTooltipNext": "Next Page (PageDown / Space)",
+  "readerTooltipSaveOffline": "Save Online Images as CBZ",
+  "readerTooltipSetCover": "Set Current Page as Library Cover",
+  "readerTooltipHideTools": "Hide Page Controls",
+  "readerTooltipShowTools": "Show Page Controls",
+  "readerTooltipOpenWeb": "Open Current Page in Web Reader",
+  "readerTooltipHorizontal": "Switch to Horizontal Paging",
+  "readerTooltipVertical": "Switch to Vertical Paging",
+  "readingActivityDay": "{date}: {count} Sessions",
+  "@readingActivityDay": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "readingHeatmapDay": "{date} · {count} Sessions",
+  "@readingHeatmapDay": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "readingSaveReportDialog": "Save Reading Report PNG",
+  "readingSaveReportMissing": "Report view could not be found.",
+  "readingSaveReportBytes": "Unable to save PNG.",
+  "readingSaveReportFailed": "Failed to Save Report Image: {error}",
+  "@readingSaveReportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }
