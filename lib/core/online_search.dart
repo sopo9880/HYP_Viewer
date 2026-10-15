@@ -135,7 +135,9 @@ class OnlineWorkSearch {
     if (language.toLowerCase() == 'korean') {
       return [...korea, ...all];
     }
-    return [...all, if (language.isEmpty) ...korea];
+    // If the general index is unreachable, allow a clearly identified
+    // partial fallback rather than making every international search fail.
+    return [...all, ...korea];
   }
 
   Future<OnlineSearchResult> searchUnified(String raw, {
@@ -157,6 +159,9 @@ class OnlineWorkSearch {
         try {
           final r = await search(entry.$2, page: page, language: language);
           successes++;
+          for (final warning in r.warnings) {
+            warnings.add(entry.$1 + ': ' + warning);
+          }
           counts.update(entry.$1, (n) => n + r.total,
               ifAbsent: () => r.total);
           hasMore = hasMore || r.works.isNotEmpty &&
@@ -227,7 +232,13 @@ class OnlineWorkSearch {
         final count = data['count'] is num
             ? (data['count'] as num).toInt().clamp(0, 100000000).toInt()
             : entries.length;
-        return OnlineSearchResult(entries, count, page);
+        final partial = provider.host == 'heliotrope.saebasol.org' &&
+            language.toLowerCase() != 'korean';
+        return OnlineSearchResult(entries, count, page,
+            warnings: partial ? const [
+              '전체 언어 서버에 연결할 수 없어 제한된 검색 서버를 이용했어. '
+              '일부 언어의 결과가 누락될 수 있어.'
+            ] : const []);
       } catch (error) {
         lastError = error;
       }
