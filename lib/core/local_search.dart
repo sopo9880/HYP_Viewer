@@ -1,4 +1,5 @@
 import 'work.dart';
+import 'work_editions.dart';
 
 /// Pure, offline-first library search. Mirrors the supported online field
 /// syntax while never sending private collection names or reading history.
@@ -12,19 +13,10 @@ abstract final class LocalWorkSearch {
       .replaceAll(RegExp(r'\s+'), ' ');
 
   static bool matchesLanguage(WorkEntry work, String selected) {
-    if (selected.isEmpty) return true;
-    final code = normalize(work.sourceLanguage);
-    const aliases = <String, Set<String>>{
-      'korean': {'korean','ko'},
-      'japanese': {'japanese','ja'},
-      'english': {'english','en'},
-      'chinese': {'chinese','zh','zh-cn','zh-tw','chinese (simplified)',
-                  'chinese (traditional)'},
-    };
-    return aliases.entries.any((entry) =>
-        (entry.key == selected || entry.value.contains(selected)) &&
-        (entry.key == code || entry.value.contains(code))) ||
-        code == selected;
+    if (selected.trim().isEmpty) return true;
+    final actual = WorkEditions.canonicalLanguage(work.sourceLanguage);
+    final expected = WorkEditions.canonicalLanguage(selected);
+    return actual.isNotEmpty && expected.isNotEmpty && actual == expected;
   }
 
   /// A query matching one saved translation should surface the entire
