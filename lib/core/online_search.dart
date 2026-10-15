@@ -53,11 +53,12 @@ class OnlineSearchResult {
   final int total;
   final int page;
   final Map<String, int> fieldTotals;
+  final Map<String, List<String>> matchedFields;
   final List<String> warnings;
   final bool hasNextPage;
   const OnlineSearchResult(this.works, this.total, this.page,
-      {this.fieldTotals = const {}, this.warnings = const [],
-       this.hasNextPage = false});
+      {this.fieldTotals = const {}, this.matchedFields = const {},
+       this.warnings = const [], this.hasNextPage = false});
 }
 
 class OnlineWorkSearch {
@@ -88,57 +89,85 @@ class OnlineWorkSearch {
   /// Search a plain term across general, creator, circle, and supported
   /// tag fields. Source count totals can overlap; only fetched unique IDs
   /// are displayed as a true unique count.
+  /// Expand one plain phrase across every supported metadata field.
+  /// Explicit field:value expressions bypass expansion. Search counts from
+  /// different fields overlap; only fetched gallery IDs are deduplicated.
+  static List<(String, String)> planQueries(String raw) {
+    final input = raw.trim();
+    if (input.isEmpty || input.length > 150) {
+      throw const FormatException('검색어는 1~150자로 입력해줘.');
+    }
+    final advanced = RegExp(r'^[a-z][a-z_]*:', caseSensitive: false)
+        .hasMatch(input);
+    if (advanced) return [('advanced', input)];
+    final alternatives = input.split('|')
+        .map((part) => part.trim()).where((part) => part.isNotEmpty)
+        .take(3).toList();
+    final planned = <(String, String)>[];
+    void add(String field, String value) {
+      if (value.isNotEmpty && value.length <= 150 &&
+          !planned.any((existing) => existing.$2 == value)) {
+        planned.add((field, value));
+      }
+    }
+    for (final term in alternatives) {
+      add('general', term);
+    }
+    // These field operators match the upstream Hitomi query syntax.
+    // Providers may still reject individual operators: failure is isolated.
+    final base = alternatives.first;
+    if (base.length > 1) {
+      for (final field in ['artist', 'group', 'series', 'tag',
+                           'female', 'male']) {
+        add(field, '$field:$base');
+      }
+    }
+    return planned;
+  }
+
+  /// Prefer a genuinely all-language index for multi-language searches.
+  /// Language-specific Korean mirrors must not silently replace an
+  /// international search with a Korea-only result set.
+  List<Uri> _orderedProviders(String language) {
+    final all = providers.where((p) => p.host == 'inst.psec.dev').toList();
+    final korea = providers.where((p) => p.host == 'heliotrope.saebasol.org')
+        .toList();
+    if (language.toLowerCase() == 'korean') {
+      return [...korea, ...all];
+    }
+    return [...all, if (language.isEmpty) ...korea];
+  }
+
   Future<OnlineSearchResult> searchUnified(String raw, {
     int page = 1,
     String language = '',
   }) async {
-    final query = raw.trim();
-    if (query.isEmpty || query.length > 150) {
-      throw const FormatException('검색어는 1~150자로 입력해줘.');
-    }
-    final advanced = RegExp(r'^[a-z][a-z_]*:', caseSensitive: false)
-        .hasMatch(query);
-    final terms = advanced ? [query] :
-        query.split('|').map((part) => part.trim())
-            .where((part) => part.isNotEmpty).take(3).toList();
-    final requests = <(String, String)>[];
-    void add(String kind, String term) {
-      if (term.length <= 150 &&
-          !requests.any((pair) => pair.$2 == term)) {
-        requests.add((kind, term));
-      }
-    }
-    for (final term in terms) {
-      add('general', term);
-      if (!advanced && term.length > 1) {
-        add('artist', 'artist:$term');
-        add('group', 'group:$term');
-        // series: is not universally supported by these providers.
-        add('female', 'female:$term');
-        add('male', 'male:$term');
-      }
-    }
-    final capped = requests.take(8).toList();
+    final queries = planQueries(raw);
     final unique = <String, OnlineSearchWork>{};
-    final totals = <String, int>{};
+    final matched = <String, Set<String>>{};
+    final counts = <String, int>{};
     final warnings = <String>[];
     var successes = 0;
-    var more = false;
-    for (var i = 0; i < capped.length; i += 2) {
-      final batch = capped.skip(i).take(2).toList();
+    var hasMore = false;
+    // Keep concurrent requests bounded so a partially down mirror never
+    // floods either server when the user types a short common word.
+    for (var i = 0; i < queries.length; i += 3) {
+      final batch = queries.skip(i).take(3);
       await Future.wait(batch.map((entry) async {
         try {
-          final result = await search(entry.$2, page: page,
-              language: language);
+          final r = await search(entry.$2, page: page, language: language);
           successes++;
-          totals[entry.$1] = (totals[entry.$1] ?? 0) + result.total;
-          more = more || result.works.isNotEmpty &&
-              (result.total > page * 25 || result.works.length >= 25);
-          for (final work in result.works) {
+          counts.update(entry.$1, (n) => n + r.total,
+              ifAbsent: () => r.total);
+          hasMore = hasMore || r.works.isNotEmpty &&
+              (r.total > page * 25 || r.works.length >= 25);
+          for (final work in r.works) {
             unique.putIfAbsent(work.workId, () => work);
+            matched.putIfAbsent(work.workId, () => <String>{})
+                .add(entry.$1);
           }
-        } catch (error) {
-          warnings.add(entry.$1 + ': ' + error.toString());
+        } catch (e) {
+          warnings.add(entry.$1 + ': ' + e.toString());
         }
       }));
     }
@@ -147,7 +176,10 @@ class OnlineWorkSearch {
           warnings.take(2).join(' / '));
     }
     return OnlineSearchResult(unique.values.toList(), unique.length, page,
-        fieldTotals: totals, warnings: warnings, hasNextPage: more);
+        fieldTotals: counts,
+        matchedFields: matched.map((id, fields) =>
+            MapEntry(id, fields.toList())),
+        warnings: warnings, hasNextPage: hasMore);
   }
 
   Future<OnlineSearchResult> search(String raw, {
@@ -159,7 +191,7 @@ class OnlineWorkSearch {
     }
     final searchTokens = tokens(raw, language: language);
     Object? lastError;
-    for (final provider in providers) {
+    for (final provider in _orderedProviders(language)) {
       if (provider.scheme != 'https' ||
           !{'heliotrope.saebasol.org', 'inst.psec.dev'}
               .contains(provider.host)) continue;
