@@ -326,5 +326,25 @@
   "legacyCompletionApply": "Mark Selected as Finished",
   "legacyCompletionEmpty": "No works need completion review.",
   "youtubeChooseVideos": "Choose Videos from YouTube Collection",
-  "youtubeAnalyzeSelected": "Analyze Selected (up to 5 Videos)"
+  "youtubeAnalyzeSelected": "Analyze Selected (up to 5 Videos)",
+  "searchSeries": "Series",
+  "searchTag": "General Tags",
+  "searchAdvanced": "Advanced Query",
+  "searchAllFields": "All Fields",
+  "searchLocalCount": "My Library · {count} Results",
+  "@searchLocalCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchResultMatches": "Matched fields: {fields}",
+  "@searchResultMatches": {
+    "placeholders": {
+      "fields": {
+        "type": "String"
+      }
+    }
+  }
 }
