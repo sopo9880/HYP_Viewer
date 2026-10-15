@@ -67,7 +67,7 @@ abstract final class LocalWorkSearch {
       }
     }
     final corpus = [
-      work.title, work.author, work.workId, work.sourceGroup,
+      work.title, ...work.titleAliases, work.author, work.workId, work.sourceGroup,
       work.sourceSeries, work.sourceType, work.sourceLanguage,
       ...work.tags, ...work.collections,
     ];
@@ -81,7 +81,8 @@ abstract final class LocalWorkSearch {
       case 'group': return contains(work.sourceGroup);
       case 'series': return contains(work.sourceSeries) ||
           contains(work.groupTitle);
-      case 'title': return contains(work.title);
+      case 'title': return contains(work.title) ||
+          work.titleAliases.any(contains);
       case 'id': return contains(work.workId);
       case 'language': return matchesLanguage(work, term);
       case 'type': return contains(work.sourceType);
