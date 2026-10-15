@@ -476,5 +476,73 @@
         "type": "int"
       }
     }
-  }
+  },
+  "editionAliasTitles": "Original / Translated Title Aliases (one per line)",
+  "editionAliasHelp": "Only add verified titles. Unverified translations will not be auto-linked.",
+  "workSourceHistory": "Discovery Source URLs (one per line)",
+  "workSourcesHelp": "Up to 32 HTTPS links are preserved, without losing reading history.",
+  "editionAliasCount": "{count} Verified Titles / Aliases",
+  "@editionAliasCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "editionKnownEvidence": "Search titles from already linked editions in your library.",
+  "workSourceCount": "{count} Discovery Sources",
+  "@workSourceCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "workSourceOpen": "View Discovery Sources",
+  "workSourceInvalid": "Invalid source link: use public HTTPS URLs only.",
+  "searchProgress": "Searched {current} of {total} categories",
+  "@searchProgress": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "searchPartialSources": "Some search categories failed. Counts may not reflect all results.",
+  "sourceIncomplete": "The complete public post was unavailable. Paste missing text manually.",
+  "readerRetrying": "Retrying image server…",
+  "readerFailedPage": "Could not load page {page}.",
+  "@readerFailedPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "readerFailureHttp": "Image server is temporarily unavailable. Retry after waiting or use the web reader.",
+  "readingStatsSummary": "My Library: {works} works · {completed} completed · {opens} reads · {sessions} new sessions",
+  "@readingStatsSummary": {
+    "placeholders": {
+      "works": {
+        "type": "int"
+      },
+      "completed": {
+        "type": "int"
+      },
+      "opens": {
+        "type": "int"
+      },
+      "sessions": {
+        "type": "int"
+      }
+    }
+  },
+  "readingStatsPrivacy": "Export the library and reading history together in JSON. Reading data is never sent to analytics servers.",
+  "readingStatsDevice": "HYP Viewer · Based on Reading Sessions Saved Locally",
+  "readingStatsCollect": "Active time, dates, and page numbers stay on this device.",
+  "readingStatsEraseHint": "Library, completed status, and total open count remain unchanged.",
+  "readingStatsEraseConfirm": "Delete all dated reading sessions on this device? This cannot be undone."
 }
