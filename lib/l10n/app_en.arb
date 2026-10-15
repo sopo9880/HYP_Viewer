@@ -544,5 +544,15 @@
   "readingStatsDevice": "HYP Viewer · Based on Reading Sessions Saved Locally",
   "readingStatsCollect": "Active time, dates, and page numbers stay on this device.",
   "readingStatsEraseHint": "Library, completed status, and total open count remain unchanged.",
-  "readingStatsEraseConfirm": "Delete all dated reading sessions on this device? This cannot be undone."
+  "readingStatsEraseConfirm": "Delete all dated reading sessions on this device? This cannot be undone.",
+  "youtubeMoreVideos": "Load More Videos",
+  "youtubeMoreUnavailable": "More videos are unavailable. Select loaded videos or paste a video URL.",
+  "youtubeVideosLoaded": "{count} Public Videos Loaded",
+  "@youtubeVideosLoaded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
