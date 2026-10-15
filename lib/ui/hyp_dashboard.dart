@@ -1661,8 +1661,8 @@ class _HypDashboardState extends State<HypDashboard> {
       final right = WorkGrouping.episodeNumber(entry);
       if (left != null && right != null && left != right) continue;
       if (entry.sourceLanguage.isNotEmpty &&
-          entry.sourceLanguage.toLowerCase() ==
-              work.sourceLanguage.toLowerCase()) continue;
+          WorkEditions.canonicalLanguage(entry.sourceLanguage) ==
+              WorkEditions.canonicalLanguage(work.sourceLanguage)) continue;
       if (match.score < 45 &&
           !entry.title.toLowerCase().contains(query.toLowerCase())) continue;
       items.add((id: entry.workId, title: entry.title,
@@ -1683,8 +1683,8 @@ class _HypDashboardState extends State<HypDashboard> {
       final right = WorkGrouping.episodeNumber(candidate);
       if (left != null && right != null && left != right) continue;
       if (candidate.sourceLanguage.isNotEmpty &&
-          candidate.sourceLanguage.toLowerCase() ==
-              work.sourceLanguage.toLowerCase()) continue;
+          WorkEditions.canonicalLanguage(candidate.sourceLanguage) ==
+              WorkEditions.canonicalLanguage(work.sourceLanguage)) continue;
       items.add((id: entry.workId, title: entry.title,
           language: entry.language, inLibrary: false, remote: entry,
           match: WorkEditions.compare(work, candidate)));
