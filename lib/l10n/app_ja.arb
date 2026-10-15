@@ -36,5 +36,81 @@
   "libraryWorks": "マイ本棚",
   "searchOnline": "オンライン作品",
   "editionSourceLocal": "本棚",
-  "editionSourceRemote": "オンライン"
+  "editionSourceRemote": "オンライン",
+  "settingsGeneral": "言語・一般",
+  "settingsHero": "ホームバナー",
+  "settingsViewer": "ビューアー・読み込み",
+  "settingsCover": "表紙の管理",
+  "settingsAndroid": "Androidの動作",
+  "settingsNotices": "お知らせ",
+  "settingsWeb": "標準Webリーダー",
+  "settingsSource": "追加画像ソース",
+  "settingsBackup": "本棚データ・バックアップ",
+  "settingsUpdates": "アップデート",
+  "insightsTitle": "読書記録",
+  "insightsSubtitle": "お気に入り・好み・読書統計を端末内で分析します。",
+  "insightsA": "A・読書の概要",
+  "insightsB": "B・タグの傾向",
+  "insightsC": "C・作品ランキング",
+  "insightsD": "D・作家とサークル",
+  "insightsE": "E・読書活動の推移",
+  "insightsF": "F・シリーズの進捗",
+  "insightsG": "G・好みのまとめ",
+  "insightsH": "H・次に読むおすすめ",
+  "insightsI": "I・読書カレンダー",
+  "insightsJ": "J・本棚整理アシスタント",
+  "insightsK": "K・月間・年間読書レポート",
+  "insightsL": "L・統計フィルターと履歴管理",
+  "metricOwned": "所持作品",
+  "metricFavorite": "お気に入り",
+  "metricCompleted": "読了",
+  "metricOpens": "累計閲覧",
+  "insightAllTime": "全期間",
+  "insightLast7": "過去7日",
+  "insightLast30": "過去30日",
+  "insightLastYear": "過去1年",
+  "insightAllWorks": "すべての作品",
+  "insightComplete": "読了作品",
+  "insightIncomplete": "未読了作品",
+  "insightTagInfo": "よく読んだタグ",
+  "insightFavoriteTags": "お気に入りに多いタグ",
+  "insightPairs": "よく組み合わせられるタグ",
+  "insightTop8": "累計閲覧トップ8",
+  "insightRecentlyRead": "最近読んだ作品",
+  "insightRereads": "再読が多い作品（2回以上）",
+  "insightCreatorReads": "作家別累計閲覧数",
+  "insightCircleReads": "サークル別累計閲覧数",
+  "insightMonthlyReport": "月間読書レポート",
+  "insightAnnualReport": "年間読書レポート",
+  "insightSavePng": "レポートをPNGで保存",
+  "insightCollectActivity": "新しい読書活動を記録",
+  "insightClearActivity": "日別読書活動の記録を削除",
+  "insightCopySummary": "統計の要約をコピー",
+  "editionReview": "同じ話数か確認してください",
+  "finderPartialBody": "投稿全文を取得できませんでした。公開プレビューのみで番号が欠けている場合があります。",
+  "searchFetchedUnique": "オンライン作品・重複のない結果 {count}件を取得",
+  "@searchFetchedUnique": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchFieldCount": "{field}: {count}件（重複の可能性あり）",
+  "@searchFieldCount": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchPartial": "一部の検索項目で失敗しました。取得できた結果のみ表示します。",
+  "searchGeneral": "一般・タイトル",
+  "searchArtist": "作家",
+  "searchGroup": "サークル",
+  "searchFemale": "女性タグ",
+  "searchMale": "男性タグ"
 }
