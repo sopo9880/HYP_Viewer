@@ -12,6 +12,7 @@ import '../core/reader_settings.dart';
 import '../core/reading_history.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
+import '../core/work_editions.dart';
 import 'hyp_theme.dart';
 
 /// A-L: all-time library facts remain separate from date-stamped sessions.
@@ -418,14 +419,23 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         if (seriesProgress.isEmpty) Text(language.insightNoGroup),
         for (final entry in seriesProgress.take(12)) Builder(builder: (context) {
           final ordered = [...entry.value]..sort(WorkGrouping.compareChapters);
-          final read = ordered.where((w) => w.completed).length;
-          final next = ordered.where((w) => !w.completed).firstOrNull;
+          final chapters = <String, List<WorkEntry>>{};
+          for (final edition in ordered) {
+            chapters.putIfAbsent(WorkEditions.groupKey(edition), () => [])
+                .add(edition);
+          }
+          final read = chapters.values.where((chapter) =>
+              chapter.any((edition) => edition.completed)).length;
+          final pending = chapters.values.where((chapter) =>
+              !chapter.any((edition) => edition.completed)).firstOrNull;
+          final next = pending == null ? null : WorkEditions.preferred(
+              pending, widget.settings.preferredEditionLanguage);
           final title = ordered.first.groupTitle.isNotEmpty
               ? ordered.first.groupTitle : '시리즈';
           return ListTile(
             contentPadding: EdgeInsets.zero,
             title: HypText(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text(language.insightChaptersCount(read, ordered.length)),
+            subtitle: Text(language.insightChaptersCount(read, chapters.length)),
             trailing: next == null ? const Icon(Icons.done_all)
                 : const Icon(Icons.play_arrow),
             onTap: next == null ? null : () => widget.onOpenWork(next),
