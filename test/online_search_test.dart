@@ -25,10 +25,48 @@ void main() {
     expect(result.works.first.artists, ['creator']);
     client.close();
   });
+  test('a plain term searches creator and circle and deduplicates overlaps', () async {
+    final seen = <String>[];
+    final client = MockClient((request) async {
+      final query = (jsonDecode(request.body)['query'] as List).first as String;
+      seen.add(query);
+      final id = query.startsWith('artist:') || query == 'Pochi' ? 100 : 101;
+      return http.Response(jsonEncode({
+        'results': [{'id': id, 'title': 'Pochi result'}],
+        'count': 10,
+      }), 200);
+    });
+    final result = await OnlineWorkSearch(client).searchUnified('Pochi');
+    expect(seen, containsAll([
+      'Pochi', 'artist:Pochi', 'group:Pochi',
+      'female:Pochi', 'male:Pochi',
+    ]));
+    expect(result.works.map((entry) => entry.workId).toSet(),
+        {'100', '101'});
+    expect(result.total, 2);
+    expect(result.fieldTotals['artist'], 10);
+    expect(result.warnings, isEmpty);
+    client.close();
+  });
+
+  test('advanced query only searches its specified field', () async {
+    final seen = <String>[];
+    final client = MockClient((request) async {
+      seen.add((jsonDecode(request.body)['query'] as List).first as String);
+      return http.Response(jsonEncode({
+        'results': [], 'count': 0,
+      }), 200);
+    });
+    await OnlineWorkSearch(client).searchUnified(
+        'artist:Pochi', language: 'japanese');
+    expect(seen, ['artist:Pochi']);
+    client.close();
+  });
+
   test('advanced query syntax and language selection', () {
     expect(OnlineWorkSearch.tokens('artist:creator', language: 'korean'),
         ['artist:creator', 'language:korean']);
     expect(OnlineWorkSearch.tokens('original | 한국어'),
-        ['original']);
+        ['original | 한국어']);
   });
 }
