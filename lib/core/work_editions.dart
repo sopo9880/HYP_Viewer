@@ -21,12 +21,26 @@ abstract final class WorkEditions {
     return WorkGrouping.normalizedSeries(s);
   }
 
-  static String languageName(String value) {
+  /// Canonical language identifier shared by local records and mirrors.
+  /// A record labeled 'ko' is not a different edition from 'korean'.
+  static String canonicalLanguage(String value) {
     switch (value.trim().toLowerCase()) {
-      case 'korean': case 'ko': return '한국어';
-      case 'japanese': case 'ja': return '日本語';
-      case 'english': case 'en': return 'English';
-      case 'chinese': case 'zh': return '中文';
+      case 'ko': case 'korean': case '한국어': return 'korean';
+      case 'ja': case 'japanese': case '日本語': return 'japanese';
+      case 'en': case 'english': return 'english';
+      case 'zh': case 'zh-cn': case 'zh-tw':
+      case 'chinese': case 'chinese (simplified)':
+      case 'chinese (traditional)': case '中文': return 'chinese';
+      default: return value.trim().toLowerCase();
+    }
+  }
+
+  static String languageName(String value) {
+    switch (canonicalLanguage(value)) {
+      case 'korean': return '한국어';
+      case 'japanese': return '日本語';
+      case 'english': return 'English';
+      case 'chinese': return '中文';
       default: return value.trim().isEmpty ? '언어 미확인' : value;
     }
   }
