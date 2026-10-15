@@ -16,6 +16,7 @@ import '../core/cover_store.dart';
 import '../core/reader_settings.dart';
 import '../core/i18n.dart';
 import '../core/number_extractor.dart';
+import '../core/online_search.dart';
 import 'candidate_editor.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
@@ -80,6 +81,8 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function() onFetch;
   final Future<void> Function() onSaveWork;
   final Future<void> Function(String code) onQuickAddNumber;
+  final Future<void> Function(OnlineSearchWork) onSaveOnlineSearchWork;
+  final Future<void> Function(OnlineSearchWork) onReadOnlineSearchWork;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
   final CandidateBatchVerify onVerifyCandidateCodes;
   final List<NumberCandidate> Function()? onCrossLineFallback;
@@ -157,6 +160,8 @@ class HypDashboard extends StatefulWidget {
     required this.onFetch,
     required this.onSaveWork,
     required this.onQuickAddNumber,
+    required this.onSaveOnlineSearchWork,
+    required this.onReadOnlineSearchWork,
     required this.onSaveSelectedWorks,
     required this.onVerifyCandidateCodes,
     this.onCrossLineFallback,
@@ -210,6 +215,16 @@ class HypDashboard extends StatefulWidget {
 
 class _HypDashboardState extends State<HypDashboard> {
   final TextEditingController _search = TextEditingController();
+  Timer? _searchDebounce;
+  int _searchEpoch = 0;
+  String _searchScope = 'all'; // all, local, online
+  String _searchLanguage = '';
+  bool _remoteBusy = false;
+  String? _remoteError;
+  List<OnlineSearchWork> _remoteResults = [];
+  int _remoteTotal = 0;
+  int _remotePage = 0;
+  final Map<String, (DateTime, OnlineSearchResult)> _remoteCache = {};
   final FocusNode _searchFocus = FocusNode();
   HypPage _page = HypPage.home;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -376,6 +391,7 @@ class _HypDashboardState extends State<HypDashboard> {
     _notificationTimer?.cancel();
     _notificationExitTimer?.cancel();
     _preloadInput.dispose();
+    _searchDebounce?.cancel();
     _search.removeListener(_changedSearch);
     _search.dispose();
     _searchFocus.dispose();
@@ -401,7 +417,65 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   void _changedSearch() {
+    _searchDebounce?.cancel();
+    _searchEpoch++;
+    _remoteResults = [];
+    _remoteError = null;
+    _remotePage = 0;
+    _remoteTotal = 0;
+    _remoteBusy = false;
     if (mounted) setState(() {});
+    if (_search.text.trim().isNotEmpty && _searchScope != 'local') {
+      final epoch = _searchEpoch;
+      _searchDebounce = Timer(const Duration(milliseconds: 450),
+          () => _fetchOnlineSearch(epoch: epoch));
+    }
+  }
+
+  Future<void> _fetchOnlineSearch({required int epoch, bool next = false}) async {
+    if (!mounted || _searchScope == 'local' || _search.text.trim().isEmpty) return;
+    final term = _search.text.trim();
+    final page = next ? _remotePage + 1 : 1;
+    final key = [term.toLowerCase(), _searchLanguage, page].join('|');
+    final cached = _remoteCache[key];
+    if (cached != null && DateTime.now().difference(cached.$1) <
+        const Duration(minutes: 10)) {
+      _useOnlineResults(cached.$2, epoch, next: next);
+      return;
+    }
+    setState(() {
+      _remoteBusy = true;
+      _remoteError = null;
+    });
+    final client = http.Client();
+    try {
+      final service = OnlineWorkSearch(client);
+      final result = await service.search(term, page: page,
+          language: _searchLanguage);
+      if (!mounted || epoch != _searchEpoch) return;
+      _remoteCache[key] = (DateTime.now(), result);
+      if (_remoteCache.length > 60) _remoteCache.clear();
+      _useOnlineResults(result, epoch, next: next);
+    } catch (error) {
+      if (mounted && epoch == _searchEpoch) setState(() {
+        _remoteError = error.toString();
+      });
+    } finally {
+      client.close();
+      if (mounted && epoch == _searchEpoch) setState(() => _remoteBusy = false);
+    }
+  }
+
+  void _useOnlineResults(OnlineSearchResult result, int epoch,
+      {required bool next}) {
+    if (!mounted || epoch != _searchEpoch) return;
+    setState(() {
+      _remotePage = result.page;
+      _remoteTotal = result.total;
+      final seen = <String>{};
+      _remoteResults = [...next ? _remoteResults : <OnlineSearchWork>[],
+        ...result.works].where((work) => seen.add(work.workId)).toList();
+    });
   }
 
   void _navigate(HypPage page) {
@@ -611,7 +685,8 @@ class _HypDashboardState extends State<HypDashboard> {
     if (term.isEmpty) return _works;
     return _works.where((w) {
       return [
-        w.title, w.author, w.workId, ...w.collections,
+        w.title, w.author, w.workId, w.sourceGroup, w.sourceSeries,
+        w.sourceType, w.sourceLanguage, ...w.tags, ...w.collections,
       ].join(' ').toLowerCase().contains(term);
     }).toList();
   }
@@ -1559,28 +1634,141 @@ class _HypDashboardState extends State<HypDashboard> {
     ],
   );
 
-  Widget _searchContent() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Align(
-        alignment: Alignment.centerRight,
-        child: OutlinedButton.icon(
+  Widget _searchContent() {
+    final existingIds = widget.library.works.map((w) => w.workId).toSet();
+    final online = _remoteResults.where((w) =>
+        !existingIds.contains(w.workId)).toList();
+    final showLocal = _searchScope != 'online';
+    final showOnline = _searchScope != 'local';
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const HypSectionTitle(icon: Icons.search_rounded,
+          title: '통합 작품 검색', subtitle: '내 서재와 온라인 작품을 함께 찾아봐.'),
+      const SizedBox(height: 10),
+      Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final entry in const [('all','전체'),('local','내 서재'),('online','온라인')])
+            ChoiceChip(
+              key: Key('search-scope-' + entry.$1),
+              label: Text(entry.$2),
+              selected: _searchScope == entry.$1,
+              onSelected: (_) => setState(() {
+                _searchScope = entry.$1;
+                _changedSearch();
+              }),
+            ),
+          PopupMenuButton<String>(
+            tooltip: '검색 언어 필터',
+            onSelected: (value) {
+              _searchLanguage = value;
+              _changedSearch();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: '', child: Text('모든 언어')),
+              PopupMenuItem(value: 'korean', child: Text('한국어')),
+              PopupMenuItem(value: 'japanese', child: Text('일본어')),
+              PopupMenuItem(value: 'english', child: Text('영어')),
+            ],
+            child: Chip(label: Text(_searchLanguage.isEmpty
+                ? '언어 전체 ▾' : '언어: ' + _searchLanguage + ' ▾')),
+          ),
+        ]),
+      if (showLocal) ...[
+        const SizedBox(height: 13),
+        Text('내 서재 · ' + _results.length.toString() + '개',
+            style: Theme.of(context).textTheme.titleMedium),
+        Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(
           key: const Key('search-select-mode'),
           onPressed: _toggleSelectionMode,
-          icon: Icon(_selectingWorks
-              ? Icons.close : Icons.checklist_outlined),
+          icon: Icon(_selectingWorks ? Icons.close : Icons.checklist_outlined),
           label: HypText(_selectingWorks ? '선택 종료' : '선택'),
+        )),
+        _selectionControls(_results),
+        _gridOrEmpty(_results,
+          emptyTitle: '내 서재에서 찾지 못했어',
+          emptyMessage: '온라인 결과가 나오면 아래에서 확인해 봐.'),
+      ],
+      if (showOnline) ...[
+        const SizedBox(height: 18),
+        Text('온라인 작품 · ' + _remoteTotal.toString() + '개 결과',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        if (_remoteBusy) const LinearProgressIndicator(),
+        if (_remoteError != null) ...[
+          Text('온라인 검색에 실패했어. 내 서재 검색은 정상 동작해.\n' +
+              _remoteError!, style: const TextStyle(color: Colors.orangeAccent)),
+          TextButton.icon(onPressed: () => _fetchOnlineSearch(epoch: _searchEpoch),
+            icon: const Icon(Icons.refresh), label: const Text('다시 검색')),
+        ],
+        if (!_remoteBusy && _remoteError == null && _remoteResults.isEmpty)
+          const Padding(padding: EdgeInsets.all(15),
+            child: Text('온라인 결과가 아직 없어. 제목이나 작가·태그로 검색해 줘.')),
+        for (final work in online) Card(
+          key: Key('online-search-' + work.workId),
+          child: ListTile(
+            leading: const Icon(Icons.menu_book_outlined),
+            title: Text(work.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+            subtitle: Text([
+              if (work.artists.isNotEmpty) work.artists.join(', '),
+              if (work.language.isNotEmpty) work.language,
+              '#' + work.workId,
+            ].join(' · '), maxLines: 2),
+            trailing: IconButton(
+              tooltip: '서재에 추가',
+              onPressed: () => widget.onSaveOnlineSearchWork(work),
+              icon: const Icon(Icons.bookmark_add_outlined),
+            ),
+            onTap: () => _showOnlineWork(work),
+          ),
         ),
-      ),
-      _selectionControls(_results),
-      _fullPage(
-        '검색 결과',
-        '"' + _search.text + '" · ' + _results.length.toString() + '개 작품',
-        Icons.search_rounded,
-        _results,
-      ),
-    ],
-  );
+        if (!_remoteBusy && _remoteResults.length < _remoteTotal &&
+            _remoteResults.isNotEmpty)
+          OutlinedButton.icon(
+            onPressed: () => _fetchOnlineSearch(
+                epoch: _searchEpoch, next: true),
+            icon: const Icon(Icons.expand_more),
+            label: const Text('온라인 결과 더 보기'),
+          ),
+      ],
+    ]);
+  }
+
+  Future<void> _showOnlineWork(OnlineSearchWork work) async {
+    await showModalBottomSheet<void>(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(work.title, style: Theme.of(ctx).textTheme.titleLarge),
+          const SizedBox(height: 10),
+          Text('#' + work.workId),
+          if (work.artists.isNotEmpty) Text('작가: ' + work.artists.join(', ')),
+          if (work.groups.isNotEmpty) Text('서클: ' + work.groups.join(', ')),
+          if (work.tags.isNotEmpty)
+            Text('태그: ' + work.tags.take(20).join(', ')),
+          const SizedBox(height: 15),
+          Wrap(spacing: 8, children: [
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                widget.onSaveOnlineSearchWork(work);
+              },
+              icon: const Icon(Icons.bookmark_add_outlined),
+              label: const Text('서재 추가'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                widget.onReadOnlineSearchWork(work);
+              },
+              icon: const Icon(Icons.menu_book),
+              label: const Text('서재 추가하고 읽기'),
+            ),
+          ]),
+        ]),
+      )),
+    );
+  }
 
   Widget _gridOrEmpty(List<WorkEntry> works, {
     required String emptyTitle,

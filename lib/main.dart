@@ -35,6 +35,7 @@ import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
 import 'core/candidate_verifier.dart';
 import 'core/online_gallery.dart';
+import 'core/online_search.dart';
 import 'core/shares.dart';
 import 'core/storage.dart';
 import 'core/updates.dart';
@@ -477,6 +478,39 @@ class _LibraryHomeState extends State<LibraryHome> {
 
   Future<void> _saveWork() =>
       _saveSelectedWorks([numberInput.text.trim()]);
+
+  Future<void> _saveOnlineSearchWork(OnlineSearchWork result) async {
+    await _commitLibrary((latest) {
+      if (latest.works.any((w) => w.workId == result.workId)) return latest;
+      final work = WorkEntry.create(
+        workId: result.workId, title: result.title,
+        author: result.artists.join(', '),
+      ).copyWith(
+        tags: result.tags,
+        sourceGroup: result.groups.join(', '),
+        sourceSeries: result.series.join(', '),
+        sourceType: result.type,
+        sourceLanguage: result.language,
+        sourceDate: result.date,
+      );
+      return LibraryBackup(
+        works: [...latest.works, work],
+        collections: latest.collections,
+      );
+    });
+    _status('작품 #' + result.workId + ' 서재에 추가했어.');
+  }
+
+  Future<void> _readOnlineSearchWork(OnlineSearchWork result) async {
+    try {
+      await _saveOnlineSearchWork(result);
+      if (!mounted) return;
+      final work = library.works.firstWhere((w) => w.workId == result.workId);
+      await _readOnline(work);
+    } catch (error) {
+      _status('검색 작품 열기 실패: ' + error.toString());
+    }
+  }
 
   Future<void> _quickAddNumber(String code) async {
     // The top search field accepts either a Shorts URL or a gallery ID.
@@ -2221,6 +2255,8 @@ class _LibraryHomeState extends State<LibraryHome> {
     onFetch: _fetch,
     onSaveWork: _saveWork,
     onQuickAddNumber: _quickAddNumber,
+    onSaveOnlineSearchWork: _saveOnlineSearchWork,
+    onReadOnlineSearchWork: _readOnlineSearchWork,
     onSaveSelectedWorks: _saveSelectedWorks,
     onVerifyCandidateCodes: _verifyCandidateCodes,
     onCrossLineFallback: _crossLineFallback,
