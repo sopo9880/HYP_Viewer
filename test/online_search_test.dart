@@ -89,6 +89,28 @@ void main() {
     client.close();
   });
 
+  test('international provider failure has explicitly limited fallback', () async {
+    final seen = <String>[];
+    final client = MockClient((request) async {
+      seen.add(request.url.host);
+      if (request.url.host == 'inst.psec.dev') {
+        return http.Response('temporarily unavailable', 503);
+      }
+      return http.Response(jsonEncode({
+        'results': [{'id': 999, 'title': 'Fallback candidate',
+                     'language': 'japanese'}],
+        'count': 1,
+      }), 200);
+    });
+    final response = await OnlineWorkSearch(client)
+        .searchUnified('Fallback', language: 'japanese');
+    expect(response.works.single.workId, '999');
+    expect(seen.first, 'inst.psec.dev');
+    expect(seen, contains('heliotrope.saebasol.org'));
+    expect(response.warnings.join(' '), contains('누락'));
+    client.close();
+  });
+
   test('advanced query syntax and language selection', () {
     expect(OnlineWorkSearch.tokens('artist:creator', language: 'korean'),
         ['artist:creator', 'language:korean']);
