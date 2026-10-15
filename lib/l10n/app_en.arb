@@ -36,5 +36,81 @@
   "libraryWorks": "My Library",
   "searchOnline": "Online Works",
   "editionSourceLocal": "Library",
-  "editionSourceRemote": "Online"
+  "editionSourceRemote": "Online",
+  "settingsGeneral": "Language & General",
+  "settingsHero": "Home Banner",
+  "settingsViewer": "Viewer & Loading",
+  "settingsCover": "Cover Management",
+  "settingsAndroid": "Android Behavior",
+  "settingsNotices": "Announcements",
+  "settingsWeb": "Default Web Reader",
+  "settingsSource": "Additional Image Sources",
+  "settingsBackup": "Library Data & Backup",
+  "settingsUpdates": "Updates",
+  "insightsTitle": "My Reading",
+  "insightsSubtitle": "Analyze your favorites, interests, and reading stats on this device.",
+  "insightsA": "A · Reading Overview",
+  "insightsB": "B · Tag Preferences",
+  "insightsC": "C · Work Rankings",
+  "insightsD": "D · Artists & Circles",
+  "insightsE": "E · Reading Activity Trends",
+  "insightsF": "F · Series Progress",
+  "insightsG": "G · Taste Summary",
+  "insightsH": "H · What to Read Next",
+  "insightsI": "I · Reading Calendar",
+  "insightsJ": "J · Library Cleanup",
+  "insightsK": "K · Monthly & Annual Reports",
+  "insightsL": "L · Filters & Reading History",
+  "metricOwned": "Works Owned",
+  "metricFavorite": "Favorites",
+  "metricCompleted": "Finished",
+  "metricOpens": "Total Opens",
+  "insightAllTime": "All Time",
+  "insightLast7": "Last 7 Days",
+  "insightLast30": "Last 30 Days",
+  "insightLastYear": "Last Year",
+  "insightAllWorks": "All Works",
+  "insightComplete": "Finished Works",
+  "insightIncomplete": "Unfinished Works",
+  "insightTagInfo": "Most Read Tags",
+  "insightFavoriteTags": "Tags Among Favorites",
+  "insightPairs": "Common Tag Combinations",
+  "insightTop8": "Top 8 Most Read",
+  "insightRecentlyRead": "Recently Read Works",
+  "insightRereads": "Most Revisited (2+ Opens)",
+  "insightCreatorReads": "Reads by Artist",
+  "insightCircleReads": "Reads by Circle",
+  "insightMonthlyReport": "Monthly Reading Report",
+  "insightAnnualReport": "Annual Reading Report",
+  "insightSavePng": "Save Report as PNG",
+  "insightCollectActivity": "Collect New Reading Activity",
+  "insightClearActivity": "Clear Dated Reading Activity",
+  "insightCopySummary": "Copy Statistics Summary",
+  "editionReview": "Confirm Same Chapter",
+  "finderPartialBody": "Could not read the complete post. Only a public preview was available; some IDs may be missing.",
+  "searchFetchedUnique": "Online Works · {count} Unique Results Loaded",
+  "@searchFetchedUnique": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchFieldCount": "{field}: {count} results (overlap possible)",
+  "@searchFieldCount": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchPartial": "Some search categories failed. Showing available results.",
+  "searchGeneral": "General & Title",
+  "searchArtist": "Artist",
+  "searchGroup": "Circle",
+  "searchFemale": "Female Tags",
+  "searchMale": "Male Tags"
 }
