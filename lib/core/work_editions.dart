@@ -14,10 +14,13 @@ class EditionMatch {
 abstract final class WorkEditions {
   static String originalTitle(String title) {
     var s = title.split('|').first.trim();
-    s = s.replaceAll(
-      RegExp(r'\b(english|korean|japanese|chinese|translated|translation)\b',
-          caseSensitive: false), ' ');
-    s = s.replaceAll(RegExp(r'(한국어|영어|일본어|中文|日本語|翻訳|번역판)'), ' ');
+    // Only strip a translation marker when it is delimited or at the end.
+    // "The English Teacher" and "Korean Love" are legitimate titles.
+    final markers = RegExp(
+      r'\s*[\[(](?:english|korean|japanese|chinese|translation|'
+      r'translated|한국어|영어|일본어|中文|日本語|翻訳|번역판)[\])]\s*$',
+      caseSensitive: false);
+    s = s.replaceFirst(markers, '').trim();
     return WorkGrouping.normalizedSeries(s);
   }
 
@@ -25,10 +28,11 @@ abstract final class WorkEditions {
   /// A record labeled 'ko' is not a different edition from 'korean'.
   static String canonicalLanguage(String value) {
     switch (value.trim().toLowerCase()) {
-      case 'ko': case 'korean': case '한국어': return 'korean';
-      case 'ja': case 'japanese': case '日本語': return 'japanese';
-      case 'en': case 'english': return 'english';
-      case 'zh': case 'zh-cn': case 'zh-tw':
+      case 'ko': case 'kor': case 'korean': case '한국어': return 'korean';
+      case 'ja': case 'jpn': case 'japanese': case '日本語': return 'japanese';
+      case 'en': case 'eng': case 'english': return 'english';
+      case 'zh': case 'zh-cn': case 'zh-tw': case 'zh-hans': case 'zh-hant':
+      case 'chs': case 'cht':
       case 'chinese': case 'chinese (simplified)':
       case 'chinese (traditional)': case '中文': return 'chinese';
       default: return value.trim().toLowerCase();
@@ -211,7 +215,8 @@ abstract final class WorkEditions {
     }
     if (language == 'auto') return editions.first;
     for (final work in editions) {
-      if (work.sourceLanguage.toLowerCase() == language) return work;
+      if (canonicalLanguage(work.sourceLanguage) ==
+          canonicalLanguage(language)) return work;
     }
     return editions.first;
   }

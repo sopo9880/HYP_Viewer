@@ -47,28 +47,37 @@ class TitleAliasIndex {
     String entered = '',
     int limit = 12,
   }) {
+    if (limit <= 0) return const [];
     final queries = <String>[];
+    final normalized = <String>{};
     void add(String value) {
       final cleaned = value.trim();
-      if (cleaned.isNotEmpty && cleaned.length <= 150 &&
-          !queries.contains(cleaned)) queries.add(cleaned);
+      if (cleaned.isEmpty || cleaned.length > 150 ||
+          queries.length >= limit) return;
+      if (normalized.add(cleaned.toLowerCase())) queries.add(cleaned);
     }
     add(entered);
-    for (final alias in aliasesFor(work)) {
-      add(alias);
-      if (queries.length >= limit - 3) break;
+    final titles = aliasesFor(work).toList();
+    // Reserve query capacity for independent creator/circle/series evidence;
+    // translations frequently share no literal words with the original.
+    final reserved = <String>[
+      if (work.author.trim().isNotEmpty)
+        'artist:' + work.author.split(',').first.trim(),
+      if (work.sourceGroup.trim().isNotEmpty)
+        'group:' + work.sourceGroup.split(',').first.trim(),
+      if (work.sourceSeries.trim().isNotEmpty)
+        'series:' + work.sourceSeries.split(',').first.trim(),
+    ];
+    final allowedTitleCount = (limit - reserved.length).clamp(1, limit);
+    for (final title in titles) {
+      if (queries.length >= allowedTitleCount) break;
+      add(title);
     }
-    for (final artist in work.author.split(',')) {
-      if (artist.trim().isNotEmpty) add('artist:' + artist.trim());
-    }
-    for (final group in work.sourceGroup.split(',')) {
-      if (group.trim().isNotEmpty) add('group:' + group.trim());
-    }
+    for (final entry in reserved) add(entry);
     if (work.sourceSeries.trim().isNotEmpty) {
-      add('series:' + work.sourceSeries.trim());
       add(work.sourceSeries.trim());
     }
-    return queries.take(limit).toList();
+    return queries;
   }
 
   bool sharesKnownAlias(WorkEntry first, WorkEntry second) {
