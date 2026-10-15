@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hyp_viewer/core/gallery.dart';
 import 'package:hyp_viewer/core/reader_settings.dart';
 import 'package:hyp_viewer/core/work.dart';
+import 'package:hyp_viewer/l10n/app_localizations.dart';
 import 'package:hyp_viewer/ui/gallery_reader.dart';
 
 class _FailingGallery implements GalleryPageSource {
@@ -23,12 +24,23 @@ class _FailingGallery implements GalleryPageSource {
   }
 }
 
+
+Widget _localizedApp({required Widget home, ThemeData? theme, Key? key}) =>
+    MaterialApp(
+      key: key,
+      locale: const Locale('ko'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      theme: theme,
+      home: home,
+    );
+
 void main() {
   testWidgets('shows actionable error instead of a blank reader', (tester) async {
     final archive = _FailingGallery();
     int? browserPage;
     var downloadRequests = 0;
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(_localizedApp(
       theme: ThemeData.dark(),
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759'),

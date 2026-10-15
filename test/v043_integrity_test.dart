@@ -69,7 +69,13 @@ void main() {
       title: '바람 이야기', editionGroupId: 'edition_99',
       sourceLanguage: 'korean');
     expect(LocalWorkSearch.queryLibrary(works, 'Wind Story').length, 2);
-    expect(LocalWorkSearch.queryLibrary(works, 'artist:Pochi').length, 20);
+    // Exactly 20 records have this creator, but matching an edition also
+    // surfaces its saved translation within the same logical group.
+    expect(works.where((work) =>
+        LocalWorkSearch.matches(work, 'artist:Pochi')).length, 20);
+    expect(LocalWorkSearch.queryLibrary(works, 'artist:Pochi').length, 21);
+    expect(LocalWorkSearch.queryLibrary(works, 'artist:Pochi')
+        .any((work) => work.workId == works[99].workId), isTrue);
     expect(LocalWorkSearch.queryLibrary(works, '').length, 1000);
   });
 
