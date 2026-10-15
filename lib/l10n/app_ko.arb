@@ -563,5 +563,6 @@
       }
     }
   },
-  "onlineSafeLink": "저장 시 기존 언어판 묶음에 연결을 시도해."
+  "onlineSafeLink": "저장 시 기존 언어판 묶음에 연결을 시도해.",
+  "youtubeCommentsPartial": "공개 댓글 일부만 수집했어. 누락된 댓글의 번호는 직접 붙여넣어줘."
 }
