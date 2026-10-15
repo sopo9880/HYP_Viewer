@@ -648,6 +648,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final client = http.Client();
     final blocks = <String>[];
     final errors = <String>[];
+    final youtubePartialText = AppLocalizations.of(context)!.youtubeCommentsPartial;
     final mapped = <String, String>{};
     final evidence = <String, Set<String>>{};
     void remember(String id, String url) {
@@ -678,6 +679,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                       ...result.comments].where((part) =>
                           part.trim().isNotEmpty).join('\n\n');
                   blocks.add(text);
+                  if (result.mayBeIncomplete) {
+                    errors.add(video.videoId + ': ' + youtubePartialText);
+                  }
                   for (final candidate in NumberExtractor.extract(
                       text, source: video.url)) {
                     remember(candidate.code, video.url);
@@ -693,6 +697,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                 : await YoutubeClient(client).fetch(link.videoId, key);
             content = [result.description, ...result.comments]
                 .where((value) => value.trim().isNotEmpty).join('\n\n');
+            if (result.mayBeIncomplete) {
+              errors.add(link.videoId + ': ' + youtubePartialText);
+            }
           } else if (link.canPreview) {
             final preview = await PublicSourcePreview(client).fetchDetailed(link);
             content = preview.text;
