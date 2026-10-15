@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../core/candidate_verifier.dart';
 import '../core/i18n.dart';
+import '../l10n/app_localizations.dart';
 import '../core/number_extractor.dart';
 
 typedef CandidateBatchVerify = Future<Map<String, CandidateVerification>>
@@ -389,7 +390,7 @@ class CandidateEditorState extends State<CandidateEditor> {
         ],
         if (_checking)
           Padding(padding: const EdgeInsets.symmetric(vertical: 8),
-            child: HypText('작품 확인 중: $_verifiedCount / $_verificationTotal',
+            child: Text(AppLocalizations.of(context)!.candidateChecking(_verifiedCount, _verificationTotal),
               style: Theme.of(context).textTheme.bodySmall)),
         if (_fallbackMessage.isNotEmpty)
           Padding(padding: const EdgeInsets.symmetric(vertical: 8),
@@ -419,7 +420,7 @@ class CandidateEditorState extends State<CandidateEditor> {
           onPressed: widget.busy || count == 0 ? null :
               () => widget.onSave(selectedCodes),
           icon: const Icon(Icons.library_add_outlined),
-          label: HypText('선택한 작품 ' + count.toString() + '개 한 번에 저장'),
+          label: Text(AppLocalizations.of(context)!.candidateSave(count)),
         ),
         const SizedBox(height: 5),
         const HypText('실제 존재하는 번호라도 댓글의 의도와 다를 수 있어. '
