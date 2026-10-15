@@ -48,9 +48,17 @@ import 'core/source_links.dart';
 import 'core/youtube_collection.dart';
 import 'core/work_edition_service.dart';
 import 'core/update_prompt.dart';
+import 'core/release_version.dart';
+import 'core/background_download_runtime.dart';
+import 'core/download_queue_store.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isWindows) {
+    try {
+      await BackgroundDownloadRuntime.instance.configureDesktop();
+    } catch (_) { /* Download attempts surface the unavailable tray. */ }
+  }
   runApp(const HypViewerApp());
 }
 
@@ -109,6 +117,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   GalleryTransfer? readerTransfer;
   bool isReaderTransferPaused = false;
   final Queue<WorkEntry> _downloadQueue = Queue<WorkEntry>();
+  final DownloadQueueStore _downloadJobs = DownloadQueueStore();
+  final BackgroundDownloadRuntime _backgroundDownloads =
+      BackgroundDownloadRuntime.instance;
+  final Map<String, String> _downloadSourceById = {};
   final Set<String> _queuedDownloadIds = {};
   bool _downloadQueueRunning = false;
   bool _downloadQueueCancelled = false;
@@ -221,7 +233,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       final pendingFile = await _pendingUpdateFile();
       if (!await pendingFile.exists()) return;
       final pendingVersion = (await pendingFile.readAsString()).trim();
-      if (!RegExp(r'^\d+\.\d+\.\d+$').hasMatch(pendingVersion)) {
+      if (!RegExp(r'^\d+\.\d+\.\d+(?:\.\d+)?$').hasMatch(pendingVersion)) {
         await pendingFile.delete();
         return;
       }
@@ -242,9 +254,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     try {
       final info = await PackageInfo.fromPlatform();
       if (mounted) {
-        setState(() => appVersion = 'v' + info.version +
+        setState(() => appVersion = 'v' + hypReleaseVersion +
             ' (build ' + info.buildNumber + ')');
-        await _checkPendingInstallation(info.version);
+        await _checkPendingInstallation(hypReleaseVersion);
       }
     } catch (_) {
       // Test hosts and unsupported platforms may not supply package metadata.
@@ -522,6 +534,31 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           '원본과 .previous 파일을 확인해줘.');
     } finally {
       if (!_initialLibraryRead.isCompleted) _initialLibraryRead.complete();
+      if (!_libraryReadFailed && mounted &&
+          (Platform.isAndroid || Platform.isWindows)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_restoreDownloadQueue());
+        });
+      }
+    }
+  }
+
+  Future<void> _restoreDownloadQueue() async {
+    try {
+      final pending = await _downloadJobs.load();
+      if (pending.isEmpty || !mounted) return;
+      final found = library.works.where((work) =>
+          pending.containsKey(work.workId)).toList();
+      if (found.isEmpty) {
+        await _downloadJobs.clear();
+        return;
+      }
+      _downloadSourceById.addAll(pending);
+      await _enqueueDownloads(found, restored: true);
+      _status('이전 다운로드 ' + found.length.toString() +
+          '개를 이어서 진행해.');
+    } catch (error) {
+      _status('저장된 다운로드 복구 실패: ' + error.toString());
     }
   }
 
@@ -1943,15 +1980,22 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     await _enqueueDownloads(library.works);
   }
 
-  Future<void> _enqueueDownloads(Iterable<WorkEntry> works) async {
+  Future<void> _enqueueDownloads(Iterable<WorkEntry> works,
+      {bool restored = false}) async {
+    final queued = works.toList();
+    // Commit user-approved intent before starting a network request.
+    if (!restored) {
+      await _downloadJobs.addAll(queued.map((work) => work.workId));
+    }
     _downloadQueueCancelled = false;
-    for (final work in works) {
+    for (final work in queued) {
+      _downloadSourceById.putIfAbsent(work.workId, () => 'hitomi');
       if (_queuedDownloadIds.add(work.workId)) _downloadQueue.add(work);
     }
     if (mounted) {
       setState(() {});
       _status('다운로드 대기: ${_downloadQueue.length}개 작품. '
-          '앱 실행 중 순서대로 다운로드해.');
+          '백그라운드에서도 순서대로 다운로드해.');
     }
     unawaited(_runDownloadQueue());
   }
@@ -1968,8 +2012,15 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         // A queued work might have been removed from the library.
         if (!library.works.any((w) => w.workId == work.workId)) continue;
         try {
-          if (await galleryStore.exists(work.workId)) continue;
-          await _downloadOnlineInternal(work, rightsApproved: true);
+          if (await galleryStore.exists(work.workId)) {
+            await _downloadJobs.remove(work.workId);
+            continue;
+          }
+          final json = _downloadSourceById[work.workId] == 'json';
+          final saved = json
+              ? await _downloadJsonSourceInternal(work, rightsApproved: true)
+              : await _downloadOnlineInternal(work, rightsApproved: true);
+          if (saved) await _downloadJobs.remove(work.workId);
         } catch (error) {
           _status('작품 ${work.workId} 다운로드 실패: $error');
         }
@@ -1984,6 +2035,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     _downloadQueue.clear();
     _queuedDownloadIds.clear();
     galleryDownloadToken?.cancel();
+    unawaited(_downloadJobs.clear());
+    _downloadSourceById.clear();
     if (mounted) setState(() {});
   }
 
@@ -1999,6 +2052,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
     final client = http.Client();
     GalleryTransfer? transfer;
+    var holdsBackground = false;
     try {
       if (rightsApproved && await galleryStore.exists(work.workId)) {
         return true;
@@ -2045,6 +2099,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         ),
       );
       if (accepted != true || !mounted) return false;
+      await _downloadJobs.add(work.workId);
+      await _backgroundDownloads.acquire();
+      holdsBackground = true;
       transfer = GalleryTransfer();
       setState(() {
         galleryDownloadToken = transfer;
@@ -2065,14 +2122,17 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               totalGalleryPages = total;
               downloadedGalleryBytes = bytes;
             });
+            unawaited(_backgroundDownloads.setProgress(completed, total));
           }
         },
       );
+      await _downloadJobs.remove(work.workId);
       if (mounted) setState(() => coverEpoch++);
       _status('오프라인 저장 완료! ' +
           downloaded.pageCount.toString() + '페이지를 인터넷 없이 읽을 수 있어.');
       return true;
     } on DownloadCancelled {
+      await _downloadJobs.remove(work.workId);
       _status('다운로드가 취소됐어. 기존 오프라인 파일은 유지했어.');
       return false;
     } catch (e) {
@@ -2080,6 +2140,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       return false;
     } finally {
       client.close();
+      if (holdsBackground) {
+        await _backgroundDownloads.clearProgress();
+        await _backgroundDownloads.release();
+      }
       if (mounted && transfer != null) {
         setState(() {
           galleryDownloadToken = null;
@@ -2309,32 +2373,41 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _downloadJsonSource(WorkEntry work) async {
+    await _downloadJsonSourceInternal(work);
+  }
+
+  Future<bool> _downloadJsonSourceInternal(WorkEntry work,
+      {bool rightsApproved = false}) async {
     if (galleryDownloadToken != null) {
       _status('이미 다른 다운로드가 실행 중이야.');
-      return;
+      return false;
     }
-    final pattern = onlineSourceInput.text.trim();
+    final pattern = onlineSourceInput.text.trim().isNotEmpty
+        ? onlineSourceInput.text.trim()
+        : (await sourceSettings.load()).trim();
     if (pattern.isEmpty) {
       _status('온라인 소스 URL 패턴을 먼저 설정해줘.');
-      return;
+      return false;
     }
     final client = http.Client();
-    CancelDownload? token;
+    GalleryTransfer? transfer;
+    var holdsBackground = false;
     try {
-      final remote = await OnlineGalleryProvider(client).load(pattern, work.workId);
+      final remote = await OnlineGalleryProvider(client)
+          .load(pattern, work.workId);
       if (!remote.downloadAllowed) {
         _status('이 온라인 소스는 작품 다운로드를 허용하지 않아.');
-        return;
+        return false;
       }
-      if (!mounted) return;
-      final approved = await showDialog<bool>(
+      if (!mounted) return false;
+      final approved = rightsApproved ? true : await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const HypText('오프라인 다운로드'),
           content: HypText('이 작품의 이미지 ' + remote.pageCount.toString() +
               '장을 다운로드해 로컬 CBZ 파일로 저장할까?\n' +
               '본인이 저장 권한을 가진 작품만 다운로드해야 해. '
-              '기존 오프라인 파일이 있다면 교체돼.'),
+              '기존 오프라인 파일이 있다면 완성한 뒤 교체돼.'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false),
                 child: const HypText('취소')),
@@ -2343,18 +2416,23 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           ],
         ),
       );
-      if (approved != true || !mounted) return;
-      token = CancelDownload();
+      if (approved != true || !mounted) return false;
+      await _downloadJobs.add(work.workId, source: 'json');
+      await _backgroundDownloads.acquire();
+      holdsBackground = true;
+      transfer = GalleryTransfer();
       setState(() {
-        galleryDownloadToken = token;
+        galleryDownloadToken = transfer;
+        readerTransfer = transfer;
         downloadingGalleryKey = work.key;
         downloadedGalleryPages = 0;
         totalGalleryPages = remote.pageCount;
         downloadedGalleryBytes = 0;
+        isReaderTransferPaused = false;
       });
-      final archive = await OnlineGalleryDownloader(galleryStore).download(
-        remote,
-        cancellation: token,
+      final archive = await ReaderGalleryDownloader(galleryStore).download(
+        work.workId, remote,
+        transfer: transfer,
         onProgress: (completed, total, bytes) {
           if (mounted) {
             setState(() {
@@ -2362,21 +2440,34 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               totalGalleryPages = total;
               downloadedGalleryBytes = bytes;
             });
+            unawaited(_backgroundDownloads.setProgress(completed, total));
           }
         },
       );
+      await _downloadJobs.remove(work.workId);
+      if (mounted) setState(() => coverEpoch++);
       _status('다운로드 완료: ' + archive.pageCount.toString() +
           '장. 이제 인터넷 없이도 읽을 수 있어.');
+      return true;
     } on DownloadCancelled {
       _status('다운로드가 취소됐어. 기존 오프라인 파일은 유지했어.');
+      await _downloadJobs.remove(work.workId);
+      return false;
     } catch (e) {
       _status('다운로드 실패: ' + e.toString());
+      return false;
     } finally {
       client.close();
-      if (token != null && mounted) {
+      if (holdsBackground) {
+        await _backgroundDownloads.clearProgress();
+        await _backgroundDownloads.release();
+      }
+      if (transfer != null && mounted) {
         setState(() {
           galleryDownloadToken = null;
+          readerTransfer = null;
           downloadingGalleryKey = null;
+          isReaderTransferPaused = false;
         });
         if (_downloadQueue.isNotEmpty && !_downloadQueueRunning &&
             !_downloadQueueCancelled) {
@@ -2453,6 +2544,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       ReleaseUpdate release, ReleaseAsset asset) async {
     if (downloadingUpdate) return;
     final client = http.Client();
+    var holdsBackground = false;
     setState(() {
       downloadingUpdate = true;
       updateProgress = 0;
@@ -2460,16 +2552,24 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       message = '설치 파일을 내려받는 중이야.';
     });
     try {
+      await _backgroundDownloads.acquire();
+      holdsBackground = true;
       final installer = await UpdateService(client).download(
         release,
         asset,
         onProgress: (value) {
-          if (mounted) setState(() => updateProgress = value.clamp(0.0, 1.0));
+          if (mounted) {
+            setState(() => updateProgress = value.clamp(0.0, 1.0));
+            unawaited(_backgroundDownloads.setProgress((value * 100).round(), 100));
+          }
         },
         onStatus: (status) {
           if (mounted) setState(() => updateStatus = status);
         },
       );
+      await _backgroundDownloads.clearProgress();
+      await _backgroundDownloads.release();
+      holdsBackground = false;
       if (!mounted) return;
       bool install;
       if (Platform.isAndroid) {
@@ -2537,6 +2637,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _status('업데이트 실패: ' + e.toString());
     } finally {
       client.close();
+      if (holdsBackground) {
+        await _backgroundDownloads.clearProgress();
+        await _backgroundDownloads.release();
+      }
       if (mounted) setState(() => downloadingUpdate = false);
     }
   }
@@ -2557,8 +2661,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     if (silent) await _settingsLoad;
     final client = http.Client();
     try {
-      final current = (await PackageInfo.fromPlatform()).version;
-      final next = await UpdateService(client).latest(current);
+      final next = await UpdateService(client).latest(hypReleaseVersion);
       if (next == null) {
         if (!silent) _status('현재 더 새로운 릴리스가 없어.');
         return;

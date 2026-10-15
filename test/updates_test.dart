@@ -35,6 +35,9 @@ void main() {
     expect(UpdateService.isNewer('0.1.0', '0.1.0'), false);
     expect(UpdateService.isNewer('0.1.0', '0.2.0'), false);
     expect(UpdateService.isNewer('0.3.0-rc1', '0.2.0'), false);
+    expect(UpdateService.isNewer('0.4.3.1', '0.4.3'), true);
+    expect(UpdateService.isNewer('0.4.3.1', '0.4.3.1'), false);
+    expect(UpdateService.isNewer('0.4.4', '0.4.3.1'), true);
   });
 
   test('release asset only accepts expected GitHub owner and path', () {

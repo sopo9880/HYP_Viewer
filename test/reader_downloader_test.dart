@@ -19,6 +19,20 @@ class _TestPages implements GalleryPageSource {
   }
 }
 
+class _FailAfterOne extends _TestPages {
+  bool failOnce = true;
+
+  @override
+  Future<Uint8List> loadPage(int index) async {
+    if (index == 1 && failOnce) {
+      failOnce = false;
+      requested++;
+      throw StateError('temporary disconnect');
+    }
+    return super.loadPage(index);
+  }
+}
+
 void main() {
   test('uses reader page loader and imports complete CBZ', () async {
     final dir = await Directory.systemTemp.createTemp('hyp-cbz-');
@@ -66,6 +80,27 @@ void main() {
     session.cancel();
     await expectLater(run, throwsA(isA<Exception>()));
     expect((await store.read('321')).pageCount, 3);
+  });
+
+  test('failed transfer resumes completed pages with the same source', () async {
+    final dir = await Directory.systemTemp.createTemp('hyp-resume-');
+    addTearDown(() => dir.delete(recursive: true));
+    final store = GalleryStore(baseDirectory: dir);
+    final downloader = ReaderGalleryDownloader(store, temporaryDirectory: dir);
+    final first = _FailAfterOne();
+    await expectLater(
+      downloader.download('78123', first, transfer: GalleryTransfer()),
+      throwsA(isA<StateError>()),
+    );
+    expect(first.requested, 2);
+    expect(await store.exists('78123'), false);
+    final events = <int>[];
+    final result = await downloader.download('78123', first,
+        transfer: GalleryTransfer(),
+        onProgress: (n, _, __) => events.add(n));
+    expect(result.pageCount, 3);
+    expect(first.requested, 4); // Only the remaining two pages were fetched.
+    expect(events, [1, 2, 3]);
   });
 
   test('rejects invalid IDs', () async {

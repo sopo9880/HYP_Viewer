@@ -101,13 +101,14 @@ class UpdateService {
   static bool isNewer(String latest, String current) {
     List<int>? parse(String value) {
       // Ignore malformed tags and pre-release versions for this stable updater.
-      if (!RegExp(r'^\d+\.\d+\.\d+$').hasMatch(value)) return null;
-      return value.split('.').map(int.parse).toList();
+      if (!RegExp(r'^\d+\.\d+\.\d+(?:\.\d+)?$').hasMatch(value)) return null;
+      final parts = value.split('.').map(int.parse).toList();
+      return parts.length == 3 ? [...parts, 0] : parts;
     }
     final a = parse(latest);
     final b = parse(current);
     if (a == null || b == null) return false;
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 4; i++) {
       if (a[i] != b[i]) return a[i] > b[i];
     }
     return false;
