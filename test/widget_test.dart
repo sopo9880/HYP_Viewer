@@ -19,6 +19,7 @@ void main() {
     await tester.pump();
     expect(find.text('내 서재'), findsWidgets);
     expect(find.byKey(const Key('library-select-mode')), findsOneWidget);
+    expect(find.byKey(const Key('library-completed-toggle')), findsOneWidget);
     await tester.tap(find.byKey(const Key('library-select-mode')));
     await tester.pump();
     expect(find.byKey(const Key('library-select-visible')), findsOneWidget);
@@ -61,7 +62,7 @@ void main() {
     );
     await tester.pump();
     expect(find.text('통합 작품 검색'), findsOneWidget);
-    expect(find.textContaining('표시할 작품이 없어'), findsOneWidget);
+    expect(find.textContaining('내 서재에서 찾지 못했어'), findsOneWidget);
 
     await tester.enterText(
       find.byKey(const Key('library-search-input')), '',

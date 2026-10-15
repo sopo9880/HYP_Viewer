@@ -157,7 +157,38 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
-          Changes in v0.2.2:
+          Changes in v0.3.0:
+          - Reader side taps now follow the physical left/right direction
+            of the chosen reading mode, including two-page spreads.
+          - Auto grouping compares original multilingual titles independently
+            of translated subtitles, recognizes trailing sequel numerals,
+            and can optionally refresh missing metadata after reporting
+            that no suggestions were found. All grouping remains opt-in.
+          - App notifications dismiss after five seconds (ten for errors),
+            fade out, pause during mouse hover, and keep a manual close.
+          - Network handover while downloading installers now resumes
+            using SHA-256-checked persistent partials, HTTP Range responses
+            and bounded retries. The installer is verified before opening.
+            Successful installation is confirmed on next app start from
+            the running app version, not from merely showing system setup.
+          - Library now uses balanced two-button action rows for sorting,
+            selection/Auto grouping, and download/completed visibility.
+            The completed hide/show toggle persists without deleting work.
+          - Home random covers are clickable and open the displayed work,
+            including its saved reading progress. Custom banners stay art.
+          - Unified library and online metadata search includes paging,
+            language and scope filters, on-device duplicate elimination,
+            details and save/read actions. Remote mirror availability varies.
+          - Favorites remain preserved under My Reading, which adds A-L
+            on-device insights: totals, tag combinations, top works,
+            creators, dated reading activity, series completion, summaries,
+            unread suggestions, heatmaps, cleanup tools, month/year reports
+            with PNG export, and filtering/opt-out/delete controls.
+            New reading sessions are time-stamped and included in optional
+            JSON library backups. Old undated open counts are not fabricated.
+          - YouTube Shorts support remains; Instagram integration excluded.
+
+          Previous v0.2.2 changes retained:
           - Auto grouping now reads each work's title/episode instead of the
             same batch-wide Shorts comment, which previously made different
             episodes all look like "Part 1".
