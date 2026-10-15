@@ -320,5 +320,9 @@
         "type": "int"
       }
     }
-  }
+  },
+  "legacyCompletionReview": "Review Possible Finished Works",
+  "legacyCompletionHint": "These works reached their last page but are not marked finished. Review before changing them.",
+  "legacyCompletionApply": "Mark Selected as Finished",
+  "legacyCompletionEmpty": "No works need completion review."
 }
