@@ -752,9 +752,8 @@ class _HypDashboardState extends State<HypDashboard> {
   List<WorkEntry> get _downloaded =>
       _works.where((w) => _offlineKeys.contains(w.key)).toList();
 
-  List<WorkEntry> get _results => _works.where((work) =>
-      LocalWorkSearch.matches(work, _search.text,
-          language: _searchLanguage)).toList();
+  List<WorkEntry> get _results => LocalWorkSearch.queryLibrary(
+      _works, _search.text, language: _searchLanguage);
 
   KeyEventResult _onKeyboardShortcut(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent ||
