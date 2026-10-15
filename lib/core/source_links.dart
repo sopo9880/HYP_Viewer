@@ -21,10 +21,23 @@ class SourceLink {
       kind == SourceKind.instagramReel || kind == SourceKind.youtubePost;
 
   static SourceLink? parse(String raw) {
-    final uri = Uri.tryParse(raw.trim());
-    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty || uri.port != 443 && uri.hasPort) return null;
-    final host = uri.host.toLowerCase();
+    final candidate = Uri.tryParse(raw.trim());
+    if (candidate == null || candidate.host.isEmpty ||
+        candidate.userInfo.isNotEmpty) return null;
+    final host = candidate.host.toLowerCase();
+    const trusted = <String>{
+      'youtube.com', 'www.youtube.com', 'm.youtube.com',
+      'music.youtube.com', 'youtu.be',
+      'instagram.com', 'www.instagram.com', 'm.instagram.com',
+      'hitomi.la', 'www.hitomi.la',
+    };
+    // Upgrade only explicitly approved public sites; never silently send an
+    // unrelated HTTP link through a different origin or port.
+    final httpAllowed = candidate.scheme == 'http' &&
+        trusted.contains(host) && !candidate.hasPort;
+    if (candidate.scheme != 'https' && !httpAllowed ||
+        candidate.hasPort && candidate.port != 443) return null;
+    final uri = httpAllowed ? candidate.replace(scheme: 'https') : candidate;
     if (<String>{'youtube.com', 'www.youtube.com', 'm.youtube.com',
           'music.youtube.com', 'youtu.be'}.contains(host)) {
       var id = '';
@@ -83,7 +96,7 @@ class SourceLink {
   static List<SourceLink> extract(String text, {int limit = 12}) {
     final found = <SourceLink>[];
     final seen = <String>{};
-    final regex = RegExp(r'https://[^\s<>"\x27]+', caseSensitive: false);
+    final regex = RegExp(r'https?://[^\s<>"\x27]+', caseSensitive: false);
     for (final match in regex.allMatches(text)) {
       final trimmed = match.group(0)!.replaceFirst(
           RegExp(r'[)\].,!?;:。]+$'), '');
