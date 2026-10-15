@@ -763,7 +763,18 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   Future<void> _saveOnlineSearchWork(OnlineSearchWork result) async {
     await _commitLibrary((latest) {
-      if (latest.works.any((w) => w.workId == result.workId)) return latest;
+      if (latest.works.any((w) => w.workId == result.workId)) {
+        // A repeat search can teach us a confirmed original/translated
+        // title. Preserve the user's own title, reading position, covers
+        // and all pre-existing language-group relationships.
+        return LibraryBackup(
+          works: latest.works.map((work) => work.workId == result.workId
+              ? work.withEvidence(
+                  aliases: [result.title, ...result.titleAliases])
+              : work).toList(),
+          collections: latest.collections,
+        );
+      }
       final work = WorkEntry.create(
         workId: result.workId, title: result.title,
         author: result.artists.join(', '),
