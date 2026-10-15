@@ -564,5 +564,47 @@
     }
   },
   "onlineSafeLink": "저장 시 기존 언어판 묶음에 연결을 시도해.",
-  "youtubeCommentsPartial": "공개 댓글 일부만 수집했어. 누락된 댓글의 번호는 직접 붙여넣어줘."
+  "youtubeCommentsPartial": "공개 댓글 일부만 수집했어. 누락된 댓글의 번호는 직접 붙여넣어줘.",
+  "readerTooltipPrevious": "이전 페이지 (PageUp)",
+  "readerTooltipNext": "다음 페이지 (PageDown / Space)",
+  "readerTooltipSaveOffline": "온라인 이미지를 CBZ로 저장",
+  "readerTooltipSetCover": "현재 페이지를 서재 표지로 지정",
+  "readerTooltipHideTools": "페이지 도구 숨기기",
+  "readerTooltipShowTools": "페이지 도구 표시",
+  "readerTooltipOpenWeb": "현재 페이지를 웹 리더로 열기",
+  "readerTooltipHorizontal": "가로 넘기기",
+  "readerTooltipVertical": "세로 넘기기",
+  "readingActivityDay": "{date}: {count}회",
+  "@readingActivityDay": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "readingHeatmapDay": "{date} · {count}회",
+  "@readingHeatmapDay": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "readingSaveReportDialog": "독서 리포트 PNG 저장",
+  "readingSaveReportMissing": "리포트 화면을 찾지 못했어.",
+  "readingSaveReportBytes": "PNG로 저장할 수 없어.",
+  "readingSaveReportFailed": "리포트 이미지 저장 실패: {error}",
+  "@readingSaveReportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }
