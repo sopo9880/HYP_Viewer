@@ -21,7 +21,10 @@ abstract final class LocalWorkSearch {
       'chinese': {'chinese','zh','zh-cn','zh-tw','chinese (simplified)',
                   'chinese (traditional)'},
     };
-    return aliases[selected]?.contains(code) ?? code == selected;
+    return aliases.entries.any((entry) =>
+        (entry.key == selected || entry.value.contains(selected)) &&
+        (entry.key == code || entry.value.contains(code))) ||
+        code == selected;
   }
 
   static bool matches(WorkEntry work, String raw, {String language = ''}) {
