@@ -61,6 +61,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   bool _controlsVisible = true;
   bool _twoPageSpread = false;
   bool _completionReported = false;
+  bool _completionPromptOpen = false;
   bool _lastPageRendered = false;
   final TransformationController _webtoonTransform = TransformationController();
   bool _webtoonZoomed = false;
@@ -89,6 +90,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   }
 
   void _completeWhenVisible() {
+    if (widget.settings.confirmCompleteOnNext) return;
     if (_completionReported || !_lastPageRendered ||
         _currentUnit != _units - 1) return;
     _completionReported = true;
@@ -101,6 +103,61 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       }
     });
   }
+  /// Confirmation only happens after an explicit NEXT at the last page.
+  /// Arrival at the final image, preloading or a held volume key never
+  /// silently marks a work as completed.
+  Future<void> _askToFinish() async {
+    if (_completionPromptOpen || _completionReported || !_lastPageRendered ||
+        !mounted) return;
+    _completionPromptOpen = true;
+    final labels = AppLocalizations.of(context)!;
+    String? answer;
+    try {
+      answer = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          key: const Key('reader-finish-dialog'),
+          title: Text(labels.readerFinishTitle),
+          content: Text(labels.readerFinishBody),
+          actions: [
+            TextButton(
+              key: const Key('reader-keep-reading'),
+              onPressed: () => Navigator.of(dialogContext).pop('stay'),
+              child: Text(labels.readerContinueReading),
+            ),
+            TextButton(
+              key: const Key('reader-exit-incomplete'),
+              onPressed: () => Navigator.of(dialogContext).pop('exit'),
+              child: Text(labels.readerExitWithoutFinishing),
+            ),
+            FilledButton(
+              key: const Key('reader-finish-and-exit'),
+              onPressed: () => Navigator.of(dialogContext).pop('complete'),
+              child: Text(labels.readerFinishAndExit),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      _completionPromptOpen = false;
+    }
+    if (!mounted) return;
+    if (answer == 'complete') {
+      _completionReported = true;
+      widget.onFinishedReading?.call(widget.archive.pageCount);
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+    } else if (answer == 'exit') {
+      // Preserve previous completion flags and reading position on exit.
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+    }
+  }
+
+  void _pauseHeldVolumeIfAtBoundary() {
+    if (_currentUnit == _units - 1) {
+      unawaited(AndroidReaderControls.pauseRepeats());
+    }
+  }
+
   void _toggleChrome() => setState(() => _controlsVisible = !_controlsVisible);
   int _reloadGeneration = 0;
   final Map<int, Future<Uint8List>> _imageCache = {};
@@ -146,6 +203,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   void didUpdateWidget(covariant GalleryReader oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.settings.volumeKeyNavigation != widget.settings.volumeKeyNavigation ||
+        oldWidget.settings.volumeHoldIntervalMs != widget.settings.volumeHoldIntervalMs ||
         oldWidget.settings.forceLandscapeForSpreads != widget.settings.forceLandscapeForSpreads ||
         oldWidget.settings.twoPageSpread != widget.settings.twoPageSpread) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -214,10 +272,13 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   void _syncAndroidControls() {
     unawaited(AndroidReaderControls.activate(
       volumeNavigation: widget.settings.volumeKeyNavigation,
+      repeatIntervalMs: widget.settings.volumeHoldIntervalMs,
       forceLandscape: !widget.settings.webtoonMode &&
           _twoPageSpread &&
           widget.settings.forceLandscapeForSpreads,
-      onTurn: (next) { if (mounted) _turn(next ? 1 : -1); },
+      onTurn: (next, repeating) {
+        if (mounted) _turn(next ? 1 : -1, fromVolumeRepeat: repeating);
+      },
     ));
   }
 
@@ -306,9 +367,17 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     });
   }
 
-  void _turn(int delta) {
+  void _turn(int delta, {bool fromVolumeRepeat = false}) {
     final target = (_currentUnit + delta).clamp(0, _units - 1).toInt();
-    if (target == _currentUnit) return;
+    if (target == _currentUnit) {
+      if (fromVolumeRepeat) {
+        unawaited(AndroidReaderControls.pauseRepeats());
+      } else if (delta > 0 && widget.settings.confirmCompleteOnNext &&
+          _currentUnit == _units - 1) {
+        unawaited(_askToFinish());
+      }
+      return;
+    }
     _resetZoom();
     if (widget.settings.webtoonMode) {
       _jumpTo(target);
@@ -326,6 +395,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     // destination before asynchronous image layout or decoding begins.
     _resetZoom();
     setState(() => _currentUnit = target);
+    _pauseHeldVolumeIfAtBoundary();
     widget.onPageChanged(_currentPage);
     _completeWhenVisible();
     _prefetchAround(target);
@@ -365,6 +435,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       if (!mounted || !widget.settings.webtoonMode ||
           index == _currentUnit) return;
       setState(() => _currentUnit = index);
+      _pauseHeldVolumeIfAtBoundary();
       _completeWhenVisible();
       widget.onPageChanged(index + 1);
       _prefetchAround(index);
@@ -607,7 +678,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
       key: const Key('reader-next'),
       tooltip: AppLocalizations.of(context)!.readerTooltipNext,
       color: Colors.white,
-      onPressed: _currentUnit < _units - 1 ? () => _turn(1) : null,
+      onPressed: _currentUnit < _units - 1 ||
+          widget.settings.confirmCompleteOnNext ? () => _turn(1) : null,
       icon: Icon(_verticalReading
           ? Icons.keyboard_arrow_down : widget.settings.reverse
           ? Icons.chevron_left : Icons.chevron_right),
@@ -746,6 +818,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 onPageChanged: (unit) {
                   _resetZoom();
                   setState(() => _currentUnit = unit);
+                  _pauseHeldVolumeIfAtBoundary();
                   _completeWhenVisible();
                   widget.onPageChanged(_currentPage);
                   _prefetchAround(unit);

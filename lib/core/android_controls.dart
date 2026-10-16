@@ -11,12 +11,15 @@ class AndroidReaderControls {
   static Future<void> activate({
     required bool volumeNavigation,
     required bool forceLandscape,
-    required void Function(bool next) onTurn,
+    required int repeatIntervalMs,
+    required void Function(bool next, bool repeating) onTurn,
   }) async {
     if (!Platform.isAndroid) return;
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'next') onTurn(true);
-      if (call.method == 'previous') onTurn(false);
+      if (call.method == 'next') onTurn(true, false);
+      if (call.method == 'previous') onTurn(false, false);
+      if (call.method == 'nextRepeat') onTurn(true, true);
+      if (call.method == 'previousRepeat') onTurn(false, true);
     });
     try {
       if (forceLandscape) {
@@ -27,10 +30,20 @@ class AndroidReaderControls {
       } else {
         await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
       }
-      await _channel.invokeMethod<void>('setVolumeNavigation', volumeNavigation);
+      await _channel.invokeMethod<void>('setVolumeNavigation', {
+        'enabled': volumeNavigation,
+        'intervalMs': repeatIntervalMs,
+      });
     } on MissingPluginException {
       // Older installs and desktop tests can still navigate using touch.
     }
+  }
+
+  /// Disable the active hold's timer at the reader boundary until KEY_UP.
+  static Future<void> pauseRepeats() async {
+    if (!Platform.isAndroid) return;
+    try { await _channel.invokeMethod<void>('pauseVolumeRepeat'); }
+    on MissingPluginException { /* Older Android runners. */ }
   }
 
   static Future<void> deactivate() async {

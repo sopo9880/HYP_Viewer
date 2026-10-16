@@ -29,6 +29,43 @@ class MainActivity : FlutterActivity() {
     private var pendingExportFiles: List<Map<String, String>> = emptyList()
     private var pendingSecurityUpdate: MethodChannel.Result? = null
     private var volumeNavigationEnabled = false
+    private val volumeHandler = Handler(Looper.getMainLooper())
+    private var heldVolumeKey: Int? = null
+    private var volumeRepeatRunnable: Runnable? = null
+    private var volumeRepeatSuspended = false
+    private var volumeRepeatIntervalMs = 400L
+
+    private fun releaseVolumeHold() {
+        volumeRepeatRunnable?.let { volumeHandler.removeCallbacks(it) }
+        volumeRepeatRunnable = null
+        heldVolumeKey = null
+        volumeRepeatSuspended = false
+    }
+
+    private fun emitVolumeTurn(keyCode: Int, repeating: Boolean) {
+        val next = keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+        readerChannel?.invokeMethod(if (next) {
+            if (repeating) "nextRepeat" else "next"
+        } else {
+            if (repeating) "previousRepeat" else "previous"
+        }, null)
+    }
+
+    private fun beginVolumeHold(keyCode: Int) {
+        releaseVolumeHold()
+        heldVolumeKey = keyCode
+        emitVolumeTurn(keyCode, false)
+        val tick = object : Runnable {
+            override fun run() {
+                if (!volumeNavigationEnabled || heldVolumeKey != keyCode ||
+                    volumeRepeatSuspended) return
+                emitVolumeTurn(keyCode, true)
+                volumeHandler.postDelayed(this, volumeRepeatIntervalMs)
+            }
+        }
+        volumeRepeatRunnable = tick
+        volumeHandler.postDelayed(tick, 500L)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,13 +73,27 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (volumeNavigationEnabled && event.action == KeyEvent.ACTION_DOWN &&
-            (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
-             event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
-            if (event.repeatCount == 0) {
-                readerChannel?.invokeMethod(
-                    if (event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) "next" else "previous", null)
+        val isVolume = event.keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+            event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+        if (isVolume && volumeNavigationEnabled) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    if (event.repeatCount == 0 && heldVolumeKey != event.keyCode) {
+                        beginVolumeHold(event.keyCode)
+                    }
+                    // Android's own auto-repeat is consumed. A fixed timer
+                    // starts after 500ms and is stopped on KEY_UP.
+                    return true
+                }
+                KeyEvent.ACTION_UP -> {
+                    if (heldVolumeKey == event.keyCode) releaseVolumeHold()
+                    return true
+                }
             }
+        }
+        if (isVolume && event.action == KeyEvent.ACTION_UP &&
+            heldVolumeKey == event.keyCode) {
+            releaseVolumeHold()
             return true
         }
         return super.dispatchKeyEvent(event)
@@ -55,7 +106,18 @@ class MainActivity : FlutterActivity() {
         readerChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "setVolumeNavigation" -> {
-                    volumeNavigationEnabled = call.arguments == true
+                    val args = call.arguments as? Map<*, *>
+                    volumeNavigationEnabled = args?.get("enabled") == true ||
+                        call.arguments == true
+                    val interval = (args?.get("intervalMs") as? Number)?.toLong() ?: 400L
+                    volumeRepeatIntervalMs = if (interval in listOf(200L, 400L, 700L))
+                        interval else 400L
+                    if (!volumeNavigationEnabled) releaseVolumeHold()
+                    result.success(null)
+                }
+                "pauseVolumeRepeat" -> {
+                    volumeRepeatSuspended = true
+                    volumeRepeatRunnable?.let { volumeHandler.removeCallbacks(it) }
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -224,6 +286,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onStop() {
         volumeNavigationEnabled = false
+        releaseVolumeHold()
         super.onStop()
     }
 
