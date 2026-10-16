@@ -737,7 +737,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _analyze();
       if (candidates.isEmpty) {
         _status('공유 텍스트를 분석했지만 작품 번호는 없었어. '
-            '게시물 링크나 댓글을 추가하거나 이미지 검색을 사용해줘.');
+            '게시물 링크나 댓글을 추가해서 다시 분석해줘.');
       }
       return;
     }
@@ -2207,6 +2207,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       await _downloadJobs.add(work.workId);
       await _backgroundDownloads.acquire();
       holdsBackground = true;
+      if (!rightsApproved && Platform.isAndroid &&
+          _backgroundDownloads.notificationsAllowed == false) {
+        _status('알림 권한이 없어 진행률이 알림창에 표시되지 않을 수 있어. '
+            '앱 알림을 허용해줘. 다운로드는 계속 시도할게.');
+      }
       transfer = GalleryTransfer();
       setState(() {
         galleryDownloadToken = transfer;
@@ -2546,6 +2551,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       await _downloadJobs.add(work.workId, source: 'json');
       await _backgroundDownloads.acquire();
       holdsBackground = true;
+      if (!rightsApproved && Platform.isAndroid &&
+          _backgroundDownloads.notificationsAllowed == false) {
+        _status('알림 권한이 없어 진행률이 알림창에 표시되지 않을 수 있어. '
+            '앱 알림을 허용해줘. 다운로드는 계속 시도할게.');
+      }
       transfer = GalleryTransfer();
       setState(() {
         galleryDownloadToken = transfer;
