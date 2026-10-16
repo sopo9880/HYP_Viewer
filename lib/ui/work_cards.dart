@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../core/i18n.dart';
+import '../l10n/app_localizations.dart';
 
 import '../core/work.dart';
 import 'hyp_theme.dart';
@@ -98,6 +99,7 @@ class HypWorkCard extends StatelessWidget {
                     ((totalPages ?? work.totalPages) - 1))
                     .clamp(0.0, 0.99).toDouble()
             : null;
+    final labels = AppLocalizations.of(context)!;
     return Material(
       color: HypColors.surface,
       borderRadius: BorderRadius.circular(15),
@@ -159,15 +161,16 @@ class HypWorkCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(10, 9, 5, 8),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 HypText(
-                  work.title.isEmpty ? '작품 ' + work.workId : work.title,
+                  work.title.isEmpty
+                      ? labels.workCardUntitled(work.workId) : work.title,
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 HypText(
                   work.author.isNotEmpty
-                      ? '작가 ' + work.author
-                      : '번호 ' + work.workId,
+                      ? labels.workCardCreator(work.author)
+                      : labels.workCardNumber(work.workId),
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 11, color: HypColors.muted),
                 ),
@@ -176,10 +179,11 @@ class HypWorkCard extends StatelessWidget {
                   Expanded(
                     child: HypText(
                       work.completed
-                          ? '완독 · 100%'
-                          : work.currentPage.toString() + '페이지부터' +
-                              (progress == null
-                                ? '' : ' · ' + (progress * 100).round().toString() + '%'),
+                          ? labels.workCardComplete
+                          : progress == null
+                              ? labels.workCardPageStart(work.currentPage)
+                              : labels.workCardPageProgress(
+                                  work.currentPage, (progress * 100).round()),
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 11),
                     ),

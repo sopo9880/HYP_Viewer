@@ -94,7 +94,7 @@ class HypDashboard extends StatefulWidget {
   final int downloadedGalleryBytes;
   final VoidCallback onAnalyze;
   final VoidCallback onClearFinder;
-  final VoidCallback onLeaveFinderAfterSave;
+  final VoidCallback? onLeaveFinderAfterSave;
   final int finderClearEpoch;
   final Future<void> Function() onFetch;
   final Future<void> Function() onSaveWork;
@@ -186,7 +186,7 @@ class HypDashboard extends StatefulWidget {
     required this.downloadedGalleryBytes,
     required this.onAnalyze,
     required this.onClearFinder,
-    required this.onLeaveFinderAfterSave,
+    this.onLeaveFinderAfterSave,
     required this.finderClearEpoch,
     required this.onFetch,
     required this.onSaveWork,
@@ -601,7 +601,7 @@ class _HypDashboardState extends State<HypDashboard> {
 
   void _navigate(HypPage page) {
     if (_page == HypPage.home && page != HypPage.home) {
-      widget.onLeaveFinderAfterSave();
+      widget.onLeaveFinderAfterSave?.call();
     }
     _dashboardFocus.requestFocus();
     _openedGroupId = null;
@@ -1253,7 +1253,8 @@ class _HypDashboardState extends State<HypDashboard> {
         Expanded(child: HypSectionTitle(
           icon: Icons.library_books_rounded,
           title: '최근 본 작품',
-          subtitle: '최근 4개 · 접어서 숨길 수 있어.',
+          subtitle: AppLocalizations.of(context)!
+              .homeRecentCountHint(_recent.take(4).length),
           actionLabel: '전체 보기',
           onAction: () => _navigate(HypPage.history),
         )),
@@ -2522,7 +2523,8 @@ class _HypDashboardState extends State<HypDashboard> {
       HypSectionTitle(
         icon: Icons.download_rounded,
         title: '다운로드',
-        subtitle: '내 기기에 저장된 작품 ' + _downloaded.length.toString() + '개',
+        subtitle: AppLocalizations.of(context)!
+            .downloadsStoredCount(_downloaded.length),
       ),
       const SizedBox(height: 8),
       Wrap(spacing: 8, runSpacing: 8, children: [
@@ -2943,6 +2945,19 @@ class _HypDashboardState extends State<HypDashboard> {
           Material(
             color: Colors.transparent,
             child: SwitchListTile.adaptive(
+              key: const Key('reader-complete-confirm-setting'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(AppLocalizations.of(context)!.settingsCompleteConfirmTitle),
+              subtitle: Text(AppLocalizations.of(context)!.settingsCompleteConfirmHint),
+              value: widget.readerSettings.confirmCompleteOnNext,
+              onChanged: (v) => widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(confirmCompleteOnNext: v)),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Material(
+            color: Colors.transparent,
+            child: SwitchListTile.adaptive(
               key: const Key('reader-two-page-setting'),
               contentPadding: EdgeInsets.zero,
               title: const HypText('2쪽 모아보기'),
@@ -3108,6 +3123,28 @@ class _HypDashboardState extends State<HypDashboard> {
               onChanged: (v) => widget.onSaveReaderSettings(
                 widget.readerSettings.copyWith(volumeKeyNavigation: v)),
             ),
+          ),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<int>(
+            key: const Key('volume-hold-speed-setting'),
+            initialValue: widget.readerSettings.volumeHoldIntervalMs,
+            decoration: InputDecoration(
+              labelText: AppLocalizations.of(context)!.settingsVolumeRepeatSpeed,
+              helperText: AppLocalizations.of(context)!.settingsVolumeRepeatHint,
+            ),
+            items: [
+              DropdownMenuItem(value: 700,
+                child: Text(AppLocalizations.of(context)!.settingsVolumeSlow)),
+              DropdownMenuItem(value: 400,
+                child: Text(AppLocalizations.of(context)!.settingsVolumeNormal)),
+              DropdownMenuItem(value: 200,
+                child: Text(AppLocalizations.of(context)!.settingsVolumeFast)),
+            ],
+            onChanged: !widget.readerSettings.volumeKeyNavigation ? null
+                : (interval) {
+                    if (interval != null) widget.onSaveReaderSettings(
+                      widget.readerSettings.copyWith(volumeHoldIntervalMs: interval));
+                  },
           ),
           Material(color: Colors.transparent,
             child: SwitchListTile.adaptive(
