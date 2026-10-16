@@ -38,6 +38,7 @@ import 'core/candidate_verifier.dart';
 import 'core/online_gallery.dart';
 import 'core/online_search.dart';
 import 'core/shares.dart';
+import 'core/social_share_text.dart';
 import 'core/storage.dart';
 import 'core/updates.dart';
 import 'core/work.dart';
@@ -545,7 +546,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         numberInput.clear();
         titleInput.clear();
         authorInput.clear();
-        message = '공유 링크를 받았어. 공개 내용을 분석할게.';
+        message = '공유 내용을 받았어. 작품 번호와 공개 내용을 분석할게.';
       });
       _fetch();
     });
@@ -717,9 +718,27 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       await _quickAddNumber(raw);
       return;
     }
-    final links = SourceLink.extract(raw, limit: 10);
+    final normalized = SocialShareText.normalize(raw);
+    if (normalized.isEmpty) {
+      _status('분석할 링크나 공유 텍스트를 입력해줘.');
+      return;
+    }
+    final hints = SocialShareText.hints(normalized);
+    if (titleInput.text.trim().isEmpty && hints.title.isNotEmpty) {
+      titleInput.text = hints.title;
+    }
+    if (authorInput.text.trim().isEmpty && hints.author.isNotEmpty) {
+      authorInput.text = hints.author;
+    }
+    final links = SourceLink.extract(normalized, limit: 10);
     if (links.isEmpty) {
-      _status('유효한 HTTPS 링크 또는 작품 번호를 입력해줘.');
+      // Accept caption-only Android shares; do not silently discard them.
+      commentInput.text = normalized;
+      _analyze();
+      if (candidates.isEmpty) {
+        _status('공유 텍스트를 분석했지만 작품 번호는 없었어. '
+            '게시물 링크나 댓글을 추가하거나 이미지 검색을 사용해줘.');
+      }
       return;
     }
     setState(() => busy = true);
@@ -800,9 +819,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           remember(candidate.code, link.url);
         }
       }
-      final shared = raw.replaceAll(RegExp(r'https?://\S+'), '').trim();
+      final shared = normalized.replaceAll(RegExp(r'https?://\S+'), '').trim();
       if (shared.isNotEmpty) blocks.add(shared);
-      commentInput.text = blocks.join('\n\n');
+      commentInput.text = SocialShareText.normalize(blocks.join('\n\n'));
       _candidateSourceUrls
         ..clear()
         ..addAll(mapped);
