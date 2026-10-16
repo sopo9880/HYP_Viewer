@@ -30,11 +30,22 @@ class SharedShorts {
     return links.isEmpty ? null : links.first.url;
   }
 
-  static Future<void> start(void Function(String text) onShared) async {
+  static Future<void> start(void Function(String text) onShared, {
+    void Function(List<String> paths)? onSharedImages,
+  }) async {
+    final received = <String>{};
+    void acceptImages(dynamic value) {
+      if (value is! List || onSharedImages == null) return;
+      final paths = value.whereType<String>().where((path) =>
+          path.isNotEmpty && received.add(path)).take(8).toList();
+      if (paths.isNotEmpty) onSharedImages(paths);
+    }
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'sharedText' && call.arguments is String) {
         final shared = normalizeIncoming(call.arguments as String);
         if (shared != null) onShared(shared);
+      } else if (call.method == 'sharedImages') {
+        acceptImages(call.arguments);
       }
     });
     try {
@@ -47,6 +58,13 @@ class SharedShorts {
       // Desktop environments don't implement this optional platform channel.
     } on PlatformException {
       // An unavailable share channel should never block app startup.
+    }
+    try {
+      acceptImages(await _channel.invokeMethod<List<dynamic>>('getSharedImages'));
+    } on MissingPluginException {
+      // Native image sharing is only present on updated Android builds.
+    } on PlatformException {
+      // App still supports manual image selection.
     }
   }
 }
