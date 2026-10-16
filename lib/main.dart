@@ -144,6 +144,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   final Map<String, CandidateVerification> _candidateCache = {};
   final Map<String, String> _candidateSourceUrls = {};
   final Map<String, Set<String>> _candidateSourceEvidence = {};
+  int downloadNavigationEpoch = 0;
+  String activeDownloadWorkId = '';
   int finderClearEpoch = 0;
   final FinderResetPolicy _finderResetPolicy = FinderResetPolicy();
 
@@ -152,6 +154,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     titleInput.text, authorInput.text,
     candidates.map((candidate) => candidate.code).join('|'),
   ];
+
+  void _openDownloadsFromNotification() {
+    if (mounted) setState(() => downloadNavigationEpoch++);
+  }
 
   void _clearSavedFinderOnTabExit() {
     if (!busy && _finderResetPolicy.consumeOnLeave(_finderSnapshot())) {
@@ -176,6 +182,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     _loadVersionInfo();
     _loadHeroArtwork();
     _listenForSharedShorts();
+    _backgroundDownloads.setDownloadsNavigationHandler(_openDownloadsFromNotification);
+    unawaited(_backgroundDownloads.consumePendingDownloadsNavigation().then((open) {
+      if (open && mounted) _openDownloadsFromNotification();
+    }));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _automaticUpdateCheck();
       if (Platform.isAndroid) _showSecurityNoticeOnce();
@@ -2147,7 +2157,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         downloadedGalleryBytes = 0;
         totalGalleryPages = remote.pageCount;
         isReaderTransferPaused = false;
+        activeDownloadWorkId = work.workId;
       });
+      unawaited(_backgroundDownloads.setProgress(0, remote.pageCount,
+          workId: work.workId, queuedCount: _downloadQueue.length,
+          language: readerSettings.languageCode));
       final downloaded = await ReaderGalleryDownloader(galleryStore).download(
         work.workId, remote,
         transfer: transfer,
@@ -2158,7 +2172,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               totalGalleryPages = total;
               downloadedGalleryBytes = bytes;
             });
-            unawaited(_backgroundDownloads.setProgress(completed, total));
+            unawaited(_backgroundDownloads.setProgress(completed, total,
+                workId: work.workId, queuedCount: _downloadQueue.length,
+                language: readerSettings.languageCode));
           }
         },
       );
@@ -2204,6 +2220,12 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       active.pause();
     }
     if (mounted) setState(() => isReaderTransferPaused = active.isPaused);
+    unawaited(_backgroundDownloads.setProgress(
+      downloadedGalleryPages, totalGalleryPages,
+      workId: activeDownloadWorkId,
+      paused: active.isPaused, queuedCount: _downloadQueue.length,
+      language: readerSettings.languageCode,
+    ));
   }
 
 
@@ -2465,7 +2487,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         totalGalleryPages = remote.pageCount;
         downloadedGalleryBytes = 0;
         isReaderTransferPaused = false;
+        activeDownloadWorkId = work.workId;
       });
+      unawaited(_backgroundDownloads.setProgress(0, remote.pageCount,
+          workId: work.workId, queuedCount: _downloadQueue.length,
+          language: readerSettings.languageCode));
       final archive = await ReaderGalleryDownloader(galleryStore).download(
         work.workId, remote,
         transfer: transfer,
@@ -2476,7 +2502,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               totalGalleryPages = total;
               downloadedGalleryBytes = bytes;
             });
-            unawaited(_backgroundDownloads.setProgress(completed, total));
+            unawaited(_backgroundDownloads.setProgress(completed, total,
+                workId: work.workId, queuedCount: _downloadQueue.length,
+                language: readerSettings.languageCode));
           }
         },
       );
@@ -2600,7 +2628,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         onProgress: (value) {
           if (mounted) {
             setState(() => updateProgress = value.clamp(0.0, 1.0));
-            unawaited(_backgroundDownloads.setProgress((value * 100).round(), 100));
+            unawaited(_backgroundDownloads.setProgress(
+                (value * 100).round(), 100,
+                isUpdate: true, language: readerSettings.languageCode));
           }
         },
         onStatus: (status) {
@@ -2761,6 +2791,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     for (final ctrl in [urlInput, commentInput, numberInput, titleInput, authorInput, apiKeyInput, onlineSourceInput]) {
       ctrl.dispose();
     }
+    _backgroundDownloads.setDownloadsNavigationHandler(null);
     super.dispose();
   }
 
@@ -2789,6 +2820,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     message: message,
     navigationEpoch: navigationEpoch,
     libraryNavigationEpoch: libraryNavigationEpoch,
+    downloadNavigationEpoch: downloadNavigationEpoch,
     editionLookupId: _requestedEditionId,
     editionLookupEpoch: _editionRequestEpoch,
     appVersion: appVersion,

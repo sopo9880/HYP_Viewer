@@ -84,6 +84,7 @@ class HypDashboard extends StatefulWidget {
   final String message;
   final int navigationEpoch;
   final int libraryNavigationEpoch;
+  final int downloadNavigationEpoch;
   final String appVersion;
   final bool downloadingUpdate;
   final double updateProgress;
@@ -176,6 +177,7 @@ class HypDashboard extends StatefulWidget {
     required this.message,
     required this.navigationEpoch,
     required this.libraryNavigationEpoch,
+    this.downloadNavigationEpoch = 0,
     required this.appVersion,
     required this.downloadingUpdate,
     required this.updateProgress,
@@ -384,6 +386,7 @@ class _HypDashboardState extends State<HypDashboard> {
   @override
   void initState() {
     super.initState();
+    if (widget.downloadNavigationEpoch > 0) _page = HypPage.downloads;
     _preloadInput = TextEditingController(
       text: widget.readerSettings.preloadPages.toString());
     _search.addListener(_changedSearch);
@@ -419,6 +422,11 @@ class _HypDashboardState extends State<HypDashboard> {
     }
     if (oldWidget.libraryNavigationEpoch != widget.libraryNavigationEpoch) {
       _page = HypPage.library;
+      _search.clear();
+    }
+    if (oldWidget.downloadNavigationEpoch != widget.downloadNavigationEpoch) {
+      if (_page == HypPage.home) widget.onLeaveFinderAfterSave?.call();
+      _page = HypPage.downloads;
       _search.clear();
     }
     if (oldWidget.editionLookupEpoch != widget.editionLookupEpoch &&
