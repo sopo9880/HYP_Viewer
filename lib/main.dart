@@ -2458,6 +2458,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final client = http.Client();
     GalleryTransfer? transfer;
     var holdsBackground = false;
+    var completedSuccessfully = false;
+    var cancelledByUser = false;
     try {
       final remote = await OnlineGalleryProvider(client)
           .load(pattern, work.workId);
@@ -2517,11 +2519,13 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         },
       );
       await _downloadJobs.remove(work.workId);
+      completedSuccessfully = true;
       if (mounted) setState(() => coverEpoch++);
       _status('다운로드 완료: ' + archive.pageCount.toString() +
           '장. 이제 인터넷 없이도 읽을 수 있어.');
       return true;
     } on DownloadCancelled {
+      cancelledByUser = true;
       _status('다운로드가 취소됐어. 기존 오프라인 파일은 유지했어.');
       await _downloadJobs.remove(work.workId);
       return false;
@@ -2533,7 +2537,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       if (holdsBackground) {
         await _backgroundDownloads.clearProgress();
         await _backgroundDownloads.release();
+        await _backgroundDownloads.showDownloadResult(work.workId,
+          success: completedSuccessfully, cancelled: cancelledByUser,
+          language: readerSettings.languageCode);
       }
+      activeDownloadWorkId = '';
       if (transfer != null && mounted) {
         setState(() {
           galleryDownloadToken = null;
