@@ -11,6 +11,7 @@ import '../core/candidate_verifier.dart';
 import '../core/cover_store.dart';
 import '../core/gallery.dart';
 import '../core/i18n.dart';
+import '../l10n/app_localizations.dart';
 import '../core/local_visual_index.dart';
 import '../core/media_image_fetcher.dart';
 import '../core/online_search.dart';
@@ -126,15 +127,16 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
 
   Future<void> _loadInitialImages() async {
     await _run(() async {
+      final loc = AppLocalizations.of(context)!;
       for (final path in widget.initialImagePaths.take(8)) {
         try {
           final file = File(path);
           if (!await file.exists() ||
               await file.length() > 12 * 1024 * 1024) continue;
-          await _addImage(await file.readAsBytes(), '공유 이미지');
+          await _addImage(await file.readAsBytes(), loc.inspectorShareImageSource);
         } catch (error) {
           if (mounted) setState(() =>
-              _warnings.add('공유 이미지를 읽지 못했어: $error'));
+              _warnings.add(loc.inspectorReadShareError(error.toString())));
         }
       }
     });
@@ -142,19 +144,20 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
 
   Future<void> _pickImages() async {
     await _run(() async {
+      final loc = AppLocalizations.of(context)!;
       final chosen = await FilePicker.platform.pickFiles(
           type: FileType.image, allowMultiple: true, withData: true);
       if (chosen == null) return;
       for (final file in chosen.files.take(12)) {
         final bytes = file.bytes;
         if (bytes != null) {
-          await _addImage(bytes, '내 기기: ' + file.name);
+          await _addImage(bytes, loc.inspectorDeviceFile(file.name));
         } else if (file.path != null) {
           final local = File(file.path!);
           if (await local.exists() &&
               await local.length() <= 12 * 1024 * 1024) {
             await _addImage(await local.readAsBytes(),
-                '내 기기: ' + file.name);
+                loc.inspectorDeviceFile(file.name));
           }
         }
       }
@@ -162,6 +165,7 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
   }
 
   Future<void> _readWeb() async {
+    final loc = AppLocalizations.of(context)!;
     final controller = _web;
     if (controller == null || !_webReady) return;
     try {
@@ -170,7 +174,7 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
       final result = SocialWebCapture.parse(value);
       if (result == null) {
         if (mounted) setState(() => _warnings.add(
-            '페이지 내용을 읽지 못했어. 원문을 복사하거나 캡처해줘.'));
+            loc.inspectorPageReadError));
         return;
       }
       if (!mounted) return;
@@ -182,11 +186,12 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
       }
     } catch (error) {
       if (mounted) setState(() => _warnings.add(
-          '접근 가능한 웹 본문을 분석하지 못했어: $error'));
+          loc.inspectorPageAnalyzeError(error.toString())));
     }
   }
 
   Future<void> _importRenderedImages() => _run(() async {
+    final loc = AppLocalizations.of(context)!;
     await _readWeb();
     final links = _snapshot?.imageUrls ?? [];
     final client = http.Client();
@@ -197,7 +202,7 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
         final bytes = await MediaImageFetcher.fetch(client, url);
         if (bytes == null) continue;
         final before = _images.length;
-        await _addImage(bytes, '공개 게시물 이미지');
+        await _addImage(bytes, loc.inspectorPublicPostImage);
         if (_images.length > before) accepted++;
         if (accepted >= 8) break;
       }
@@ -206,23 +211,25 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
     }
     if (accepted == 0 && mounted) {
       setState(() => _warnings.add(
-          '공개 이미지 원본에 접근하지 못했어. 화면 캡처를 사용해줘.'));
+          loc.inspectorPublicImageFetchError));
     }
   });
 
   Future<void> _captureFrame() async {
+    final loc = AppLocalizations.of(context)!;
     final screenshot = await _web?.takeScreenshot();
     if (screenshot == null) {
       if (mounted) setState(() => _warnings.add(
-          '화면 캡처가 제한되어 있어. 갤러리 이미지 공유를 사용해줘.'));
+          loc.inspectorCaptureRestricted));
       return;
     }
-    await _addImage(screenshot, '앱 내 웹 화면 캡처');
+    await _addImage(screenshot, loc.inspectorWebScreenshot);
   }
 
   Future<void> _captureCurrent() => _run(_captureFrame);
 
   Future<void> _sampleFrames() => _run(() async {
+    final loc = AppLocalizations.of(context)!;
     if (!_isVideo) return;
     for (var i = 0; i < 4 && mounted && _images.length < 16; i++) {
       if (i > 0) await Future<void>.delayed(
@@ -230,8 +237,7 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
       await _captureFrame();
     }
     if (mounted) setState(() => _warnings.add(
-        '현재 재생 가능한 프레임만 분석했어. 영상이 멈춰 있거나 보호된 경우 '
-        '장면이 추가되지 않을 수 있어.'));
+        loc.inspectorSampleFrameNotice));
   });
 
   Future<void> _rebuildIndex() => _run(() async {
@@ -256,6 +262,7 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
   }
 
   Future<void> _analyze() => _run(() async {
+    final loc = AppLocalizations.of(context)!;
     final ocr = <String>[];
     final warnings = <String>[];
     for (final image in _images.take(8)) {
@@ -279,14 +286,15 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
     });
     await _verify(ranked);
     if (ranked.isEmpty && mounted) setState(() => _warnings.add(
-        '번호 후보가 없어. 로컬 인덱스를 만들거나 제목·작가로 온라인 검색해줘.'));
+        loc.inspectorNoIdCandidates));
   });
 
   Future<void> _searchOnline() => _run(() async {
+    final loc = AppLocalizations.of(context)!;
     final term = _query.text.trim();
     if (term.isEmpty || term.length > 150) {
       if (mounted) setState(() =>
-          _warnings.add('검색어는 1~150자로 입력해줘.'));
+          _warnings.add(loc.inspectorSearchLength));
       return;
     }
     final client = http.Client();
@@ -323,9 +331,10 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
   }
 
   Widget _browser() {
+    final loc = AppLocalizations.of(context)!;
     if (widget.source == null) return const SizedBox.shrink();
     if (!Platform.isAndroid && !Platform.isWindows) {
-      return const HypText('이 환경은 앱 내부 브라우저를 지원하지 않아.');
+      return Text(loc.inspectorUnsupportedBrowser);
     }
     return SizedBox(height: 310, child: ClipRRect(
       borderRadius: BorderRadius.circular(12),
@@ -363,6 +372,7 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
     final size = MediaQuery.sizeOf(context);
     final width = size.width > 980 ? 960.0 : size.width * .96;
     final height = size.height > 780 ? 740.0 : size.height * .94;
@@ -375,7 +385,7 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
               Row(children: [
                 const Icon(Icons.auto_awesome, color: HypColors.lightPurple),
                 const SizedBox(width: 9),
-                Expanded(child: HypText('링크·이미지 통합 작품 분석',
+                Expanded(child: Text(loc.inspectorTitle,
                   style: Theme.of(context).textTheme.titleLarge)),
                 IconButton(tooltip: HypI18n.t(context, '닫기'),
                   onPressed: () => Navigator.of(context).pop(),
@@ -387,7 +397,7 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (widget.source != null) ...[
-                      HypText('앱 내부 원본 화면 · 공개되거나 표시된 정보만 읽어와',
+                      Text(loc.inspectorOnlyPublic,
                           style: Theme.of(context).textTheme.bodySmall),
                       const SizedBox(height: 5),
                       _browser(),
@@ -397,22 +407,22 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
                           onPressed: _busy || !_webReady ? null :
                               () => _run(_readWeb),
                           icon: const Icon(Icons.article_outlined),
-                          label: const HypText('본문·표시된 댓글 분석')),
+                          label: Text(loc.inspectorReadComments)),
                         OutlinedButton.icon(
                           onPressed: _busy || !_webReady ? null :
                               _importRenderedImages,
                           icon: const Icon(Icons.image_search_outlined),
-                          label: const HypText('게시물 이미지 자동 추출')),
+                          label: Text(loc.inspectorExtractPostImages)),
                         OutlinedButton.icon(
                           onPressed: _busy || !_webReady ? null :
                               _captureCurrent,
                           icon: const Icon(Icons.screenshot_monitor),
-                          label: const HypText('현재 화면 캡처')),
+                          label: Text(loc.inspectorCaptureCurrent)),
                         if (_isVideo) OutlinedButton.icon(
                           onPressed: _busy || !_webReady ? null :
                               _sampleFrames,
                           icon: const Icon(Icons.movie_filter_outlined),
-                          label: const HypText('영상 주요 프레임 샘플링')),
+                          label: Text(loc.inspectorSampleVideo)),
                       ]),
                       const SizedBox(height: 12),
                     ],
@@ -420,29 +430,25 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
                       OutlinedButton.icon(
                         onPressed: _busy ? null : _pickImages,
                         icon: const Icon(Icons.add_photo_alternate_outlined),
-                        label: const HypText('내 기기 이미지 선택')),
+                        label: Text(loc.inspectorChooseImage)),
                       OutlinedButton.icon(
                         onPressed: _busy ? null : _rebuildIndex,
                         icon: const Icon(Icons.data_object_outlined),
-                        label: const HypText('내 서재 이미지 인덱스 만들기')),
+                        label: Text(loc.inspectorBuildVisualIndex)),
                       FilledButton.icon(
                         onPressed: _busy ? null : _analyze,
                         icon: const Icon(Icons.travel_explore),
-                        label: const HypText('로컬 OCR·이미지 검색')),
+                        label: Text(loc.inspectorLocalOcrSearch)),
                     ]),
                     if (_indexTotal > 0) ...[
                       const SizedBox(height: 5),
                       LinearProgressIndicator(value: _indexTotal == 0
                           ? 0 : _indexProgress / _indexTotal),
-                      HypText('서재 인덱스 생성 ' +
-                          _indexProgress.toString() + '/' +
-                          _indexTotal.toString() + ' · 지문 ' +
-                          _indexed.toString() + '개'),
+                      Text(loc.inspectorIndexingProgress(_indexProgress, _indexTotal, _indexed)),
                     ],
                     if (hasImages) ...[
                       const SizedBox(height: 12),
-                      HypText('분석 이미지 · ' + _images.length.toString() +
-                          '개', style: Theme.of(context).textTheme.titleMedium),
+                      Text(loc.inspectorImagesAnalyzed(_images.length), style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 6),
                       SizedBox(height: 88, child: ListView.separated(
                         scrollDirection: Axis.horizontal, itemCount: _images.length,
@@ -457,15 +463,12 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
                     ],
                     if (_snapshot != null) ...[
                       const SizedBox(height: 8),
-                      HypText('현재 페이지 본문: ' +
-                          _snapshot!.description.characters.take(120).toString()),
-                      HypText('현재 로딩된 댓글 ' +
-                          _snapshot!.comments.length.toString() + '개 · '
-                          '댓글 전체를 수집했다는 의미는 아니야'),
+                      Text(loc.inspectorPageExcerpt(_snapshot!.description.characters.take(120).toString())),
+                      Text(loc.inspectorDisplayedComments(_snapshot!.comments.length)),
                     ],
                     if (_recognizedText.isNotEmpty) ...[
                       const SizedBox(height: 9),
-                      const HypText('로컬 OCR 결과'),
+                      Text(loc.inspectorOcrResult),
                       SelectableText(_recognizedText,
                           maxLines: 5),
                     ],
@@ -473,12 +476,11 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
                     TextField(
                       controller: _query, maxLength: 150,
                       decoration: InputDecoration(
-                        labelText: HypI18n.t(context, '제목·작가로 온라인 검색'),
-                        helperText: HypI18n.t(context,
-                            '이미지는 보내지 않고 입력한 검색어만 전송해'),
+                        labelText: loc.inspectorSearchByTitle,
+                        helperText: loc.inspectorSearchPrivacy,
                         suffixIcon: IconButton(
                           onPressed: _busy ? null : _searchOnline,
-                          tooltip: HypI18n.t(context, '온라인 후보 검색'),
+                          tooltip: loc.inspectorSearchTooltip,
                           icon: const Icon(Icons.public),
                         ),
                       ),
@@ -486,18 +488,16 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
                     ),
                     OutlinedButton.icon(onPressed: _busy ? null : _searchOnline,
                         icon: const Icon(Icons.search),
-                        label: const HypText('온라인 제목·작가 후보 찾기')),
+                        label: Text(loc.inspectorFindOnlineCandidates)),
                     if (_candidates.isNotEmpty) ...[
                       const SizedBox(height: 10),
-                      HypText('작품 번호 후보 · ' +
-                          _candidates.length.toString() + '개',
+                      Text(loc.inspectorIdCandidateCount(_candidates.length),
                           style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 4),
                       for (final item in _candidates.take(20))
                         Card(child: ListTile(
                           dense: true,
-                          title: Text((item.title.isEmpty ? '작품 ' +
-                              item.workId : item.title) + ' · #' + item.workId),
+                          title: Text((item.title.isEmpty ? loc.workCardUntitled(item.workId) : item.title) + ' · #' + item.workId),
                           subtitle: Text(item.evidence +
                             ' · ' + (_verification[item.workId]?.exists == true
                                 ? HypI18n.t(context, '번호 존재 확인')
@@ -509,7 +509,7 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
                             onPressed: _verification[item.workId]?.status ==
                                     CandidateCheck.notFound
                                 ? null : () => _accept(selected: item),
-                            child: const HypText('Finder로 가져오기'),
+                            child: Text(loc.inspectorImportCandidate),
                           ),
                         )),
                     ],
@@ -520,20 +520,19 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
                             .textTheme.bodySmall),
                     ],
                     const SizedBox(height: 8),
-                    const HypText('이미지 일치·검색 결과만으로 작품을 확정하지 않아. '
-                        '공개 댓글은 실제 화면에 로딩된 것만 분석할 수 있어.'),
+                    Text(loc.inspectorCaution),
                   ],
                 ),
               )),
               const Divider(),
               Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                 TextButton(onPressed: () => Navigator.pop(context),
-                  child: const HypText('취소')),
+                  child: Text(loc.cancel)),
                 const SizedBox(width: 9),
                 FilledButton.icon(
                   onPressed: () => _accept(),
                   icon: const Icon(Icons.playlist_add),
-                  label: const HypText('분석 내용 Finder로 가져오기')),
+                  label: Text(loc.inspectorImportAnalysis)),
               ]),
             ],
           ),

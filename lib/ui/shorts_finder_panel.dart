@@ -297,13 +297,13 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               key: const Key('social-open-inspector'),
               onPressed: widget.busy ? null : widget.onInspectSource,
               icon: const Icon(Icons.web_outlined, size: 19),
-              label: const HypText('앱 내 웹·영상 분석'),
+              label: Text(AppLocalizations.of(context)!.inspectorActionWebAnalysis),
             ),
             OutlinedButton.icon(
               key: const Key('social-choose-images'),
               onPressed: widget.busy ? null : widget.onInspectImages,
               icon: const Icon(Icons.image_search_outlined, size: 19),
-              label: const HypText('이미지로 작품 찾기'),
+              label: Text(AppLocalizations.of(context)!.inspectorActionImageSearch),
             ),
             TextButton.icon(
               onPressed: widget.onOpenYoutube,
