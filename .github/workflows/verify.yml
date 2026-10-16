@@ -31,7 +31,11 @@ jobs:
           cache: true
       - name: Generate Flutter Android host project
         run: flutter create --platforms=android --org com.sopo9880 --project-name hyp_viewer .
+      - name: Configure Japanese/Korean offline OCR models
+        run: python3 scripts/configure_android_ocr.py
       - run: flutter pub get
+      - name: Patch WebView Android ProGuard compatibility
+        run: python3 scripts/patch_webview_proguard.py
       - name: Generate typed app localizations
         run: flutter gen-l10n
       - name: Check language packs and new UI strings
@@ -49,7 +53,7 @@ jobs:
 
   windows:
     name: Windows installer
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,6 +64,9 @@ jobs:
           cache: true
       - name: Generate Flutter Windows host project
         run: flutter create --platforms=windows --org com.sopo9880 --project-name hyp_viewer .
+      - name: Install WebView2 NuGet CLI
+        shell: pwsh
+        run: choco install nuget.commandline -y --no-progress
       - run: flutter pub get
       - name: Generate typed app localizations
         run: flutter gen-l10n

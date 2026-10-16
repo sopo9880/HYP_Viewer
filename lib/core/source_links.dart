@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'social_share_text.dart';
+
 /// Parsing is entirely local and never requires an account or API key.
 /// A recognized link does not imply that its comments can be read.
 enum SourceKind {
@@ -96,8 +98,9 @@ class SourceLink {
   static List<SourceLink> extract(String text, {int limit = 12}) {
     final found = <SourceLink>[];
     final seen = <String>{};
+    final normalized = SocialShareText.normalize(text);
     final regex = RegExp(r'https?://[^\s<>"\x27]+', caseSensitive: false);
-    for (final match in regex.allMatches(text)) {
+    for (final match in regex.allMatches(normalized)) {
       final trimmed = match.group(0)!.replaceFirst(
           RegExp(r'[)\].,!?;:。]+$'), '');
       final link = parse(trimmed);
@@ -164,10 +167,7 @@ class PublicSourcePreview {
     final title = meta('og:title') ?? meta('twitter:title') ?? '';
     final description = meta('og:description') ??
         meta('description') ?? meta('twitter:description') ?? '';
-    String decode(String input) => input
-        .replaceAll('&amp;', '&').replaceAll('&quot;', '"')
-        .replaceAll('&#39;', "'").replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>');
+    String decode(String input) => SocialShareText.decode(input);
     if (link.kind == SourceKind.youtubePost) {
       final postId = link.uri.pathSegments.length > 1
           ? link.uri.pathSegments[1] : '';
@@ -178,8 +178,10 @@ class PublicSourcePreview {
         return PublicPreviewResult(body, fullBody: true);
       }
     }
+    final seen = <String>{};
     final text = [decode(title), decode(description)]
-        .where((part) => part.trim().isNotEmpty).join('\n');
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty && seen.add(part)).join('\n');
     if (text.isEmpty) {
       throw const FormatException('게시물의 공개 본문을 확인할 수 없어. '
           '비공개 또는 로그인 제한일 수 있으니 직접 복사해줘.');

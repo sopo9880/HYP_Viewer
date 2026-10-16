@@ -3,6 +3,18 @@ import 'package:hyp_viewer/core/shares.dart';
 import 'package:hyp_viewer/core/youtube.dart';
 
 void main() {
+  test('receives decoded Instagram caption without any URL', () {
+    final shared = SharedShorts.normalizeIncoming(
+        '만화방 on Instagram: "&#xb9cc;&#xd654;"');
+    expect(shared, '만화방 on Instagram: "만화"');
+  });
+
+  test('share receiver rejects blank and excessively long text', () {
+    expect(SharedShorts.normalizeIncoming('   '), isNull);
+    expect(SharedShorts.normalizeIncoming(List.filled(262145, 'x').join()),
+        isNull);
+  });
+
   test('recognizes standard Shorts link', () {
     expect(ShortsLink.videoId('https://www.youtube.com/shorts/-MK_XG2aflo'), '-MK_XG2aflo');
   });

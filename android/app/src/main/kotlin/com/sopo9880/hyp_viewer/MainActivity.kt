@@ -1,6 +1,11 @@
 package com.sopo9880.hyp_viewer
 
 import android.app.Activity
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -13,6 +18,7 @@ import android.os.Handler
 import android.os.Looper
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
@@ -26,6 +32,8 @@ class MainActivity : FlutterActivity() {
     private val channelName = "hyp_viewer/share"
     private var channel: MethodChannel? = null
     private var pendingSharedText: String? = null
+    private var pendingSharedImagePaths: List<String> = emptyList()
+    private var sharedImageRequestSerial = 0
     private var readerChannel: MethodChannel? = null
     private var securityChannel: MethodChannel? = null
     private val securityUpdateRequest = 8421
@@ -35,6 +43,8 @@ class MainActivity : FlutterActivity() {
     private var pendingExportFiles: List<Map<String, String>> = emptyList()
     private var pendingSecurityUpdate: MethodChannel.Result? = null
     private var volumeNavigationEnabled = false
+    private val notificationPermissionRequest = 8423
+    private var pendingNotificationPermission: MethodChannel.Result? = null
     private val downloadChannelName = "hyp_viewer/download_notification"
     private var downloadChannel: MethodChannel? = null
     private var pendingOpenDownloads = false
@@ -49,6 +59,13 @@ class MainActivity : FlutterActivity() {
 
     private fun notificationManager() =
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    private fun notificationsAllowed(): Boolean {
+        val runtimeGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+        return runtimeGranted && NotificationManagerCompat.from(this).areNotificationsEnabled()
+    }
 
     private fun downloadsPendingIntent(): PendingIntent {
         val open = Intent(this, MainActivity::class.java).apply {
@@ -73,8 +90,8 @@ class MainActivity : FlutterActivity() {
 
     private fun updateDownloadProgress(args: Map<*, *>) {
         val total = ((args["total"] as? Number)?.toInt() ?: 0).coerceAtLeast(0)
-        if (total == 0) return
         val done = ((args["done"] as? Number)?.toInt() ?: 0).coerceIn(0, total)
+        val preparing = total == 0
         val paused = args["paused"] == true
         val isUpdate = args["update"] == true
         val queued = ((args["queued"] as? Number)?.toInt() ?: 0).coerceAtLeast(0)
@@ -92,9 +109,9 @@ class MainActivity : FlutterActivity() {
             else -> if (paused) "HYP Viewer · 다운로드 일시정지" else "HYP Viewer · 다운로드 중"
         }
         val text = when (language) {
-            "en" -> if (isUpdate) "App update: $percent%" else "Work #$id · $done/$total pages · $percent%"
-            "ja" -> if (isUpdate) "アプリ更新: $percent%" else "作品 #$id · $done/${total}ページ · $percent%"
-            else -> if (isUpdate) "앱 업데이트 · $percent%" else "작품 #$id · $done/${total}페이지 · $percent%"
+            "en" -> if (preparing) "Preparing work #$id" else if (isUpdate) "App update: $percent%" else "Work #$id · $done/$total pages · $percent%"
+            "ja" -> if (preparing) "作品 #$id を準備中" else if (isUpdate) "アプリ更新: $percent%" else "作品 #$id · $done/${total}ページ · $percent%"
+            else -> if (preparing) "작품 #$id 준비 중" else if (isUpdate) "앱 업데이트 · $percent%" else "작품 #$id · $done/${total}페이지 · $percent%"
         }
         val subText = if (queued == 0) null else when (language) {
             "en" -> "$queued works queued"
@@ -110,7 +127,7 @@ class MainActivity : FlutterActivity() {
             .setContentIntent(downloadsPendingIntent())
             .setOnlyAlertOnce(true)
             .setOngoing(true)
-            .setProgress(total, done, false)
+            .setProgress(total, done, preparing)
             .build()
         try {
             notificationManager().notify(ongoingNotificationId, notification)
@@ -228,6 +245,26 @@ class MainActivity : FlutterActivity() {
             downloadChannelName)
         downloadChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
+                "requestNotificationPermission" -> {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                        notificationsAllowed()) {
+                        result.success(notificationsAllowed())
+                    } else if (pendingNotificationPermission != null) {
+                        result.error("permission_in_progress",
+                            "Notification permission is already requested", null)
+                    } else {
+                        pendingNotificationPermission = result
+                        try {
+                            ActivityCompat.requestPermissions(this,
+                                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                                notificationPermissionRequest)
+                        } catch (_: Exception) {
+                            pendingNotificationPermission = null
+                            result.success(false)
+                        }
+                    }
+                }
+                "notificationsEnabled" -> result.success(notificationsAllowed())
                 "updateProgress" -> {
                     val arguments = call.arguments as? Map<*, *>
                     if (arguments != null) updateDownloadProgress(arguments)
@@ -349,8 +386,22 @@ class MainActivity : FlutterActivity() {
                     result.success(pendingSharedText)
                     pendingSharedText = null
                 }
+                "getSharedImages" -> {
+                    result.success(pendingSharedImagePaths)
+                    pendingSharedImagePaths = emptyList()
+                }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == notificationPermissionRequest) {
+            pendingNotificationPermission?.success(notificationsAllowed())
+            pendingNotificationPermission = null
         }
     }
 
@@ -445,11 +496,81 @@ class MainActivity : FlutterActivity() {
             pendingOpenDownloads = true
             downloadChannel?.invokeMethod("openDownloads", null)
         }
-        pendingSharedText?.let { channel?.invokeMethod("sharedText", it) }
+        pendingSharedText?.let { shared ->
+            channel?.invokeMethod("sharedText", shared)
+            pendingSharedText = null
+        }
     }
 
     private fun readShareIntent(intent: Intent?) {
-        if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return
-        pendingSharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+        if (intent == null) return
+        if (intent.action == Intent.ACTION_SEND &&
+            intent.type == "text/plain") {
+            pendingSharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+            return
+        }
+        if (intent.type?.startsWith("image/") != true ||
+            intent.action != Intent.ACTION_SEND &&
+            intent.action != Intent.ACTION_SEND_MULTIPLE) return
+
+        val images = linkedSetOf<Uri>()
+        if (intent.action == Intent.ACTION_SEND) {
+            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let(images::add)
+        } else {
+            intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+                ?.forEach(images::add)
+        }
+        intent.clipData?.let { clips ->
+            for (index in 0 until minOf(clips.itemCount, 8)) {
+                clips.getItemAt(index).uri?.let(images::add)
+            }
+        }
+        val selected = images.take(8)
+        if (selected.isEmpty()) return
+        val generation = ++sharedImageRequestSerial
+        Thread {
+            val copied = mutableListOf<String>()
+            for ((index, uri) in selected.withIndex()) {
+                try {
+                    val input = contentResolver.openInputStream(uri) ?: continue
+                    val folder = File(cacheDir, "hyp_shared_images")
+                    if (!folder.exists()) folder.mkdirs()
+                    val file = File(folder,
+                        "share_" + System.currentTimeMillis().toString() +
+                        "_" + index.toString() + ".img")
+                    var size = 0L
+                    var tooLarge = false
+                    input.use { stream ->
+                        FileOutputStream(file).use { output ->
+                            val bytes = ByteArray(65536)
+                            while (true) {
+                                val count = stream.read(bytes)
+                                if (count < 0) break
+                                size += count
+                                if (size > 12L * 1024 * 1024) {
+                                    tooLarge = true
+                                    break
+                                }
+                                output.write(bytes, 0, count)
+                            }
+                        }
+                    }
+                    if (tooLarge || size == 0L) file.delete()
+                    else copied.add(file.absolutePath)
+                } catch (_: Exception) {
+                    // Revoked/expired ContentResolver URI. Continue other images.
+                }
+            }
+            runOnUiThread {
+                if (generation == sharedImageRequestSerial &&
+                    copied.isNotEmpty()) {
+                    pendingSharedImagePaths = copied
+                    channel?.let { incoming ->
+                        incoming.invokeMethod("sharedImages", copied)
+                        pendingSharedImagePaths = emptyList()
+                    }
+                }
+            }
+        }.start()
     }
 }

@@ -27,6 +27,7 @@ import 'core/android_controls.dart';
 import 'core/hitomi_reader_link.dart';
 import 'core/hitomi_gallery.dart';
 import 'ui/gallery_reader.dart';
+import 'ui/visual_source_inspector.dart';
 import 'ui/cover_picker.dart';
 import 'ui/cover_cropper.dart';
 import 'ui/work_editor.dart';
@@ -38,6 +39,7 @@ import 'core/candidate_verifier.dart';
 import 'core/online_gallery.dart';
 import 'core/online_search.dart';
 import 'core/shares.dart';
+import 'core/social_share_text.dart';
 import 'core/storage.dart';
 import 'core/updates.dart';
 import 'core/work.dart';
@@ -125,6 +127,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   final Set<String> _queuedDownloadIds = {};
   bool _downloadQueueRunning = false;
   bool _downloadQueueCancelled = false;
+  bool _restoringDownloads = false;
   Timer? _noticesTimer;
   String? downloadingGalleryKey;
   int downloadedGalleryPages = 0;
@@ -196,6 +199,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _activeReading?.resume();
+      // Work that failed while offline can resume after the user returns.
+      // Never restart while a manual transfer or the queue is still running.
+      if (!_downloadQueueRunning && galleryDownloadToken == null) {
+        unawaited(_restoreDownloadQueue());
+      }
     } else {
       _activeReading?.pause();
     }
@@ -529,20 +537,123 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _listenForSharedShorts() async {
-    await SharedShorts.start((url) {
+    await SharedShorts.start((shared) {
       if (!mounted) return;
+      final links = SourceLink.extract(shared);
+      final inspectable = links.where((link) =>
+          link.kind == SourceKind.instagramPost ||
+          link.kind == SourceKind.instagramReel ||
+          link.kind == SourceKind.youtubeVideo ||
+          link.kind == SourceKind.youtubePost).firstOrNull;
       setState(() {
-        urlInput.text = url;
+        urlInput.text = shared;
         navigationEpoch += 1;
         candidates = [];
         commentInput.clear();
         numberInput.clear();
         titleInput.clear();
         authorInput.clear();
-        message = '공유 링크를 받았어. 공개 내용을 분석할게.';
+        message = '공유 내용을 받았어. 링크·본문·이미지를 분석할게.';
       });
-      _fetch();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (inspectable != null) {
+          unawaited(_openVisualInspector(
+              source: inspectable, sharedText: shared));
+        } else {
+          unawaited(_fetch());
+        }
+      });
+    }, onSharedImages: (paths) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => navigationEpoch++);
+        unawaited(_openVisualInspector(initialImagePaths: paths));
+      });
     });
+  }
+
+  Future<void> _openVisualInspector({
+    SourceLink? source,
+    String sharedText = '',
+    List<String> initialImagePaths = const [],
+  }) async {
+    if (!mounted) return;
+    final selection = await showDialog<VisualInspectionResult>(
+      context: context,
+      builder: (_) => VisualSourceInspector(
+        source: source,
+        sharedText: sharedText,
+        initialImagePaths: initialImagePaths,
+        works: library.works,
+        covers: coverStore,
+        galleries: galleryStore,
+        verifyCandidates: _verifyCandidateCodes,
+      ),
+    );
+    if (selection == null || !mounted) return;
+    final extra = selection.text.trim();
+    final previous = commentInput.text.trim();
+    setState(() {
+      if (selection.sourceUrl.isNotEmpty) {
+        urlInput.text = selection.sourceUrl;
+      }
+      if (extra.isNotEmpty) {
+        commentInput.text = [previous, extra]
+            .where((text) => text.isNotEmpty).toSet().join('\n\n');
+      }
+      if (selection.workId.isNotEmpty) numberInput.text = selection.workId;
+      if (selection.title.isNotEmpty) titleInput.text = selection.title;
+      if (selection.author.isNotEmpty) authorInput.text = selection.author;
+      navigationEpoch++;
+    });
+    _analyze();
+    if (selection.workId.isNotEmpty) {
+      // Image/text matching never automatically saves a work. Preserve the
+      // candidate and let the existing Finder/verification UI review it.
+      final id = selection.workId;
+      if (mounted) setState(() {
+        if (!candidates.any((candidate) => candidate.code == id)) {
+          candidates = [
+            NumberCandidate(code: id,
+                evidence: '이미지·본문 후보 (사용자 확인 필요)',
+                source: selection.sourceUrl, score: 70,
+                rule: 'visual-candidate'),
+            ...candidates,
+          ];
+        }
+        if (selection.sourceUrl.isNotEmpty) {
+          _candidateSourceUrls[id] = selection.sourceUrl;
+          _candidateSourceEvidence.putIfAbsent(id,
+              () => <String>{}).add(selection.sourceUrl);
+        }
+        message = selection.verified
+            ? '작품 번호가 존재하는 걸 확인했어. 내용이 맞는지 확인 후 저장해줘.'
+            : '번호 후보를 입력했어. 검증 후 저장해줘.';
+      });
+    } else {
+      _status('본문·댓글·이미지 OCR 결과를 Finder로 가져왔어. '
+          '후보를 확인하거나 수동으로 번호를 입력해줘.');
+    }
+  }
+
+  Future<void> _inspectInputSource() async {
+    final raw = urlInput.text.trim();
+    final links = SourceLink.extract(raw);
+    final supported = links.where((link) =>
+        link.kind == SourceKind.instagramPost ||
+        link.kind == SourceKind.instagramReel ||
+        link.kind == SourceKind.youtubeVideo ||
+        link.kind == SourceKind.youtubePost).firstOrNull;
+    if (supported == null) {
+      _status('Instagram 게시물·릴스 또는 YouTube 영상·게시물 링크를 입력해줘.');
+      return;
+    }
+    await _openVisualInspector(source: supported, sharedText: raw);
+  }
+
+  Future<void> _inspectLocalImages() async {
+    await _openVisualInspector();
   }
 
   Future<void> _load() async {
@@ -570,21 +681,30 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _restoreDownloadQueue() async {
+    if (_restoringDownloads || _downloadQueueRunning ||
+        _downloadQueueCancelled || galleryDownloadToken != null) return;
+    _restoringDownloads = true;
     try {
+      // A resume event may arrive before LibraryStorage has finished loading.
+      // Do not clear approved jobs merely because the in-memory shelf is empty.
+      await _initialLibraryRead.future;
+      if (!mounted || _libraryReadFailed || _downloadQueueRunning ||
+          galleryDownloadToken != null) return;
       final pending = await _downloadJobs.load();
       if (pending.isEmpty || !mounted) return;
       final found = library.works.where((work) =>
-          pending.containsKey(work.workId)).toList();
-      if (found.isEmpty) {
-        await _downloadJobs.clear();
-        return;
-      }
+          pending.containsKey(work.workId) &&
+          work.workId != activeDownloadWorkId &&
+          !_queuedDownloadIds.contains(work.workId)).toList();
+      if (found.isEmpty) return;
       _downloadSourceById.addAll(pending);
       await _enqueueDownloads(found, restored: true);
       _status('이전 다운로드 ' + found.length.toString() +
           '개를 이어서 진행해.');
     } catch (error) {
       _status('저장된 다운로드 복구 실패: ' + error.toString());
+    } finally {
+      _restoringDownloads = false;
     }
   }
 
@@ -702,9 +822,27 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       await _quickAddNumber(raw);
       return;
     }
-    final links = SourceLink.extract(raw, limit: 10);
+    final normalized = SocialShareText.normalize(raw);
+    if (normalized.isEmpty) {
+      _status('분석할 링크나 공유 텍스트를 입력해줘.');
+      return;
+    }
+    final hints = SocialShareText.hints(normalized);
+    if (titleInput.text.trim().isEmpty && hints.title.isNotEmpty) {
+      titleInput.text = hints.title;
+    }
+    if (authorInput.text.trim().isEmpty && hints.author.isNotEmpty) {
+      authorInput.text = hints.author;
+    }
+    final links = SourceLink.extract(normalized, limit: 10);
     if (links.isEmpty) {
-      _status('유효한 HTTPS 링크 또는 작품 번호를 입력해줘.');
+      // Accept caption-only Android shares; do not silently discard them.
+      commentInput.text = normalized;
+      _analyze();
+      if (candidates.isEmpty) {
+        _status('공유 텍스트를 분석했지만 작품 번호는 없었어. '
+            '게시물 링크나 댓글을 추가해서 다시 분석해줘.');
+      }
       return;
     }
     setState(() => busy = true);
@@ -785,9 +923,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           remember(candidate.code, link.url);
         }
       }
-      final shared = raw.replaceAll(RegExp(r'https?://\S+'), '').trim();
+      final shared = normalized.replaceAll(RegExp(r'https?://\S+'), '').trim();
       if (shared.isNotEmpty) blocks.add(shared);
-      commentInput.text = blocks.join('\n\n');
+      commentInput.text = SocialShareText.normalize(blocks.join('\n\n'));
       _candidateSourceUrls
         ..clear()
         ..addAll(mapped);
@@ -2050,27 +2188,49 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     if (_downloadQueueRunning || galleryDownloadToken != null) return;
     _downloadQueueRunning = true;
     try {
-      while (_downloadQueue.isNotEmpty && !_downloadQueueCancelled) {
-        if (galleryDownloadToken != null) break;
-        final work = _downloadQueue.removeFirst();
-        _queuedDownloadIds.remove(work.workId);
-        if (mounted) setState(() {});
-        // A queued work might have been removed from the library.
-        if (!library.works.any((w) => w.workId == work.workId)) continue;
-        try {
-          if (await galleryStore.exists(work.workId)) {
+      // Acquire before even resolving the first remote gallery. The outer
+      // lease stays alive between items and prevents Android 12+ from needing
+      // to start a new foreground service while Home is in the background.
+      await _backgroundDownloads.holdQueue(() async {
+        if (Platform.isAndroid &&
+            _backgroundDownloads.notificationsAllowed == false) {
+          _status('알림 권한이 꺼져 있어 진행률이 알림창에 표시되지 않아. '
+              '다운로드는 계속 시도할게. Android 설정에서 알림을 허용해줘.');
+        }
+        while (_downloadQueue.isNotEmpty && !_downloadQueueCancelled) {
+          if (galleryDownloadToken != null) break;
+          final work = _downloadQueue.removeFirst();
+          _queuedDownloadIds.remove(work.workId);
+          if (mounted) setState(() {});
+          // Indeterminate progress is shown during network/metadata loading.
+          await _backgroundDownloads.setProgress(0, 0,
+              workId: work.workId, queuedCount: _downloadQueue.length,
+              language: readerSettings.languageCode);
+          // A queued work might have been removed from the library.
+          if (!library.works.any((w) => w.workId == work.workId)) {
             await _downloadJobs.remove(work.workId);
             continue;
           }
-          final json = _downloadSourceById[work.workId] == 'json';
-          final saved = json
-              ? await _downloadJsonSourceInternal(work, rightsApproved: true)
-              : await _downloadOnlineInternal(work, rightsApproved: true);
-          if (saved) await _downloadJobs.remove(work.workId);
-        } catch (error) {
-          _status('작품 ${work.workId} 다운로드 실패: $error');
+          try {
+            if (await galleryStore.exists(work.workId)) {
+              await _downloadJobs.remove(work.workId);
+              continue;
+            }
+            final json = _downloadSourceById[work.workId] == 'json';
+            final saved = json
+                ? await _downloadJsonSourceInternal(work, rightsApproved: true)
+                : await _downloadOnlineInternal(work, rightsApproved: true);
+            if (saved) await _downloadJobs.remove(work.workId);
+          } catch (error) {
+            _status('작품 ${work.workId} 다운로드 실패: $error');
+          }
         }
-      }
+      });
+    } catch (error) {
+      // Failed foreground-service startup must not discard queued jobs.
+      // The persistent queue is retried on next app launch/resume.
+      _status('백그라운드 다운로드 시작 실패: $error. '
+          '작업은 저장되어 있으니 앱으로 돌아와 다시 시도해줘.');
     } finally {
       _downloadQueueRunning = false;
     }
@@ -2092,7 +2252,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   Future<bool> _downloadOnlineInternal(
       WorkEntry work, {bool rightsApproved = false}) async {
-    if (galleryDownloadToken != null) {
+    if (galleryDownloadToken != null ||
+        (!rightsApproved && _downloadQueueRunning)) {
       _status('이미 진행 중인 다운로드가 있어. 먼저 완료하거나 취소해줘.');
       return false;
     }
@@ -2150,6 +2311,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       await _downloadJobs.add(work.workId);
       await _backgroundDownloads.acquire();
       holdsBackground = true;
+      if (!rightsApproved && Platform.isAndroid &&
+          _backgroundDownloads.notificationsAllowed == false) {
+        _status('알림 권한이 없어 진행률이 알림창에 표시되지 않을 수 있어. '
+            '앱 알림을 허용해줘. 다운로드는 계속 시도할게.');
+      }
       transfer = GalleryTransfer();
       setState(() {
         galleryDownloadToken = transfer;
@@ -2444,7 +2610,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   Future<bool> _downloadJsonSourceInternal(WorkEntry work,
       {bool rightsApproved = false}) async {
-    if (galleryDownloadToken != null) {
+    if (galleryDownloadToken != null ||
+        (!rightsApproved && _downloadQueueRunning)) {
       _status('이미 다른 다운로드가 실행 중이야.');
       return false;
     }
@@ -2488,6 +2655,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       await _downloadJobs.add(work.workId, source: 'json');
       await _backgroundDownloads.acquire();
       holdsBackground = true;
+      if (!rightsApproved && Platform.isAndroid &&
+          _backgroundDownloads.notificationsAllowed == false) {
+        _status('알림 권한이 없어 진행률이 알림창에 표시되지 않을 수 있어. '
+            '앱 알림을 허용해줘. 다운로드는 계속 시도할게.');
+      }
       transfer = GalleryTransfer();
       setState(() {
         galleryDownloadToken = transfer;
@@ -2852,6 +3024,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     onLeaveFinderAfterSave: _clearSavedFinderOnTabExit,
     finderClearEpoch: finderClearEpoch,
     onFetch: _fetch,
+    onInspectSource: _inspectInputSource,
+    onInspectImages: _inspectLocalImages,
     onSaveWork: _saveWork,
     onQuickAddNumber: _quickAddNumber,
     onSaveOnlineSearchWork: _saveOnlineSearchWork,

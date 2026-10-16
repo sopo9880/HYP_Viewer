@@ -21,6 +21,8 @@ class ShortsFinderPanel extends StatefulWidget {
   final VoidCallback? onClear;
   final VoidCallback onAnalyze;
   final Future<void> Function() onFetch;
+  final Future<void> Function()? onInspectSource;
+  final Future<void> Function()? onInspectImages;
   final Future<void> Function() onOpenYoutube;
   final Future<void> Function() onSave;
   final Future<void> Function(String code)? onQuickAddNumber;
@@ -42,6 +44,8 @@ class ShortsFinderPanel extends StatefulWidget {
     this.onClear,
     required this.onAnalyze,
     required this.onFetch,
+    this.onInspectSource,
+    this.onInspectImages,
     required this.onOpenYoutube,
     required this.onSave,
     this.onQuickAddNumber,
@@ -288,6 +292,18 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
               onPressed: widget.busy ? null : widget.onFetch,
               icon: const Icon(Icons.cloud_download_outlined, size: 19),
               label: const HypText('설명란 · 댓글 자동 조회'),
+            ),
+            OutlinedButton.icon(
+              key: const Key('social-open-inspector'),
+              onPressed: widget.busy ? null : widget.onInspectSource,
+              icon: const Icon(Icons.web_outlined, size: 19),
+              label: Text(AppLocalizations.of(context)!.inspectorActionWebAnalysis),
+            ),
+            OutlinedButton.icon(
+              key: const Key('social-choose-images'),
+              onPressed: widget.busy ? null : widget.onInspectImages,
+              icon: const Icon(Icons.image_search_outlined, size: 19),
+              label: Text(AppLocalizations.of(context)!.inspectorActionImageSearch),
             ),
             TextButton.icon(
               onPressed: widget.onOpenYoutube,
