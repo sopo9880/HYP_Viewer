@@ -8,6 +8,9 @@ void main() {
     final prefs = const ReaderSettings(
       nextDirection: 'right',
       twoPageSpread: true,
+      confirmCompleteOnNext: false,
+      volumeKeyNavigation: true,
+      volumeHoldIntervalMs: 700,
       verticalScrolling: true,
       showDownloadAction: false,
       showOrientationAction: false,
@@ -28,6 +31,9 @@ void main() {
     final output = ReaderSettings.fromJson(prefs.toJson());
     expect(output.reverse, true);
     expect(output.twoPageSpread, true);
+    expect(output.confirmCompleteOnNext, false);
+    expect(output.volumeKeyNavigation, true);
+    expect(output.volumeHoldIntervalMs, 700);
     expect(output.verticalScrolling, true);
     expect(output.showDownloadAction, false);
     expect(output.showOrientationAction, false);
@@ -51,6 +57,7 @@ void main() {
       'twoPageSpread': 1,
       'languageCode': 'invalid',
       'openAfterSave': 'true',
+      'volumeHoldIntervalMs': -500,
     });
     expect(bad.nextDirection, 'left');
     expect(bad.twoPageSpread, false);
@@ -59,6 +66,9 @@ void main() {
     expect(bad.showOrientationAction, true);
     expect(bad.preloadPages, 100);
     expect(bad.openAfterSave, false);
+    expect(bad.confirmCompleteOnNext, true);
+    expect(bad.volumeHoldIntervalMs, 400);
+    expect(ReaderSettings.fromJson({'volumeHoldIntervalMs': 200}).volumeHoldIntervalMs, 200);
     expect(bad.languageCode, 'ko');
     expect(bad.heroArtworkSource, 'custom');
     expect(bad.tapNavigation, true);

@@ -94,6 +94,7 @@ class HypDashboard extends StatefulWidget {
   final int downloadedGalleryBytes;
   final VoidCallback onAnalyze;
   final VoidCallback onClearFinder;
+  final VoidCallback onLeaveFinderAfterSave;
   final int finderClearEpoch;
   final Future<void> Function() onFetch;
   final Future<void> Function() onSaveWork;
@@ -185,6 +186,7 @@ class HypDashboard extends StatefulWidget {
     required this.downloadedGalleryBytes,
     required this.onAnalyze,
     required this.onClearFinder,
+    required this.onLeaveFinderAfterSave,
     required this.finderClearEpoch,
     required this.onFetch,
     required this.onSaveWork,
@@ -598,6 +600,9 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   void _navigate(HypPage page) {
+    if (_page == HypPage.home && page != HypPage.home) {
+      widget.onLeaveFinderAfterSave();
+    }
     _dashboardFocus.requestFocus();
     _openedGroupId = null;
     _lastHomeBack = null;

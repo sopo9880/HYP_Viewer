@@ -51,6 +51,7 @@ import 'core/update_prompt.dart';
 import 'core/release_version.dart';
 import 'core/background_download_runtime.dart';
 import 'core/download_queue_store.dart';
+import 'core/finder_reset_policy.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -144,6 +145,20 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   final Map<String, String> _candidateSourceUrls = {};
   final Map<String, Set<String>> _candidateSourceEvidence = {};
   int finderClearEpoch = 0;
+  final FinderResetPolicy _finderResetPolicy = FinderResetPolicy();
+
+  List<String> _finderSnapshot() => [
+    urlInput.text, commentInput.text, numberInput.text,
+    titleInput.text, authorInput.text,
+    candidates.map((candidate) => candidate.code).join('|'),
+  ];
+
+  void _clearSavedFinderOnTabExit() {
+    if (!busy && _finderResetPolicy.consumeOnLeave(_finderSnapshot())) {
+      _clearFinder();
+    }
+  }
+
   late final Future<void> _settingsLoad;
   bool _updateDismissedThisLaunch = false;
   bool _updateDialogOpen = false;
@@ -490,6 +505,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   void _clearFinder() {
     if (busy) return;
+    _finderResetPolicy.reset();
     setState(() {
       for (final ctrl in [urlInput, commentInput, numberInput,
           titleInput, authorInput]) { ctrl.clear(); }
@@ -890,6 +906,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _status('번호는 숫자 1~12자리로 입력해줘.');
       return;
     }
+    final savedFinderInput = _finderSnapshot();
     setState(() => busy = true);
     final client = http.Client();
     WorkEntry? openAfterSave;
@@ -953,6 +970,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           LibraryBackup.merge(latest,
             LibraryBackup(works: works, collections: const [])), codes));
       if (mounted) setState(() => libraryNavigationEpoch++);
+      // Clear only when a successful save is followed by leaving Home.
+      // Preserve unsaved/new input and the persistent API key.
+      _finderResetPolicy.recordSuccessfulSave(savedFinderInput);
       if (readerSettings.openAfterSave && works.length == 1) {
         openAfterSave = works.single;
       }
@@ -2781,6 +2801,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     downloadedGalleryBytes: downloadedGalleryBytes,
     onAnalyze: _analyze,
     onClearFinder: _clearFinder,
+    onLeaveFinderAfterSave: _clearSavedFinderOnTabExit,
     finderClearEpoch: finderClearEpoch,
     onFetch: _fetch,
     onSaveWork: _saveWork,
