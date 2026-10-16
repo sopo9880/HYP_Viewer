@@ -11,7 +11,7 @@ void main() {
   });
 
   test('double-escaped entities and invalid codepoints are handled safely', () {
-    expect(SocialShareText.decode('&amp;#xb9cc;&nbsp;&quot;A&quot;'),
+    expect(SocialShareText.decode('&amp;#xb9cc;&amp;#xd654;&nbsp;&quot;A&quot;'),
         '만화 "A"');
     expect(SocialShareText.decode('&#x110000;'), '&#x110000;');
     expect(SocialShareText.decode('&#xD800;'), '&#xD800;');

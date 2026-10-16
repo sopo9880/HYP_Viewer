@@ -31,6 +31,8 @@ jobs:
           cache: true
       - name: Generate Flutter Android host project
         run: flutter create --platforms=android --org com.sopo9880 --project-name hyp_viewer .
+      - name: Configure Japanese/Korean offline OCR models
+        run: python3 scripts/configure_android_ocr.py
       - run: flutter pub get
       - name: Generate typed app localizations
         run: flutter gen-l10n
@@ -60,6 +62,9 @@ jobs:
           cache: true
       - name: Generate Flutter Windows host project
         run: flutter create --platforms=windows --org com.sopo9880 --project-name hyp_viewer .
+      - name: Install WebView2 NuGet CLI
+        shell: pwsh
+        run: choco install nuget.commandline -y --no-progress
       - run: flutter pub get
       - name: Generate typed app localizations
         run: flutter gen-l10n

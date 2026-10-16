@@ -58,6 +58,9 @@ jobs:
           cache: true
       - name: Generate Windows host project
         run: flutter create --platforms=windows --org com.sopo9880 --project-name hyp_viewer .
+      - name: Install WebView2 NuGet CLI
+        shell: pwsh
+        run: choco install nuget.commandline -y --no-progress
       - run: flutter pub get
       - run: flutter test
       - run: flutter build windows --release
@@ -93,6 +96,8 @@ jobs:
           cache: true
       - name: Generate Android host project
         run: flutter create --platforms=android --org com.sopo9880 --project-name hyp_viewer .
+      - name: Configure Japanese/Korean offline OCR models
+        run: python3 scripts/configure_android_ocr.py
       - run: flutter pub get
       - run: flutter test
       - name: Configure persistent APK signing
@@ -156,6 +161,17 @@ jobs:
 
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
+
+          Changes in v0.4.6:
+          - Inspect visible public Instagram/YouTube captions, comments,
+            images and user-accessible video frames using in-app WebView.
+          - Support Android image shares, local on-device OCR and opt-in
+            perceptual image matching against saved covers/offline pages.
+          - Require user confirmation of work IDs, never auto-save a
+            visual-only match; preserve private library/backup data.
+          - Keep Android foreground downloads active through the entire
+            approved work queue and report actual page progress.
+          - Decode numeric HTML entities in Instagram share text.
 
           Changes in v0.4.5:
           - Clear link-finder inputs and analysed candidates only after a
