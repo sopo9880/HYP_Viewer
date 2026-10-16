@@ -12,6 +12,8 @@ void main() {
       '묶음 이름', '한 칸 위로', '한 칸 아래로',
       '현재 표지의 작품 읽기', '작품 번호 또는 제목으로 검색',
       '읽는 중', '다른 언어판 찾기', '표지 선택', '작품 메뉴',
+      '기존에 즐겨찾기한 작품을 그대로 확인해.', '완독 표시',
+      '완독 숨기기', '최근 본 작품 펼치기', '최근 본 작품 접기',
     ];
     for (final key in pages) {
       expect(HypI18n.translate(key, 'en'), isNot(key),
@@ -90,6 +92,16 @@ void main() {
       expect(triplet[1], isNot(triplet[0]));
       expect(triplet[2], isNot(triplet[0]));
     }
+    expect(en.homeRecentCountHint(0), contains('0'));
+    expect(ja.downloadsStoredCount(12), contains('12'));
+    expect(en.workCardCreator('Alice'), contains('Alice'));
+    expect(ja.workCardPageProgress(3, 55), contains('55'));
+    expect(en.workCardPageStart(7), contains('7'));
+    expect(ko.readerFinishTitle, isNotEmpty);
+    expect(en.readerFinishTitle, isNot(ko.readerFinishTitle));
+    expect(ja.readerFinishTitle, isNot(ko.readerFinishTitle));
+    expect(en.settingsCompleteConfirmHint, isNotEmpty);
+    expect(ja.settingsVolumeRepeatSpeed, isNotEmpty);
     expect(en.editionFinderProgress(2, 8), contains('2'));
     expect(ja.editionFinderLinkSelected(3), contains('3'));
     expect(ko.readerFailedPage(7), contains('7'));
