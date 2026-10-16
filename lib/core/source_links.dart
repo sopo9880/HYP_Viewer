@@ -178,8 +178,10 @@ class PublicSourcePreview {
         return PublicPreviewResult(body, fullBody: true);
       }
     }
+    final seen = <String>{};
     final text = [decode(title), decode(description)]
-        .where((part) => part.trim().isNotEmpty).join('\n');
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty && seen.add(part)).join('\n');
     if (text.isEmpty) {
       throw const FormatException('게시물의 공개 본문을 확인할 수 없어. '
           '비공개 또는 로그인 제한일 수 있으니 직접 복사해줘.');

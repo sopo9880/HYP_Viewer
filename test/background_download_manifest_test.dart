@@ -17,7 +17,17 @@ void main() {
         .readAsString();
     expect(source, contains('private val ongoingNotificationId = 1'));
     expect(source, contains('private val foregroundChannelId = "flutter_background"'));
-    expect(source, contains('.setProgress(total, done, false)'));
+    expect(source, contains('.setProgress(total, done, preparing)'));
+    expect(source, contains('requestNotificationPermission'));
+    expect(source, contains('notificationPermissionRequest'));
+    final runtime = await File('lib/core/background_download_runtime.dart')
+        .readAsString();
+    expect(runtime, contains('Future<T> holdQueue<T>'));
+    expect(runtime,
+        contains("invokeMethod<bool>('requestNotificationPermission')"));
+    final main = await File('lib/main.dart').readAsString();
+    expect(main, contains('_backgroundDownloads.holdQueue('));
+    expect(main, contains('await _initialLibraryRead.future'));
     expect(source, contains('notificationManager().notify(ongoingNotificationId, notification)'));
     expect(source, contains('KeyEvent.ACTION_UP'));
     expect(source, contains('volumeHandler.postDelayed(tick, 500L)'));

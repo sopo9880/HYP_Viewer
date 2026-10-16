@@ -6,6 +6,29 @@ import 'package:http/testing.dart';
 import 'package:hyp_viewer/core/source_links.dart';
 
 void main() {
+  test('HTML numeric entities in public Instagram metadata are decoded',
+      () async {
+    final client = MockClient((request) async => http.Response.bytes(
+        utf8.encode('<html><meta property="og:title" '
+            'content="&#xc624;&#xb298;&#xb3c4; &amp; &#064;artist" />'
+            '<meta property="og:description" '
+            'content="&#xc624;&#xb298;&#xb3c4; &amp; &#064;artist" /></html>'),
+        200));
+    final result = await PublicSourcePreview(client).fetchDetailed(
+        SourceLink.parse('https://www.instagram.com/p/DeLL6F5n1LS/')!);
+    expect(result.text, '오늘도 & @artist');
+    expect(result.fullBody, false);
+    client.close();
+  });
+
+  test('HTML escaped Instagram URL keeps all query parameters', () {
+    final links = SourceLink.extract(
+      'https://www.instagram.com/p/DeLL6F5n1LS/?img_index=2&amp;srtk=abc');
+    expect(links.single.kind, SourceKind.instagramPost);
+    expect(links.single.uri.queryParameters['img_index'], '2');
+    expect(links.single.uri.queryParameters['srtk'], 'abc');
+  });
+
   test('video, post, reel and direct gallery links all parse', () {
     final cases = <String, SourceKind>{
       'https://www.youtube.com/shorts/abcD123xyZ0': SourceKind.youtubeVideo,
