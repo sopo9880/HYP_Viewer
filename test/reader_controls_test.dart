@@ -123,7 +123,9 @@ void main() {
       home: GalleryReader(
         work: WorkEntry.create(workId: '2711759').copyWith(currentPage: 5),
         archive: _Pages(), diskCacheEnabled: false,
-        settings: const ReaderSettings(hideReaderUiOnOpen: false, preloadPages: 0),
+        settings: const ReaderSettings(
+            hideReaderUiOnOpen: false, preloadPages: 0,
+            confirmCompleteOnNext: false),
         onPageChanged: (_) {},
         onFinishedReading: completed.add,
       ),
@@ -136,6 +138,60 @@ void main() {
       await tester.pump();
     }
     expect(completed, [5]);
+  });
+
+  testWidgets('last page requires explicit NEXT and supports keep reading',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final completed = <int>[];
+    await tester.pumpWidget(_localizedApp(home: GalleryReader(
+      work: WorkEntry.create(workId: '2711759').copyWith(currentPage: 5),
+      archive: _Pages(), diskCacheEnabled: false,
+      settings: const ReaderSettings(hideReaderUiOnOpen: false, preloadPages: 0),
+      onPageChanged: (_) {}, onFinishedReading: completed.add,
+    )));
+    await tester.pumpAndSettle();
+    // Give asynchronous frame decoding the same chance as the legacy test.
+    await tester.runAsync(() async =>
+        Future<void>.delayed(const Duration(milliseconds: 90)));
+    await tester.pumpAndSettle();
+    expect(completed, isEmpty); // reaching final image never auto-completes
+    await tester.tap(find.byKey(const Key('reader-next')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reader-finish-dialog')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('reader-keep-reading')));
+    await tester.pumpAndSettle();
+    expect(completed, isEmpty);
+    await tester.tap(find.byKey(const Key('reader-next')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reader-finish-and-exit')));
+    await tester.pumpAndSettle();
+    expect(completed, [5]);
+  });
+
+  testWidgets('two-page spread final next can exit without completing',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final completed = <int>[];
+    await tester.pumpWidget(_localizedApp(home: GalleryReader(
+      work: WorkEntry.create(workId: '2711759').copyWith(currentPage: 5),
+      archive: _Pages(), diskCacheEnabled: false,
+      settings: const ReaderSettings(hideReaderUiOnOpen: false,
+          preloadPages: 0, twoPageSpread: true),
+      onPageChanged: (_) {}, onFinishedReading: completed.add,
+    )));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async =>
+        Future<void>.delayed(const Duration(milliseconds: 90)));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reader-finish-dialog')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('reader-exit-incomplete')));
+    await tester.pumpAndSettle();
+    expect(completed, isEmpty);
   });
 
   testWidgets('side taps navigate toward physical direction for both settings',

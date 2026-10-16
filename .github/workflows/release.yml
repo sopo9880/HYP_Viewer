@@ -157,6 +157,27 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
+          Changes in v0.4.5:
+          - Clear link-finder inputs and analysed candidates only after a
+            successful shelf save and a switch away from Home. Preserve
+            unsaved edits, new pasted links, user metadata and API keys.
+          - Confirm explicit next-page navigation after the final rendered
+            page: finish and exit, exit without changing the completion flag,
+            or continue. The confirmation can be disabled in settings to
+            retain the prior auto-completion behavior.
+          - Support Android long-press volume-key paging with a 500ms hold
+            threshold and user-selectable 700/400/200ms repeat intervals.
+            Release stops immediately and repeats stop at book boundaries.
+          - Update the active Android foreground download notification with
+            real completed-page progress, pause state, work ID and percentage;
+            completed/failed/cancelled results link back to Downloads.
+          - Repair dynamic Home recent counts, Downloads counts, work-card
+            creator/page/completion fields, finished filters and Favorites
+            subtitles in Korean, English and Japanese.
+          - Preserve 0.x backups, reading history, offline CBZ files and the
+            existing resumable download queue. Device smoke testing of
+            background notification behavior is recommended after CI.
+
           Changes in v0.4.4:
           - Audit UI translations across Korean, English and Japanese screens,
             reader controls, settings, dialogs, tooltips and status messages.

@@ -10,6 +10,8 @@ class ReaderSettings {
   final bool twoPageSpread;
   /// Hide chrome at entry; tap center or press Space to reveal.
   final bool hideReaderUiOnOpen;
+  /// ON: reaching the last page does not mark complete; explicit next asks.
+  final bool confirmCompleteOnNext;
   final bool verticalScrolling;
   final bool showDownloadAction;
   final bool showCoverAction;
@@ -30,6 +32,8 @@ class ReaderSettings {
   final List<String> expandedSettings;
   final bool autoCoverEnabled;
   final bool volumeKeyNavigation;
+  /// Android volume long-press repeat: 200/400/700 milliseconds.
+  final int volumeHoldIntervalMs;
   final bool forceLandscapeForSpreads;
   final bool receiveAnnouncements;
   final bool openAfterSave;
@@ -44,6 +48,7 @@ class ReaderSettings {
     this.nextDirection = 'left',
     this.twoPageSpread = false,
     this.hideReaderUiOnOpen = true,
+    this.confirmCompleteOnNext = true,
     this.verticalScrolling = false,
     this.showDownloadAction = true,
     this.showCoverAction = true,
@@ -64,6 +69,7 @@ class ReaderSettings {
     this.expandedSettings = const [],
     this.autoCoverEnabled = false,
     this.volumeKeyNavigation = false,
+    this.volumeHoldIntervalMs = 400,
     this.forceLandscapeForSpreads = false,
     this.receiveAnnouncements = false,
     this.openAfterSave = false,
@@ -81,6 +87,7 @@ class ReaderSettings {
     String? nextDirection,
     bool? twoPageSpread,
     bool? hideReaderUiOnOpen,
+    bool? confirmCompleteOnNext,
     bool? verticalScrolling,
     bool? showDownloadAction,
     bool? showCoverAction,
@@ -101,6 +108,7 @@ class ReaderSettings {
     List<String>? expandedSettings,
     bool? autoCoverEnabled,
     bool? volumeKeyNavigation,
+    int? volumeHoldIntervalMs,
     bool? forceLandscapeForSpreads,
     bool? receiveAnnouncements,
     bool? openAfterSave,
@@ -114,6 +122,7 @@ class ReaderSettings {
     nextDirection: nextDirection ?? this.nextDirection,
     twoPageSpread: twoPageSpread ?? this.twoPageSpread,
     hideReaderUiOnOpen: hideReaderUiOnOpen ?? this.hideReaderUiOnOpen,
+    confirmCompleteOnNext: confirmCompleteOnNext ?? this.confirmCompleteOnNext,
     verticalScrolling: verticalScrolling ?? this.verticalScrolling,
     showDownloadAction: showDownloadAction ?? this.showDownloadAction,
     showCoverAction: showCoverAction ?? this.showCoverAction,
@@ -134,6 +143,7 @@ class ReaderSettings {
     expandedSettings: expandedSettings ?? this.expandedSettings,
     autoCoverEnabled: autoCoverEnabled ?? this.autoCoverEnabled,
     volumeKeyNavigation: volumeKeyNavigation ?? this.volumeKeyNavigation,
+    volumeHoldIntervalMs: volumeHoldIntervalMs ?? this.volumeHoldIntervalMs,
     forceLandscapeForSpreads: forceLandscapeForSpreads ?? this.forceLandscapeForSpreads,
     receiveAnnouncements: receiveAnnouncements ?? this.receiveAnnouncements,
     openAfterSave: openAfterSave ?? this.openAfterSave,
@@ -149,6 +159,7 @@ class ReaderSettings {
     'nextDirection': nextDirection,
     'twoPageSpread': twoPageSpread,
     'hideReaderUiOnOpen': hideReaderUiOnOpen,
+    'confirmCompleteOnNext': confirmCompleteOnNext,
     'verticalScrolling': verticalScrolling,
     'showDownloadAction': showDownloadAction,
     'showCoverAction': showCoverAction,
@@ -169,6 +180,7 @@ class ReaderSettings {
     'expandedSettings': expandedSettings,
     'autoCoverEnabled': autoCoverEnabled,
     'volumeKeyNavigation': volumeKeyNavigation,
+    'volumeHoldIntervalMs': volumeHoldIntervalMs,
     'forceLandscapeForSpreads': forceLandscapeForSpreads,
     'receiveAnnouncements': receiveAnnouncements,
     'openAfterSave': openAfterSave,
@@ -185,6 +197,7 @@ class ReaderSettings {
         nextDirection: data['nextDirection'] == 'right' ? 'right' : 'left',
         twoPageSpread: data['twoPageSpread'] == true,
         hideReaderUiOnOpen: data['hideReaderUiOnOpen'] != false,
+        confirmCompleteOnNext: data['confirmCompleteOnNext'] != false,
         verticalScrolling: data['verticalScrolling'] == true,
         showDownloadAction: data['showDownloadAction'] != false,
         showCoverAction: data['showCoverAction'] != false,
@@ -197,6 +210,9 @@ class ReaderSettings {
         preferredEditionLanguage: const {'auto', 'recent', 'korean', 'japanese', 'english', 'chinese'}.contains(data['preferredEditionLanguage']) ? data['preferredEditionLanguage'] as String : 'auto',
         autoCoverEnabled: data['autoCoverEnabled'] == true,
         volumeKeyNavigation: data['volumeKeyNavigation'] == true,
+        volumeHoldIntervalMs: data['volumeHoldIntervalMs'] is int &&
+            const {200, 400, 700}.contains(data['volumeHoldIntervalMs'])
+            ? (data['volumeHoldIntervalMs'] as int) : 400,
         forceLandscapeForSpreads: data['forceLandscapeForSpreads'] == true,
         receiveAnnouncements: data['receiveAnnouncements'] == true,
         openAfterSave: data['openAfterSave'] == true,

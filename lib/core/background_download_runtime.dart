@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_background/flutter_background.dart';
+import 'package:flutter/services.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -16,6 +17,27 @@ class BackgroundDownloadRuntime {
   int _leases = 0;
   Future<void> _serial = Future<void>.value();
   final _desktop = _DesktopDownloadTray();
+  static const MethodChannel _downloadChannel =
+      MethodChannel('hyp_viewer/download_notification');
+  void Function()? _onOpenDownloads;
+
+  void setDownloadsNavigationHandler(void Function()? handler) {
+    _onOpenDownloads = handler;
+    _downloadChannel.setMethodCallHandler(handler == null ? null : (call) async {
+      if (call.method == 'openDownloads') {
+        await consumePendingDownloadsNavigation();
+        _onOpenDownloads?.call();
+      }
+    });
+  }
+
+  Future<bool> consumePendingDownloadsNavigation() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _downloadChannel.invokeMethod<bool>('consumeOpenDownloads') ?? false;
+    } on MissingPluginException { return false; }
+    on PlatformException { return false; }
+  }
 
   bool get hasTransfers => _leases > 0;
 
@@ -26,6 +48,9 @@ class BackgroundDownloadRuntime {
   Future<void> acquire() => _exclusive(() async {
     if (_leases == 0) {
       if (Platform.isAndroid) {
+        try { await _downloadChannel.invokeMethod<void>('clearResult'); }
+        on MissingPluginException { /* Non-Android test runner. */ }
+        on PlatformException { /* Notification disabled by the user. */ }
         final ok = await FlutterBackground.initialize(
           androidConfig: FlutterBackgroundAndroidConfig(
             notificationTitle: 'HYP Viewer',
@@ -61,14 +86,46 @@ class BackgroundDownloadRuntime {
     }
   });
 
-  Future<void> setProgress(int done, int total) async {
-    if (!Platform.isWindows || total <= 0) return;
-    try { await windowManager.setProgressBar(done / total); } catch (_) {}
+  /// On Android update the flutter_background FOREGROUND notification ID=1,
+  /// not an additional ongoing notification. The native side owns its UI.
+  Future<void> setProgress(int done, int total, {
+    String workId = '', bool paused = false, int queuedCount = 0,
+    bool isUpdate = false, String language = 'ko',
+  }) async {
+    if (total <= 0) return;
+    if (Platform.isAndroid) {
+      try {
+        await _downloadChannel.invokeMethod<void>('updateProgress', {
+          'done': done.clamp(0, total).toInt(), 'total': total,
+          'workId': workId, 'paused': paused,
+          'queued': queuedCount, 'update': isUpdate, 'language': language,
+        });
+      } on MissingPluginException { /* Old Android runner. */ }
+      on PlatformException { /* System notification permission blocked. */ }
+    } else if (Platform.isWindows) {
+      try { await windowManager.setProgressBar(done / total); } catch (_) {}
+    }
+  }
+
+  Future<void> showDownloadResult(String workId, {
+    required bool success, bool cancelled = false, String language = 'ko',
+  }) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _downloadChannel.invokeMethod<void>('showResult', {
+        'workId': workId, 'success': success,
+        'cancelled': cancelled, 'language': language,
+      });
+    } on MissingPluginException { /* Old Android runner. */ }
+    on PlatformException { /* Notifications are optional. */ }
   }
 
   Future<void> clearProgress() async {
-    if (!Platform.isWindows) return;
-    try { await windowManager.setProgressBar(0); } catch (_) {}
+    if (Platform.isWindows) {
+      try { await windowManager.setProgressBar(0); } catch (_) {}
+    }
+    // Never cancel notification ID=1 here; it belongs to the active
+    // foreground service and is removed when the last lease is released.
   }
 
   Future<void> _exclusive(Future<void> Function() callback) {

@@ -51,6 +51,7 @@ import 'core/update_prompt.dart';
 import 'core/release_version.dart';
 import 'core/background_download_runtime.dart';
 import 'core/download_queue_store.dart';
+import 'core/finder_reset_policy.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -143,7 +144,27 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   final Map<String, CandidateVerification> _candidateCache = {};
   final Map<String, String> _candidateSourceUrls = {};
   final Map<String, Set<String>> _candidateSourceEvidence = {};
+  int downloadNavigationEpoch = 0;
+  String activeDownloadWorkId = '';
   int finderClearEpoch = 0;
+  final FinderResetPolicy _finderResetPolicy = FinderResetPolicy();
+
+  List<String> _finderSnapshot() => [
+    urlInput.text, commentInput.text, numberInput.text,
+    titleInput.text, authorInput.text,
+    candidates.map((candidate) => candidate.code).join('|'),
+  ];
+
+  void _openDownloadsFromNotification() {
+    if (mounted) setState(() => downloadNavigationEpoch++);
+  }
+
+  void _clearSavedFinderOnTabExit() {
+    if (!busy && _finderResetPolicy.consumeOnLeave(_finderSnapshot())) {
+      _clearFinder();
+    }
+  }
+
   late final Future<void> _settingsLoad;
   bool _updateDismissedThisLaunch = false;
   bool _updateDialogOpen = false;
@@ -161,6 +182,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     _loadVersionInfo();
     _loadHeroArtwork();
     _listenForSharedShorts();
+    _backgroundDownloads.setDownloadsNavigationHandler(_openDownloadsFromNotification);
+    unawaited(_backgroundDownloads.consumePendingDownloadsNavigation().then((open) {
+      if (open && mounted) _openDownloadsFromNotification();
+    }));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _automaticUpdateCheck();
       if (Platform.isAndroid) _showSecurityNoticeOnce();
@@ -490,6 +515,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   void _clearFinder() {
     if (busy) return;
+    _finderResetPolicy.reset();
     setState(() {
       for (final ctrl in [urlInput, commentInput, numberInput,
           titleInput, authorInput]) { ctrl.clear(); }
@@ -890,6 +916,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _status('번호는 숫자 1~12자리로 입력해줘.');
       return;
     }
+    final savedFinderInput = _finderSnapshot();
     setState(() => busy = true);
     final client = http.Client();
     WorkEntry? openAfterSave;
@@ -953,6 +980,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           LibraryBackup.merge(latest,
             LibraryBackup(works: works, collections: const [])), codes));
       if (mounted) setState(() => libraryNavigationEpoch++);
+      // Clear only when a successful save is followed by leaving Home.
+      // Preserve unsaved/new input and the persistent API key.
+      _finderResetPolicy.recordSuccessfulSave(savedFinderInput);
       if (readerSettings.openAfterSave && works.length == 1) {
         openAfterSave = works.single;
       }
@@ -2069,6 +2099,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final client = http.Client();
     GalleryTransfer? transfer;
     var holdsBackground = false;
+    var completedSuccessfully = false;
+    var cancelledByUser = false;
     try {
       if (rightsApproved && await galleryStore.exists(work.workId)) {
         return true;
@@ -2127,7 +2159,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         downloadedGalleryBytes = 0;
         totalGalleryPages = remote.pageCount;
         isReaderTransferPaused = false;
+        activeDownloadWorkId = work.workId;
       });
+      unawaited(_backgroundDownloads.setProgress(0, remote.pageCount,
+          workId: work.workId, queuedCount: _downloadQueue.length,
+          language: readerSettings.languageCode));
       final downloaded = await ReaderGalleryDownloader(galleryStore).download(
         work.workId, remote,
         transfer: transfer,
@@ -2138,16 +2174,20 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               totalGalleryPages = total;
               downloadedGalleryBytes = bytes;
             });
-            unawaited(_backgroundDownloads.setProgress(completed, total));
+            unawaited(_backgroundDownloads.setProgress(completed, total,
+                workId: work.workId, queuedCount: _downloadQueue.length,
+                language: readerSettings.languageCode));
           }
         },
       );
       await _downloadJobs.remove(work.workId);
+      completedSuccessfully = true;
       if (mounted) setState(() => coverEpoch++);
       _status('오프라인 저장 완료! ' +
           downloaded.pageCount.toString() + '페이지를 인터넷 없이 읽을 수 있어.');
       return true;
     } on DownloadCancelled {
+      cancelledByUser = true;
       await _downloadJobs.remove(work.workId);
       _status('다운로드가 취소됐어. 기존 오프라인 파일은 유지했어.');
       return false;
@@ -2159,7 +2199,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       if (holdsBackground) {
         await _backgroundDownloads.clearProgress();
         await _backgroundDownloads.release();
+        await _backgroundDownloads.showDownloadResult(work.workId,
+          success: completedSuccessfully, cancelled: cancelledByUser,
+          language: readerSettings.languageCode);
       }
+      activeDownloadWorkId = '';
       if (mounted && transfer != null) {
         setState(() {
           galleryDownloadToken = null;
@@ -2184,6 +2228,12 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       active.pause();
     }
     if (mounted) setState(() => isReaderTransferPaused = active.isPaused);
+    unawaited(_backgroundDownloads.setProgress(
+      downloadedGalleryPages, totalGalleryPages,
+      workId: activeDownloadWorkId,
+      paused: active.isPaused, queuedCount: _downloadQueue.length,
+      language: readerSettings.languageCode,
+    ));
   }
 
 
@@ -2408,6 +2458,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final client = http.Client();
     GalleryTransfer? transfer;
     var holdsBackground = false;
+    var completedSuccessfully = false;
+    var cancelledByUser = false;
     try {
       final remote = await OnlineGalleryProvider(client)
           .load(pattern, work.workId);
@@ -2445,7 +2497,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         totalGalleryPages = remote.pageCount;
         downloadedGalleryBytes = 0;
         isReaderTransferPaused = false;
+        activeDownloadWorkId = work.workId;
       });
+      unawaited(_backgroundDownloads.setProgress(0, remote.pageCount,
+          workId: work.workId, queuedCount: _downloadQueue.length,
+          language: readerSettings.languageCode));
       final archive = await ReaderGalleryDownloader(galleryStore).download(
         work.workId, remote,
         transfer: transfer,
@@ -2456,16 +2512,20 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               totalGalleryPages = total;
               downloadedGalleryBytes = bytes;
             });
-            unawaited(_backgroundDownloads.setProgress(completed, total));
+            unawaited(_backgroundDownloads.setProgress(completed, total,
+                workId: work.workId, queuedCount: _downloadQueue.length,
+                language: readerSettings.languageCode));
           }
         },
       );
       await _downloadJobs.remove(work.workId);
+      completedSuccessfully = true;
       if (mounted) setState(() => coverEpoch++);
       _status('다운로드 완료: ' + archive.pageCount.toString() +
           '장. 이제 인터넷 없이도 읽을 수 있어.');
       return true;
     } on DownloadCancelled {
+      cancelledByUser = true;
       _status('다운로드가 취소됐어. 기존 오프라인 파일은 유지했어.');
       await _downloadJobs.remove(work.workId);
       return false;
@@ -2477,7 +2537,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       if (holdsBackground) {
         await _backgroundDownloads.clearProgress();
         await _backgroundDownloads.release();
+        await _backgroundDownloads.showDownloadResult(work.workId,
+          success: completedSuccessfully, cancelled: cancelledByUser,
+          language: readerSettings.languageCode);
       }
+      activeDownloadWorkId = '';
       if (transfer != null && mounted) {
         setState(() {
           galleryDownloadToken = null;
@@ -2580,7 +2644,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         onProgress: (value) {
           if (mounted) {
             setState(() => updateProgress = value.clamp(0.0, 1.0));
-            unawaited(_backgroundDownloads.setProgress((value * 100).round(), 100));
+            unawaited(_backgroundDownloads.setProgress(
+                (value * 100).round(), 100,
+                isUpdate: true, language: readerSettings.languageCode));
           }
         },
         onStatus: (status) {
@@ -2741,6 +2807,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     for (final ctrl in [urlInput, commentInput, numberInput, titleInput, authorInput, apiKeyInput, onlineSourceInput]) {
       ctrl.dispose();
     }
+    _backgroundDownloads.setDownloadsNavigationHandler(null);
     super.dispose();
   }
 
@@ -2769,6 +2836,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     message: message,
     navigationEpoch: navigationEpoch,
     libraryNavigationEpoch: libraryNavigationEpoch,
+    downloadNavigationEpoch: downloadNavigationEpoch,
     editionLookupId: _requestedEditionId,
     editionLookupEpoch: _editionRequestEpoch,
     appVersion: appVersion,
@@ -2781,6 +2849,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     downloadedGalleryBytes: downloadedGalleryBytes,
     onAnalyze: _analyze,
     onClearFinder: _clearFinder,
+    onLeaveFinderAfterSave: _clearSavedFinderOnTabExit,
     finderClearEpoch: finderClearEpoch,
     onFetch: _fetch,
     onSaveWork: _saveWork,
