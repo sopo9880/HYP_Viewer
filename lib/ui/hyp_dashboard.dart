@@ -98,6 +98,8 @@ class HypDashboard extends StatefulWidget {
   final VoidCallback? onLeaveFinderAfterSave;
   final int finderClearEpoch;
   final Future<void> Function() onFetch;
+  final Future<void> Function()? onInspectSource;
+  final Future<void> Function()? onInspectImages;
   final Future<void> Function() onSaveWork;
   final Future<void> Function(String code) onQuickAddNumber;
   final Future<void> Function(OnlineSearchWork) onSaveOnlineSearchWork;
@@ -191,6 +193,8 @@ class HypDashboard extends StatefulWidget {
     this.onLeaveFinderAfterSave,
     required this.finderClearEpoch,
     required this.onFetch,
+    this.onInspectSource,
+    this.onInspectImages,
     required this.onSaveWork,
     required this.onQuickAddNumber,
     required this.onSaveOnlineSearchWork,
@@ -1258,6 +1262,8 @@ class _HypDashboardState extends State<HypDashboard> {
         onClear: widget.onClearFinder,
         clearEpoch: widget.finderClearEpoch,
         onFetch: widget.onFetch,
+        onInspectSource: widget.onInspectSource,
+        onInspectImages: widget.onInspectImages,
         onOpenYoutube: widget.onOpenShortsInput,
         onSave: widget.onSaveWork,
         onQuickAddNumber: widget.onQuickAddNumber,

@@ -27,6 +27,7 @@ import 'core/android_controls.dart';
 import 'core/hitomi_reader_link.dart';
 import 'core/hitomi_gallery.dart';
 import 'ui/gallery_reader.dart';
+import 'ui/visual_source_inspector.dart';
 import 'ui/cover_picker.dart';
 import 'ui/cover_cropper.dart';
 import 'ui/work_editor.dart';
@@ -536,20 +537,123 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _listenForSharedShorts() async {
-    await SharedShorts.start((url) {
+    await SharedShorts.start((shared) {
       if (!mounted) return;
+      final links = SourceLink.extract(shared);
+      final inspectable = links.where((link) =>
+          link.kind == SourceKind.instagramPost ||
+          link.kind == SourceKind.instagramReel ||
+          link.kind == SourceKind.youtubeVideo ||
+          link.kind == SourceKind.youtubePost).firstOrNull;
       setState(() {
-        urlInput.text = url;
+        urlInput.text = shared;
         navigationEpoch += 1;
         candidates = [];
         commentInput.clear();
         numberInput.clear();
         titleInput.clear();
         authorInput.clear();
-        message = '공유 내용을 받았어. 작품 번호와 공개 내용을 분석할게.';
+        message = '공유 내용을 받았어. 링크·본문·이미지를 분석할게.';
       });
-      _fetch();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (inspectable != null) {
+          unawaited(_openVisualInspector(
+              source: inspectable, sharedText: shared));
+        } else {
+          unawaited(_fetch());
+        }
+      });
+    }, onSharedImages: (paths) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => navigationEpoch++);
+        unawaited(_openVisualInspector(initialImagePaths: paths));
+      });
     });
+  }
+
+  Future<void> _openVisualInspector({
+    SourceLink? source,
+    String sharedText = '',
+    List<String> initialImagePaths = const [],
+  }) async {
+    if (!mounted) return;
+    final selection = await showDialog<VisualInspectionResult>(
+      context: context,
+      builder: (_) => VisualSourceInspector(
+        source: source,
+        sharedText: sharedText,
+        initialImagePaths: initialImagePaths,
+        works: library.works,
+        covers: coverStore,
+        galleries: galleryStore,
+        verifyCandidates: _verifyCandidateCodes,
+      ),
+    );
+    if (selection == null || !mounted) return;
+    final extra = selection.text.trim();
+    final previous = commentInput.text.trim();
+    setState(() {
+      if (selection.sourceUrl.isNotEmpty) {
+        urlInput.text = selection.sourceUrl;
+      }
+      if (extra.isNotEmpty) {
+        commentInput.text = [previous, extra]
+            .where((text) => text.isNotEmpty).toSet().join('\n\n');
+      }
+      if (selection.workId.isNotEmpty) numberInput.text = selection.workId;
+      if (selection.title.isNotEmpty) titleInput.text = selection.title;
+      if (selection.author.isNotEmpty) authorInput.text = selection.author;
+      navigationEpoch++;
+    });
+    _analyze();
+    if (selection.workId.isNotEmpty) {
+      // Image/text matching never automatically saves a work. Preserve the
+      // candidate and let the existing Finder/verification UI review it.
+      final id = selection.workId;
+      if (mounted) setState(() {
+        if (!candidates.any((candidate) => candidate.code == id)) {
+          candidates = [
+            NumberCandidate(code: id,
+                evidence: '이미지·본문 후보 (사용자 확인 필요)',
+                source: selection.sourceUrl, score: 70,
+                rule: 'visual-candidate'),
+            ...candidates,
+          ];
+        }
+        if (selection.sourceUrl.isNotEmpty) {
+          _candidateSourceUrls[id] = selection.sourceUrl;
+          _candidateSourceEvidence.putIfAbsent(id,
+              () => <String>{}).add(selection.sourceUrl);
+        }
+        message = selection.verified
+            ? '작품 번호가 존재하는 걸 확인했어. 내용이 맞는지 확인 후 저장해줘.'
+            : '번호 후보를 입력했어. 검증 후 저장해줘.';
+      });
+    } else {
+      _status('본문·댓글·이미지 OCR 결과를 Finder로 가져왔어. '
+          '후보를 확인하거나 수동으로 번호를 입력해줘.');
+    }
+  }
+
+  Future<void> _inspectInputSource() async {
+    final raw = urlInput.text.trim();
+    final links = SourceLink.extract(raw);
+    final supported = links.where((link) =>
+        link.kind == SourceKind.instagramPost ||
+        link.kind == SourceKind.instagramReel ||
+        link.kind == SourceKind.youtubeVideo ||
+        link.kind == SourceKind.youtubePost).firstOrNull;
+    if (supported == null) {
+      _status('Instagram 게시물·릴스 또는 YouTube 영상·게시물 링크를 입력해줘.');
+      return;
+    }
+    await _openVisualInspector(source: supported, sharedText: raw);
+  }
+
+  Future<void> _inspectLocalImages() async {
+    await _openVisualInspector();
   }
 
   Future<void> _load() async {
@@ -2920,6 +3024,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     onLeaveFinderAfterSave: _clearSavedFinderOnTabExit,
     finderClearEpoch: finderClearEpoch,
     onFetch: _fetch,
+    onInspectSource: _inspectInputSource,
+    onInspectImages: _inspectLocalImages,
     onSaveWork: _saveWork,
     onQuickAddNumber: _quickAddNumber,
     onSaveOnlineSearchWork: _saveOnlineSearchWork,
