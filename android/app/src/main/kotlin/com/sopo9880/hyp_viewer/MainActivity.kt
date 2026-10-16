@@ -1,6 +1,11 @@
 package com.sopo9880.hyp_viewer
 
 import android.app.Activity
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -35,6 +40,8 @@ class MainActivity : FlutterActivity() {
     private var pendingExportFiles: List<Map<String, String>> = emptyList()
     private var pendingSecurityUpdate: MethodChannel.Result? = null
     private var volumeNavigationEnabled = false
+    private val notificationPermissionRequest = 8423
+    private var pendingNotificationPermission: MethodChannel.Result? = null
     private val downloadChannelName = "hyp_viewer/download_notification"
     private var downloadChannel: MethodChannel? = null
     private var pendingOpenDownloads = false
@@ -49,6 +56,13 @@ class MainActivity : FlutterActivity() {
 
     private fun notificationManager() =
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    private fun notificationsAllowed(): Boolean {
+        val runtimeGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+        return runtimeGranted && NotificationManagerCompat.from(this).areNotificationsEnabled()
+    }
 
     private fun downloadsPendingIntent(): PendingIntent {
         val open = Intent(this, MainActivity::class.java).apply {
@@ -73,8 +87,8 @@ class MainActivity : FlutterActivity() {
 
     private fun updateDownloadProgress(args: Map<*, *>) {
         val total = ((args["total"] as? Number)?.toInt() ?: 0).coerceAtLeast(0)
-        if (total == 0) return
         val done = ((args["done"] as? Number)?.toInt() ?: 0).coerceIn(0, total)
+        val preparing = total == 0
         val paused = args["paused"] == true
         val isUpdate = args["update"] == true
         val queued = ((args["queued"] as? Number)?.toInt() ?: 0).coerceAtLeast(0)
@@ -92,9 +106,9 @@ class MainActivity : FlutterActivity() {
             else -> if (paused) "HYP Viewer · 다운로드 일시정지" else "HYP Viewer · 다운로드 중"
         }
         val text = when (language) {
-            "en" -> if (isUpdate) "App update: $percent%" else "Work #$id · $done/$total pages · $percent%"
-            "ja" -> if (isUpdate) "アプリ更新: $percent%" else "作品 #$id · $done/${total}ページ · $percent%"
-            else -> if (isUpdate) "앱 업데이트 · $percent%" else "작품 #$id · $done/${total}페이지 · $percent%"
+            "en" -> if (preparing) "Preparing work #$id" else if (isUpdate) "App update: $percent%" else "Work #$id · $done/$total pages · $percent%"
+            "ja" -> if (preparing) "作品 #$id を準備中" else if (isUpdate) "アプリ更新: $percent%" else "作品 #$id · $done/${total}ページ · $percent%"
+            else -> if (preparing) "작품 #$id 준비 중" else if (isUpdate) "앱 업데이트 · $percent%" else "작품 #$id · $done/${total}페이지 · $percent%"
         }
         val subText = if (queued == 0) null else when (language) {
             "en" -> "$queued works queued"
@@ -110,7 +124,7 @@ class MainActivity : FlutterActivity() {
             .setContentIntent(downloadsPendingIntent())
             .setOnlyAlertOnce(true)
             .setOngoing(true)
-            .setProgress(total, done, false)
+            .setProgress(total, done, preparing)
             .build()
         try {
             notificationManager().notify(ongoingNotificationId, notification)
@@ -228,6 +242,26 @@ class MainActivity : FlutterActivity() {
             downloadChannelName)
         downloadChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
+                "requestNotificationPermission" -> {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                        notificationsAllowed()) {
+                        result.success(notificationsAllowed())
+                    } else if (pendingNotificationPermission != null) {
+                        result.error("permission_in_progress",
+                            "Notification permission is already requested", null)
+                    } else {
+                        pendingNotificationPermission = result
+                        try {
+                            ActivityCompat.requestPermissions(this,
+                                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                                notificationPermissionRequest)
+                        } catch (_: Exception) {
+                            pendingNotificationPermission = null
+                            result.success(false)
+                        }
+                    }
+                }
+                "notificationsEnabled" -> result.success(notificationsAllowed())
                 "updateProgress" -> {
                     val arguments = call.arguments as? Map<*, *>
                     if (arguments != null) updateDownloadProgress(arguments)
@@ -351,6 +385,16 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == notificationPermissionRequest) {
+            pendingNotificationPermission?.success(notificationsAllowed())
+            pendingNotificationPermission = null
         }
     }
 

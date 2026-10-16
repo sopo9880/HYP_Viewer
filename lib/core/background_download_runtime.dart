@@ -20,6 +20,22 @@ class BackgroundDownloadRuntime {
   static const MethodChannel _downloadChannel =
       MethodChannel('hyp_viewer/download_notification');
   void Function()? _onOpenDownloads;
+  bool? _notificationsAllowed;
+
+  /// Android 13+ may keep foreground transfers running while hiding their
+  /// notification from the drawer when the user denies notification access.
+  bool? get notificationsAllowed => _notificationsAllowed;
+
+  /// Own ONE lease for an entire batch, including metadata lookup between
+  /// works. Per-work nested leases must not stop the Android service.
+  Future<T> holdQueue<T>(Future<T> Function() process) async {
+    await acquire();
+    try {
+      return await process();
+    } finally {
+      await release();
+    }
+  }
 
   void setDownloadsNavigationHandler(void Function()? handler) {
     _onOpenDownloads = handler;
@@ -48,6 +64,14 @@ class BackgroundDownloadRuntime {
   Future<void> acquire() => _exclusive(() async {
     if (_leases == 0) {
       if (Platform.isAndroid) {
+        try {
+          _notificationsAllowed = await _downloadChannel
+              .invokeMethod<bool>('requestNotificationPermission');
+        } on MissingPluginException {
+          _notificationsAllowed = null;
+        } on PlatformException {
+          _notificationsAllowed = false;
+        }
         try { await _downloadChannel.invokeMethod<void>('clearResult'); }
         on MissingPluginException { /* Non-Android test runner. */ }
         on PlatformException { /* Notification disabled by the user. */ }
@@ -92,18 +116,24 @@ class BackgroundDownloadRuntime {
     String workId = '', bool paused = false, int queuedCount = 0,
     bool isUpdate = false, String language = 'ko',
   }) async {
-    if (total <= 0) return;
+    // total=0 is a real indeterminate progress state while downloading
+    // metadata. A spinner is better than hiding the notification progress.
+    if (total < 0) return;
     if (Platform.isAndroid) {
       try {
         await _downloadChannel.invokeMethod<void>('updateProgress', {
-          'done': done.clamp(0, total).toInt(), 'total': total,
+          'done': total == 0 ? 0 : done.clamp(0, total).toInt(),
+          'total': total,
           'workId': workId, 'paused': paused,
           'queued': queuedCount, 'update': isUpdate, 'language': language,
         });
       } on MissingPluginException { /* Old Android runner. */ }
       on PlatformException { /* System notification permission blocked. */ }
     } else if (Platform.isWindows) {
-      try { await windowManager.setProgressBar(done / total); } catch (_) {}
+      try {
+        await windowManager.setProgressBar(
+            total == 0 ? 0 : done.clamp(0, total) / total);
+      } catch (_) {}
     }
   }
 
