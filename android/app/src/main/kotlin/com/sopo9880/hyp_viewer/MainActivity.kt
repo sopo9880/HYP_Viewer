@@ -93,13 +93,13 @@ class MainActivity : FlutterActivity() {
         }
         val text = when (language) {
             "en" -> if (isUpdate) "App update: $percent%" else "Work #$id · $done/$total pages · $percent%"
-            "ja" -> if (isUpdate) "アプリ更新: $percent%" else "作品 #$id · $done/$totalページ · $percent%"
-            else -> if (isUpdate) "앱 업데이트 · $percent%" else "작품 #$id · $done/$total페이지 · $percent%"
+            "ja" -> if (isUpdate) "アプリ更新: $percent%" else "作品 #$id · $done/${total}ページ · $percent%"
+            else -> if (isUpdate) "앱 업데이트 · $percent%" else "작품 #$id · $done/${total}페이지 · $percent%"
         }
         val subText = if (queued == 0) null else when (language) {
             "en" -> "$queued works queued"
-            "ja" -> "待機中: $queued作品"
-            else -> "대기 중인 작품 $queued개"
+            "ja" -> "待機中: ${queued}作品"
+            else -> "대기 중인 작품 ${queued}개"
         }
         ensureChannel(foregroundChannelId, "HYP Viewer downloads")
         val notification = NotificationCompat.Builder(this, foregroundChannelId)

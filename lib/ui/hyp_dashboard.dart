@@ -421,12 +421,20 @@ class _HypDashboardState extends State<HypDashboard> {
       _search.clear();
     }
     if (oldWidget.libraryNavigationEpoch != widget.libraryNavigationEpoch) {
-      if (_page == HypPage.home) widget.onLeaveFinderAfterSave?.call();
+      if (_page == HypPage.home) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) widget.onLeaveFinderAfterSave?.call();
+        });
+      }
       _page = HypPage.library;
       _search.clear();
     }
     if (oldWidget.downloadNavigationEpoch != widget.downloadNavigationEpoch) {
-      if (_page == HypPage.home) widget.onLeaveFinderAfterSave?.call();
+      if (_page == HypPage.home) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) widget.onLeaveFinderAfterSave?.call();
+        });
+      }
       _page = HypPage.downloads;
       _search.clear();
     }

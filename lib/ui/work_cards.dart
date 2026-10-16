@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../core/i18n.dart';
 import '../l10n/app_localizations.dart';
+import '../l10n/app_localizations_ko.dart';
 
 import '../core/work.dart';
 import 'hyp_theme.dart';
@@ -99,7 +100,9 @@ class HypWorkCard extends StatelessWidget {
                     ((totalPages ?? work.totalPages) - 1))
                     .clamp(0.0, 0.99).toDouble()
             : null;
-    final labels = AppLocalizations.of(context)!;
+    // Embedded cards and widget tests may not install the delegate.
+    // The real app supplies all three locales; Korean is a safe fallback.
+    final labels = AppLocalizations.of(context) ?? AppLocalizationsKo();
     return Material(
       color: HypColors.surface,
       borderRadius: BorderRadius.circular(15),
