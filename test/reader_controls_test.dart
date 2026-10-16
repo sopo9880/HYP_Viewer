@@ -152,6 +152,10 @@ void main() {
       onPageChanged: (_) {}, onFinishedReading: completed.add,
     )));
     await tester.pumpAndSettle();
+    // Give asynchronous frame decoding the same chance as the legacy test.
+    await tester.runAsync(() async =>
+        Future<void>.delayed(const Duration(milliseconds: 90)));
+    await tester.pumpAndSettle();
     expect(completed, isEmpty); // reaching final image never auto-completes
     await tester.tap(find.byKey(const Key('reader-next')));
     await tester.pumpAndSettle();
@@ -178,6 +182,9 @@ void main() {
           preloadPages: 0, twoPageSpread: true),
       onPageChanged: (_) {}, onFinishedReading: completed.add,
     )));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async =>
+        Future<void>.delayed(const Duration(milliseconds: 90)));
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
     await tester.pumpAndSettle();

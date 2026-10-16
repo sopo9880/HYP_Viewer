@@ -421,6 +421,7 @@ class _HypDashboardState extends State<HypDashboard> {
       _search.clear();
     }
     if (oldWidget.libraryNavigationEpoch != widget.libraryNavigationEpoch) {
+      if (_page == HypPage.home) widget.onLeaveFinderAfterSave?.call();
       _page = HypPage.library;
       _search.clear();
     }

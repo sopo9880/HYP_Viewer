@@ -210,7 +210,8 @@ class ReaderSettings {
         preferredEditionLanguage: const {'auto', 'recent', 'korean', 'japanese', 'english', 'chinese'}.contains(data['preferredEditionLanguage']) ? data['preferredEditionLanguage'] as String : 'auto',
         autoCoverEnabled: data['autoCoverEnabled'] == true,
         volumeKeyNavigation: data['volumeKeyNavigation'] == true,
-        volumeHoldIntervalMs: const {200, 400, 700}.contains(data['volumeHoldIntervalMs'])
+        volumeHoldIntervalMs: data['volumeHoldIntervalMs'] is int &&
+            const {200, 400, 700}.contains(data['volumeHoldIntervalMs'])
             ? (data['volumeHoldIntervalMs'] as int) : 400,
         forceLandscapeForSpreads: data['forceLandscapeForSpreads'] == true,
         receiveAnnouncements: data['receiveAnnouncements'] == true,

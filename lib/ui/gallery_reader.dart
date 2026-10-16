@@ -455,6 +455,11 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+    if (event is KeyRepeatEvent && _currentUnit == _units - 1 &&
+        widget.settings.confirmCompleteOnNext) {
+      // Held keyboard keys cannot repeatedly reopen a finish dialog.
+      return KeyEventResult.handled;
+    }
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.space) {
       _toggleChrome();

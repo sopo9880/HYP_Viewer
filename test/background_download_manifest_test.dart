@@ -11,4 +11,17 @@ void main() {
     expect(xml, contains('android:foregroundServiceType="dataSync"'));
     expect(xml, contains('POST_NOTIFICATIONS'));
   });
+
+  test('Android download progress replaces the existing foreground notification', () async {
+    final source = await File('android/app/src/main/kotlin/com/sopo9880/hyp_viewer/MainActivity.kt')
+        .readAsString();
+    expect(source, contains('private val ongoingNotificationId = 1'));
+    expect(source, contains('private val foregroundChannelId = "flutter_background"'));
+    expect(source, contains('.setProgress(total, done, false)'));
+    expect(source, contains('notificationManager().notify(ongoingNotificationId, notification)'));
+    expect(source, contains('KeyEvent.ACTION_UP'));
+    expect(source, contains('volumeHandler.postDelayed(tick, 500L)'));
+    expect(source, contains('"pauseVolumeRepeat"'));
+    expect(source, contains('"consumeOpenDownloads"'));
+  });
 }

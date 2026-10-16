@@ -24,7 +24,10 @@ class BackgroundDownloadRuntime {
   void setDownloadsNavigationHandler(void Function()? handler) {
     _onOpenDownloads = handler;
     _downloadChannel.setMethodCallHandler(handler == null ? null : (call) async {
-      if (call.method == 'openDownloads') _onOpenDownloads?.call();
+      if (call.method == 'openDownloads') {
+        await consumePendingDownloadsNavigation();
+        _onOpenDownloads?.call();
+      }
     });
   }
 
