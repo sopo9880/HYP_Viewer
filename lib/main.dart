@@ -2099,6 +2099,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final client = http.Client();
     GalleryTransfer? transfer;
     var holdsBackground = false;
+    var completedSuccessfully = false;
+    var cancelledByUser = false;
     try {
       if (rightsApproved && await galleryStore.exists(work.workId)) {
         return true;
@@ -2179,11 +2181,13 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         },
       );
       await _downloadJobs.remove(work.workId);
+      completedSuccessfully = true;
       if (mounted) setState(() => coverEpoch++);
       _status('오프라인 저장 완료! ' +
           downloaded.pageCount.toString() + '페이지를 인터넷 없이 읽을 수 있어.');
       return true;
     } on DownloadCancelled {
+      cancelledByUser = true;
       await _downloadJobs.remove(work.workId);
       _status('다운로드가 취소됐어. 기존 오프라인 파일은 유지했어.');
       return false;
@@ -2195,7 +2199,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       if (holdsBackground) {
         await _backgroundDownloads.clearProgress();
         await _backgroundDownloads.release();
+        await _backgroundDownloads.showDownloadResult(work.workId,
+          success: completedSuccessfully, cancelled: cancelledByUser,
+          language: readerSettings.languageCode);
       }
+      activeDownloadWorkId = '';
       if (mounted && transfer != null) {
         setState(() {
           galleryDownloadToken = null;
