@@ -42,6 +42,10 @@ class ReaderSettings {
   final bool startupUpdatePrompt;
   final String snoozedUpdateVersion;
   final String snoozedUpdateUntil;
+  /// Starting state of the local-file checkbox in both delete dialogs.
+  final bool deleteLocalFilesByDefault;
+  /// Windows: close window instead of keeping the application in the tray.
+  final bool closeWindowExitsApp;
   final String preferredEditionLanguage; // auto, recent, korean, japanese, english, chinese
 
   const ReaderSettings({
@@ -79,6 +83,8 @@ class ReaderSettings {
     this.snoozedUpdateVersion = '',
     this.snoozedUpdateUntil = '',
     this.preferredEditionLanguage = 'auto',
+    this.deleteLocalFilesByDefault = true,
+    this.closeWindowExitsApp = false,
   });
 
   bool get reverse => nextDirection == 'right';
@@ -118,6 +124,8 @@ class ReaderSettings {
     String? snoozedUpdateVersion,
     String? snoozedUpdateUntil,
     String? preferredEditionLanguage,
+    bool? deleteLocalFilesByDefault,
+    bool? closeWindowExitsApp,
   }) => ReaderSettings(
     nextDirection: nextDirection ?? this.nextDirection,
     twoPageSpread: twoPageSpread ?? this.twoPageSpread,
@@ -153,6 +161,8 @@ class ReaderSettings {
     snoozedUpdateVersion: snoozedUpdateVersion ?? this.snoozedUpdateVersion,
     snoozedUpdateUntil: snoozedUpdateUntil ?? this.snoozedUpdateUntil,
     preferredEditionLanguage: preferredEditionLanguage ?? this.preferredEditionLanguage,
+    deleteLocalFilesByDefault: deleteLocalFilesByDefault ?? this.deleteLocalFilesByDefault,
+    closeWindowExitsApp: closeWindowExitsApp ?? this.closeWindowExitsApp,
   );
 
   Map<String, Object> toJson() => {
@@ -190,11 +200,15 @@ class ReaderSettings {
     'snoozedUpdateVersion': snoozedUpdateVersion,
     'snoozedUpdateUntil': snoozedUpdateUntil,
     'preferredEditionLanguage': preferredEditionLanguage,
+    'deleteLocalFilesByDefault': deleteLocalFilesByDefault,
+    'closeWindowExitsApp': closeWindowExitsApp,
   };
 
   factory ReaderSettings.fromJson(Map<String, dynamic> data) =>
       ReaderSettings(
         nextDirection: data['nextDirection'] == 'right' ? 'right' : 'left',
+        deleteLocalFilesByDefault: data['deleteLocalFilesByDefault'] != false,
+        closeWindowExitsApp: data['closeWindowExitsApp'] == true,
         twoPageSpread: data['twoPageSpread'] == true,
         hideReaderUiOnOpen: data['hideReaderUiOnOpen'] != false,
         confirmCompleteOnNext: data['confirmCompleteOnNext'] != false,

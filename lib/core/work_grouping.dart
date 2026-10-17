@@ -25,6 +25,11 @@ class WorkGrouping {
   // Both 第3話 and 3話 are common Japanese chapter labels.
   static final _japaneseChapter = RegExp(r'(?<!\d)(?:第\s*)?(\d{1,3})\s*[話巻部]');
   static final _trailingNumber = RegExp(r'(?:[\s\-_.#]+)(\d{1,3})\s*$');
+  static final _afterStory = RegExp(
+    r'(?:[\s~\-_.:：()\[\]【】]*(?:after[\s\-_]*story|epilogue|후일담|에필로그|後日談|外伝|外傳|番外編|외전)[\s~\-_.:：()\[\]【】]*)$',
+    caseSensitive: false);
+  static bool _isAfterStory(String title) =>
+      _afterStory.hasMatch(title.split('|').first.trim());
 
   static int? _chapterInText(String text) {
     for (final pattern in [_chapter, _prefixChapter, _japaneseChapter]) {
@@ -69,7 +74,8 @@ class WorkGrouping {
     var s = rawTitle.split('|').first.toLowerCase().trim();
     // Metadata titles often start with a circle or artist in brackets.
     s = s.replaceFirst(RegExp(r'^(?:\[[^\]]{1,75}\]\s*)+'), '');
-    s = s.replaceAll(_chapter, ' ')
+    s = s.replaceAll(_afterStory, ' ')
+        .replaceAll(_chapter, ' ')
         .replaceAll(_prefixChapter, ' ')
         .replaceAll(_japaneseChapter, ' ')
         .replaceAll(_trailingNumber, ' ')
@@ -147,6 +153,9 @@ class WorkGrouping {
 
   /// Original chapter order can still be explicitly overridden by groupOrder.
   static int compareChapters(WorkEntry a, WorkEntry b) {
+    final aAfter = _isAfterStory(a.title);
+    final bAfter = _isAfterStory(b.title);
+    if (aAfter != bAfter) return aAfter ? 1 : -1;
     final ae = episodeNumber(a), be = episodeNumber(b);
     if (ae != null && be != null && ae != be) return ae.compareTo(be);
     if (ae != null && be == null) {
@@ -223,12 +232,16 @@ class WorkGrouping {
               _sameKnownCreator(w, reference));
       final exactNames = cluster.every((w) =>
           normalizedSeries(w.title) == normalizedSeries(reference.title));
-      final confidence = exactNames && chapters.length >= 2 && uniqueChapters
+      final hasAfterStory = cluster.any((w) => _isAfterStory(w.title));
+      final confidence = exactNames && hasAfterStory && matchingCreators
+          ? 95 : exactNames && chapters.length >= 2 && uniqueChapters
           ? 95 : exactNames && matchingCreators ? 89 : exactNames ? 77 : 70;
       final title = existing.isNotEmpty && base.groupTitle.isNotEmpty
           ? base.groupTitle : normalizedSeries(base.title);
       final reason = existing.isNotEmpty
           ? '기존 시리즈와 제목·제작 정보가 일치하는 새 작품'
+          : exactNames && hasAfterStory
+          ? '본편과 후일담·외전의 제목 및 제작 정보 확인 필요'
           : exactNames && chapters.length >= 2 && uniqueChapters
           ? '같은 제목의 서로 다른 회차'
           : exactNames && matchingCreators

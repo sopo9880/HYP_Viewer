@@ -5,6 +5,7 @@ import 'package:flutter_background/flutter_background.dart';
 import 'package:flutter/services.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'i18n.dart';
 
 /// Only active user-approved transfers hold an Android foreground-service
 /// notification. Android OS/force-stop may interrupt it: the persisted queue
@@ -39,6 +40,7 @@ class BackgroundDownloadRuntime {
 
   void setDownloadsNavigationHandler(void Function()? handler) {
     _onOpenDownloads = handler;
+    _desktop.setDownloadsNavigationHandler(handler);
     _downloadChannel.setMethodCallHandler(handler == null ? null : (call) async {
       if (call.method == 'openDownloads') {
         await consumePendingDownloadsNavigation();
@@ -56,6 +58,14 @@ class BackgroundDownloadRuntime {
   }
 
   bool get hasTransfers => _leases > 0;
+
+  void setWindowExitConfirmationHandler(Future<bool> Function()? handler) {
+    _desktop.setWindowExitConfirmationHandler(handler);
+  }
+
+  Future<void> setCloseWindowExits(bool enabled) async {
+    if (Platform.isWindows) await _desktop.setCloseWindowExits(enabled);
+  }
 
   Future<void> configureDesktop() async {
     if (Platform.isWindows) await _desktop.initialize();
@@ -130,6 +140,8 @@ class BackgroundDownloadRuntime {
       } on MissingPluginException { /* Old Android runner. */ }
       on PlatformException { /* System notification permission blocked. */ }
     } else if (Platform.isWindows) {
+      await _desktop.updateProgress(done, total, workId: workId,
+          queuedCount: queuedCount, paused: paused);
       try {
         await windowManager.setProgressBar(
             total == 0 ? 0 : done.clamp(0, total) / total);
@@ -165,13 +177,24 @@ class BackgroundDownloadRuntime {
   }
 }
 
-/// Closing a Windows window while transferring hides it to the system tray,
-/// not the task manager. Explicit "Exit" keeps resumable pages for next launch.
+/// Persistent Windows tray. X hides by default, with an explicit exit menu.
 class _DesktopDownloadTray with WindowListener, TrayListener {
   bool _initialized = false;
-  bool _iconVisible = false;
-  bool _finishedWhileHidden = false;
+  bool _exitOnClose = false;
+  bool _closing = false;
+  void Function()? _openDownloads;
+  Future<bool> Function()? _confirmExit;
   int _active = 0;
+  String _progress = '진행 중인 다운로드 없음';
+  DateTime? _lastMenuUpdate;
+
+  void setDownloadsNavigationHandler(void Function()? handler) {
+    _openDownloads = handler;
+  }
+
+  void setWindowExitConfirmationHandler(Future<bool> Function()? handler) {
+    _confirmExit = handler;
+  }
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -179,63 +202,109 @@ class _DesktopDownloadTray with WindowListener, TrayListener {
     windowManager.addListener(this);
     trayManager.addListener(this);
     await windowManager.setPreventClose(true);
+    await trayManager.setIcon('assets/icons/hyp_tray.ico');
+    await trayManager.setToolTip('HYP Viewer');
     _initialized = true;
+    await _refreshMenu();
+  }
+
+  Future<void> setCloseWindowExits(bool enabled) async {
+    await initialize();
+    _exitOnClose = enabled;
+    await _refreshMenu();
+  }
+
+  String _local(String ko, String en, String ja) {
+    final language = HypLanguage.selected.value;
+    return language == 'en' ? en : language == 'ja' ? ja : ko;
+  }
+
+  Future<void> _refreshMenu() async {
+    if (!_initialized) return;
+    await trayManager.setContextMenu(Menu(items: [
+      MenuItem(key: 'show', label: _local('HYP Viewer 열기',
+          'Open HYP Viewer', 'HYP Viewerを開く')),
+      MenuItem.separator(),
+      MenuItem(key: 'progress', label: _progress, disabled: true),
+      MenuItem(key: 'downloads', label: _local('다운로드 관리 열기',
+          'Open Downloads Manager', 'ダウンロード管理を開く')),
+      MenuItem.separator(),
+      MenuItem(key: 'exit', label: _local('완전 종료',
+          'Quit Completely', '完全に終了')),
+    ]));
   }
 
   Future<void> started() async {
     await initialize();
-    _finishedWhileHidden = false;
-    if (_iconVisible) { _active++; return; }
-    await trayManager.setIcon('assets/icons/hyp_tray.ico');
-    await trayManager.setToolTip('HYP Viewer · 다운로드 중');
-    await trayManager.setContextMenu(Menu(items: [
-      MenuItem(key: 'show', label: 'HYP Viewer 열기'),
-      MenuItem.separator(),
-      MenuItem(key: 'exit', label: '다운로드 중단하고 종료'),
-    ]));
-    _iconVisible = true;
     _active++;
+    _progress = _local('다운로드 준비 중', 'Preparing download',
+        'ダウンロードを準備中');
+    await _refreshMenu();
+  }
+
+  Future<void> updateProgress(int done, int total, {
+    String workId = '', int queuedCount = 0, bool paused = false,
+  }) async {
+    if (!_initialized) return;
+    final percent = total > 0 ? (done * 100 ~/ total).clamp(0, 100) : null;
+    _progress = [
+      if (workId.isNotEmpty) '#$workId',
+      if (paused) _local('일시정지', 'Paused', '一時停止'),
+      if (percent == null) _local('다운로드 준비 중',
+          'Preparing download', 'ダウンロードを準備中') else '$percent% ($done/$total)',
+      if (queuedCount > 0) _local('대기 $queuedCount개',
+          '$queuedCount queued', '待機 $queuedCount 件'),
+    ].join(' · ');
+    final now = DateTime.now();
+    if (_lastMenuUpdate != null &&
+        now.difference(_lastMenuUpdate!) < const Duration(seconds: 1)) return;
+    _lastMenuUpdate = now;
+    await _refreshMenu();
   }
 
   Future<void> finished() async {
     if (_active > 0) _active--;
-    if (_active > 0) return;
-    if (await windowManager.isVisible()) {
-      await _hideIcon();
-    } else {
-      // Keep a recovery route after the last job finishes while hidden.
-      _finishedWhileHidden = true;
-      if (_iconVisible) {
-        await trayManager.setToolTip('HYP Viewer · 다운로드 완료');
-        await trayManager.setContextMenu(Menu(items: [
-          MenuItem(key: 'show', label: 'HYP Viewer 열기'),
-          MenuItem.separator(),
-          MenuItem(key: 'exit', label: '종료'),
-        ]));
-      }
+    if (_active == 0) {
+      _progress = _local('진행 중인 다운로드 없음',
+          'No active downloads', '進行中のダウンロードなし');
+      await _refreshMenu();
     }
   }
 
-  Future<void> _hideIcon() async {
-    if (!_iconVisible) return;
-    await trayManager.destroy();
-    _iconVisible = false;
-    _finishedWhileHidden = false;
+  /// Never silently interrupt an active transfer, even when the X setting
+  /// requests complete shutdown. A cancelled dialog leaves the app open.
+  Future<void> _requestExit({bool fromTray = false}) async {
+    if (_closing) return;
+    _closing = true;
+    try {
+      if (_active > 0) {
+        if (fromTray) await _show();
+        final confirm = _confirmExit;
+        if (confirm == null || !await confirm()) return;
+      }
+      await windowManager.destroy();
+    } finally {
+      _closing = false;
+    }
   }
 
   @override
-  void onWindowClose() async {
-    if (_active > 0 || _finishedWhileHidden) {
-      await windowManager.hide();
+  void onWindowClose() {
+    if (_exitOnClose) {
+      unawaited(_requestExit());
     } else {
-      await windowManager.destroy();
+      unawaited(windowManager.hide());
     }
   }
 
   Future<void> _show() async {
     await windowManager.show();
     await windowManager.focus();
-    if (_active == 0) await _hideIcon();
+  }
+
+  Future<void> _openDownloadsManager() async {
+    await _show();
+    _openDownloads?.call();
   }
 
   @override
@@ -245,10 +314,10 @@ class _DesktopDownloadTray with WindowListener, TrayListener {
   void onTrayMenuItemClick(MenuItem item) {
     if (item.key == 'show') {
       unawaited(_show());
+    } else if (item.key == 'downloads') {
+      unawaited(_openDownloadsManager());
     } else if (item.key == 'exit') {
-      // Closing intentionally stops the Dart process. The persisted queue and
-      // complete page files are read back on the next app launch.
-      unawaited(windowManager.destroy());
+      unawaited(_requestExit(fromTray: true));
     }
   }
 }

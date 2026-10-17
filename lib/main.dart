@@ -28,6 +28,8 @@ import 'core/hitomi_reader_link.dart';
 import 'core/hitomi_gallery.dart';
 import 'ui/gallery_reader.dart';
 import 'ui/visual_source_inspector.dart';
+import 'ui/instagram_source_inspector.dart';
+import 'ui/image_search_placeholder.dart';
 import 'ui/cover_picker.dart';
 import 'ui/cover_cropper.dart';
 import 'ui/work_editor.dart';
@@ -162,6 +164,28 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     if (mounted) setState(() => downloadNavigationEpoch++);
   }
 
+  Future<bool> _confirmExitWhileDownloading() async {
+    if (!mounted) return false;
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialog) => AlertDialog(
+        title: const HypText('다운로드 중 종료 확인'),
+        content: const HypText('진행 중인 다운로드를 중단하고 앱을 완전히 종료할까? 저장된 대기열은 다음 실행 때 복구돼.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const HypText('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const HypText('완전 종료'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
   void _clearSavedFinderOnTabExit() {
     if (!busy && _finderResetPolicy.consumeOnLeave(_finderSnapshot())) {
       _clearFinder();
@@ -186,6 +210,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     _loadHeroArtwork();
     _listenForSharedShorts();
     _backgroundDownloads.setDownloadsNavigationHandler(_openDownloadsFromNotification);
+    if (Platform.isWindows) {
+      _backgroundDownloads.setWindowExitConfirmationHandler(
+        _confirmExitWhileDownloading);
+    }
     unawaited(_backgroundDownloads.consumePendingDownloadsNavigation().then((open) {
       if (open && mounted) _openDownloadsFromNotification();
     }));
@@ -311,6 +339,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     try {
       final result = await readerSettingsStorage.load();
       if (mounted) setState(() => readerSettings = result);
+      unawaited(_backgroundDownloads.setCloseWindowExits(result.closeWindowExitsApp));
       HypLanguage.selected.value = result.languageCode;
       _syncNoticesTimer();
       if (result.receiveAnnouncements) {
@@ -375,6 +404,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     try {
       await readerSettingsStorage.save(updated);
       if (mounted) setState(() => readerSettings = updated);
+      unawaited(_backgroundDownloads.setCloseWindowExits(updated.closeWindowExitsApp));
       HypLanguage.selected.value = updated.languageCode;
       _syncNoticesTimer();
       if (updated.receiveAnnouncements && !wasSubscribed) {
@@ -543,8 +573,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       final inspectable = links.where((link) =>
           link.kind == SourceKind.instagramPost ||
           link.kind == SourceKind.instagramReel ||
-          link.kind == SourceKind.youtubeVideo ||
-          link.kind == SourceKind.youtubePost).firstOrNull;
+          false).firstOrNull;
       setState(() {
         urlInput.text = shared;
         navigationEpoch += 1;
@@ -553,12 +582,12 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         numberInput.clear();
         titleInput.clear();
         authorInput.clear();
-        message = '공유 내용을 받았어. 링크·본문·이미지를 분석할게.';
+        message = '공유 내용을 받았어. 링크에서 작품 번호를 찾을게.';
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (inspectable != null) {
-          unawaited(_openVisualInspector(
+          unawaited(_openInstagramInspector(
               source: inspectable, sharedText: shared));
         } else {
           unawaited(_fetch());
@@ -568,9 +597,27 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         setState(() => navigationEpoch++);
-        unawaited(_openVisualInspector(initialImagePaths: paths));
+        unawaited(_inspectLocalImages());
       });
     });
+  }
+
+  Future<void> _openInstagramInspector({
+    required SourceLink source,
+    String sharedText = '',
+  }) async {
+    if (!mounted) return;
+    final selected = await showDialog<VisualInspectionResult>(
+      context: context,
+      builder: (_) => InstagramSourceInspector(
+        source: source, sharedText: sharedText));
+    if (selected == null || !mounted) return;
+    setState(() {
+      if (selected.sourceUrl.isNotEmpty) urlInput.text = selected.sourceUrl;
+      if (selected.text.isNotEmpty) commentInput.text = selected.text;
+      navigationEpoch++;
+    });
+    _analyze();
   }
 
   Future<void> _openVisualInspector({
@@ -649,11 +696,21 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _status('Instagram 게시물·릴스 또는 YouTube 영상·게시물 링크를 입력해줘.');
       return;
     }
-    await _openVisualInspector(source: supported, sharedText: raw);
+    if (supported.kind == SourceKind.instagramPost ||
+        supported.kind == SourceKind.instagramReel) {
+      await _openInstagramInspector(source: supported, sharedText: raw);
+    } else {
+      await _openVisualInspector(source: supported, sharedText: raw);
+    }
   }
 
   Future<void> _inspectLocalImages() async {
-    await _openVisualInspector();
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const ImageSearchPlaceholder(),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -851,7 +908,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       // Public preview metadata never contains Instagram's full comments.
       // Open the in-app reader to inspect visible content and let the user
       // scroll, re-read or paste caption/comment text where permitted.
-      await _openVisualInspector(source: links.single, sharedText: normalized);
+      await _openInstagramInspector(source: links.single, sharedText: normalized);
       return;
     }
     setState(() => busy = true);
@@ -1364,6 +1421,17 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   Future<void> _reorderGroup(String groupId, List<String> orderedIds) async {
     await _commitLibrary((latest) =>
         WorkEditionService.reorderSeries(latest, groupId, orderedIds));
+  }
+
+  Future<void> _removeGroupChapters(String groupId, List<String> ids) async {
+    await _commitLibrary((latest) =>
+        WorkEditionService.removeFromSeries(latest, groupId, ids));
+  }
+
+  Future<void> _moveGroupChapters(String source, String target,
+      List<String> ids) async {
+    await _commitLibrary((latest) =>
+        WorkEditionService.moveBetweenSeries(latest, source, target, ids));
   }
 
   Future<void> _deleteSelectedOffline(List<String> workIds) async {
@@ -2424,7 +2492,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       return;
     }
     if (!mounted) return;
-    var alsoDeleteFiles = false;
+    var alsoDeleteFiles = readerSettings.deleteLocalFilesByDefault;
     final approved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -2511,7 +2579,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _status('다운로드 중인 작품은 완료하거나 취소한 뒤 삭제해줘.');
       return false;
     }
-    var deleteFiles = false;
+    var deleteFiles = readerSettings.deleteLocalFilesByDefault;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialog) => StatefulBuilder(
@@ -2537,7 +2605,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                   value: deleteFiles,
                   contentPadding: EdgeInsets.zero,
                   title: const HypText('로컬 파일도 함께 삭제'),
-                  subtitle: const HypText('기본 OFF. 켜면 이 작품들의 '
+                  subtitle: const HypText('설정 기본값 적용. 체크하면 이 작품들의 '
                       '다운로드 파일과 표지 미리보기도 삭제해.'),
                   onChanged: (v) => update(() => deleteFiles = v == true),
                 ),
@@ -2989,6 +3057,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       ctrl.dispose();
     }
     _backgroundDownloads.setDownloadsNavigationHandler(null);
+    _backgroundDownloads.setWindowExitConfirmationHandler(null);
     super.dispose();
   }
 
@@ -3073,6 +3142,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     onUngroupWorks: _ungroupWorks,
     onRenameGroup: _renameGroup,
     onReorderGroup: _reorderGroup,
+    onRemoveGroupChapters: _removeGroupChapters,
+    onMoveGroupChapters: _moveGroupChapters,
     onExportSelectedDownloads: _exportSelectedDownloads,
     onDeleteSelectedOffline: _deleteSelectedOffline,
     onToggleDownloadPause: _pauseOrResumeReaderDownload,

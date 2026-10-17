@@ -1,3 +1,5 @@
+// Image-matching implementations are kept dormant for a future release.
+// ignore_for_file: unused_element, unused_field
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -759,7 +761,6 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
     final size = MediaQuery.sizeOf(context);
     final width = size.width > 1020 ? 1000.0 : size.width * .96;
     final height = size.height > 880 ? 830.0 : size.height * .95;
-    final hasImages = _images.isNotEmpty;
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       child: SizedBox(width: width, height: height,
@@ -769,7 +770,7 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
               Row(children: [
                 const Icon(Icons.travel_explore, color: HypColors.lightPurple),
                 const SizedBox(width: 9),
-                Expanded(child: Text(loc.inspectorTitle,
+                Expanded(child: HypText('링크 고급 분석',
                     style: Theme.of(context).textTheme.titleLarge)),
                 IconButton(
                   tooltip: HypI18n.t(context, '닫기'),
@@ -788,28 +789,12 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
                       const SizedBox(height: 6),
                       _browser(),
                       const SizedBox(height: 7),
-                      Wrap(spacing: 7, runSpacing: 6, children: [
-                        FilledButton.tonalIcon(
-                          onPressed: _busy || !_webReady ? null :
-                              () => _run(_readWeb),
-                          icon: const Icon(Icons.refresh, size: 18),
-                          label: Text(loc.inspectorRereadComments)),
-                        OutlinedButton.icon(
-                          onPressed: _busy || !_webReady ? null :
-                              _importRenderedImages,
-                          icon: const Icon(Icons.image_search_outlined),
-                          label: Text(loc.inspectorExtractPostImages)),
-                        OutlinedButton.icon(
-                          onPressed: _busy || !_webReady ? null :
-                              _captureCurrent,
-                          icon: const Icon(Icons.screenshot_monitor),
-                          label: Text(loc.inspectorCaptureCurrent)),
-                        if (_isVideo) OutlinedButton.icon(
-                          onPressed: _busy || !_webReady ? null :
-                              _sampleFrames,
-                          icon: const Icon(Icons.movie_filter_outlined),
-                          label: Text(loc.inspectorSampleVideo)),
-                      ]),
+                      FilledButton.tonalIcon(
+                        onPressed: _busy || !_webReady ? null :
+                            () => _run(_readWeb),
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: Text(loc.inspectorRereadComments),
+                      ),
                       const SizedBox(height: 7),
                       Text(loc.inspectorScrollBeforeRead,
                         style: Theme.of(context).textTheme.bodySmall),
@@ -861,147 +846,11 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
                         ),
                       ),
                     ],
-                    Wrap(spacing: 8, runSpacing: 6, children: [
-                      OutlinedButton.icon(
-                        onPressed: _busy ? null : _pickImages,
-                        icon: const Icon(Icons.add_photo_alternate_outlined),
-                        label: Text(loc.inspectorChooseImage)),
-                      if (widget.source != null)
-                        OutlinedButton.icon(
-                          onPressed: _busy ? null : () => _run(_readWeb),
-                          icon: const Icon(Icons.article_outlined),
-                          label: Text(loc.inspectorReadComments)),
-                    ]),
-                    if (hasImages) ...[
-                      const SizedBox(height: 10),
-                      Text(loc.inspectorImagesAnalyzed(_images.length),
-                        style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 6),
-                      SizedBox(height: 108,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _images.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(width: 7),
-                          itemBuilder: (context, index) => Tooltip(
-                            message: _imageSources[index],
-                            child: InkWell(
-                              onTap: () => setState(() =>
-                                  _selectedImage = index),
-                              child: Container(
-                                width: 100, height: 100,
-                                padding: const EdgeInsets.all(3),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(width:
-                                    _selectedImage == index ? 3 : 1,
-                                    color: _selectedImage == index
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).dividerColor),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(7),
-                                  child: Image.memory(_images[index],
-                                    fit: BoxFit.cover),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Text(loc.inspectorSelectedImage(_selectedImage + 1),
-                        style: Theme.of(context).textTheme.bodySmall),
-                    ] else _emptyResult(Icons.add_photo_alternate_outlined,
-                        loc.inspectorImageFirst, loc.inspectorImageFirstHint),
-                    const SizedBox(height: 12),
-                    SegmentedButton<bool>(
-                      segments: [
-                        ButtonSegment(value: true,
-                          icon: const Icon(Icons.public),
-                          label: Text(loc.inspectorRemoteTab)),
-                        ButtonSegment(value: false,
-                          icon: const Icon(Icons.collections_bookmark_outlined),
-                          label: Text(loc.inspectorLocalTab)),
-                      ],
-                      selected: {_showRemote},
-                      onSelectionChanged: (value) =>
-                          setState(() => _showRemote = value.first),
-                    ),
-                    const SizedBox(height: 10),
-                    if (_showRemote) ...[
-                      Text(loc.inspectorRemoteIntro),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _sauceKey,
-                        obscureText: true,
-                        enableSuggestions: false,
-                        autocorrect: false,
-                        decoration: InputDecoration(
-                          border: const OutlineInputBorder(),
-                          labelText: loc.inspectorSauceKey,
-                          helperText: loc.inspectorSauceHint,
-                          prefixIcon: const Icon(Icons.key),
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-                      FilledButton.icon(
-                        key: const Key('search-external-images'),
-                        onPressed: _busy || !hasImages ? null : _searchRemote,
-                        icon: const Icon(Icons.travel_explore),
-                        label: Text(loc.inspectorSearchExternal),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(loc.inspectorUploadPrivacy,
-                        style: Theme.of(context).textTheme.bodySmall),
-                      if (_remoteHits.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Text(loc.inspectorRemoteCount(_remoteHits.length),
-                          style: Theme.of(context).textTheme.titleMedium),
-                        _resultGrid(_remoteHits, width,
-                            (match) => _remoteCard(match, loc)),
-                      ] else if (_remoteSearched)
-                        _emptyResult(Icons.search_off,
-                          loc.inspectorRemoteEmpty,
-                          loc.inspectorRemoteEmptyHint),
-                    ] else ...[
-                      Text(loc.inspectorLocalIntro),
-                      const SizedBox(height: 7),
-                      Wrap(spacing: 8, runSpacing: 7, children: [
-                        OutlinedButton.icon(
-                          onPressed: _busy ? null : _rebuildIndex,
-                          icon: const Icon(Icons.dataset_outlined),
-                          label: Text(loc.inspectorBuildVisualIndex)),
-                        FilledButton.icon(
-                          key: const Key('search-local-images'),
-                          onPressed: _busy || !hasImages ? null : _analyze,
-                          icon: const Icon(Icons.manage_search),
-                          label: Text(loc.inspectorLocalOcrSearch)),
-                      ]),
-                      if (_indexTotal > 0) ...[
-                        const SizedBox(height: 6),
-                        LinearProgressIndicator(value: _indexTotal == 0
-                          ? 0 : _indexProgress / _indexTotal),
-                        Text(loc.inspectorIndexingProgress(
-                          _indexProgress, _indexTotal, _indexed)),
-                      ],
-                      if (_recognizedText.isNotEmpty)
-                        ExpansionTile(
-                          title: Text(loc.inspectorOcrResult),
-                          children: [
-                            SelectableText(_recognizedText, maxLines: 10),
-                          ],
-                        ),
-                      if (_localMatches.isNotEmpty) ...[
-                        const SizedBox(height: 11),
-                        Text(loc.inspectorLocalCount(_localMatches.length),
-                          style: Theme.of(context).textTheme.titleMedium),
-                        _resultGrid(_localMatches, width,
-                            (item) => _localCard(item, loc)),
-                      ] else if (_localSearched)
-                        _emptyResult(Icons.search_off,
-                          loc.inspectorLocalEmpty,
-                          loc.inspectorLocalEmptyHint),
-                    ],
+                    // Image search is intentionally disabled in v0.4.7.
+                    // The standalone image page explains that it is coming soon.
+                    const SizedBox(height: 8),
+                    const HypText(
+                      '이미지 검색은 준비 중이야. 이번 버전에서는 이미지 검색을 실행하지 않아.'),
                     const SizedBox(height: 15),
                     TextField(
                       controller: _query, maxLength: 150,

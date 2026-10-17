@@ -58,6 +58,8 @@ jobs:
           cache: true
       - name: Generate Windows host project
         run: flutter create --platforms=windows --org com.sopo9880 --project-name hyp_viewer .
+      - name: Prevent duplicate Windows app processes
+        run: python scripts/patch_windows_single_instance.py
       - name: Install WebView2 NuGet CLI
         shell: pwsh
         run: choco install nuget.commandline -y --no-progress

@@ -105,6 +105,8 @@ class HypWorkGroupCard extends StatelessWidget {
                         padding: EdgeInsets.zero,
                         onSelected: onAction,
                         itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'members',
+                              child: HypText('구성원 추가·제외·이동')),
                           PopupMenuItem(value: 'rename',
                               child: HypText('묶음 이름 수정')),
                           PopupMenuItem(value: 'reorder',
