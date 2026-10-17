@@ -845,6 +845,15 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       }
       return;
     }
+    if (links.length == 1 &&
+        (links.single.kind == SourceKind.instagramPost ||
+         links.single.kind == SourceKind.instagramReel)) {
+      // Public preview metadata never contains Instagram's full comments.
+      // Open the in-app reader to inspect visible content and let the user
+      // scroll, re-read or paste caption/comment text where permitted.
+      await _openVisualInspector(source: links.single, sharedText: normalized);
+      return;
+    }
     setState(() => busy = true);
     final client = http.Client();
     final blocks = <String>[];

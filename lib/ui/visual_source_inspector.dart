@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:http/http.dart' as http;
 
@@ -15,6 +17,7 @@ import '../l10n/app_localizations.dart';
 import '../core/local_visual_index.dart';
 import '../core/media_image_fetcher.dart';
 import '../core/online_search.dart';
+import '../core/reverse_image_search.dart';
 import '../core/social_share_text.dart';
 import '../core/social_web_capture.dart';
 import '../core/source_links.dart';
@@ -62,6 +65,17 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
   final List<String> _imageSources = [];
   final List<String> _warnings = [];
   final TextEditingController _query = TextEditingController();
+  final TextEditingController _sauceKey = TextEditingController();
+  final TextEditingController _manualText = TextEditingController();
+  final List<RemoteImageHit> _remoteHits = [];
+  final List<LocalVisualMatch> _localMatches = [];
+  final Map<String, Future<Uint8List?>> _coverPreview = {};
+  bool _remoteSearched = false;
+  bool _localSearched = false;
+  bool _showRemote = true;
+  bool _loginWarningAdded = false;
+  int _selectedImage = 0;
+  String _publicPreview = '';
   final List<VisualCandidate> _candidates = [];
   final Map<String, CandidateVerification> _verification = {};
   bool _busy = false;
@@ -77,6 +91,8 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
   String get _collectedText => [
     widget.sharedText,
     _snapshot?.combinedText ?? '',
+    _publicPreview,
+    _manualText.text,
     _recognizedText,
   ].where((text) => text.trim().isNotEmpty).toSet().join('\n\n');
 
@@ -96,6 +112,8 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
   @override
   void dispose() {
     _query.dispose();
+    _sauceKey.dispose();
+    _manualText.dispose();
     super.dispose();
   }
 
@@ -165,28 +183,64 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
   }
 
   Future<void> _readWeb() async {
-    final loc = AppLocalizations.of(context)!;
     final controller = _web;
     if (controller == null || !_webReady) return;
+    final loc = AppLocalizations.of(context)!;
     try {
       final value = await controller.evaluateJavascript(
           source: SocialWebCapture.javascript);
-      final result = SocialWebCapture.parse(value);
-      if (result == null) {
-        if (mounted) setState(() => _warnings.add(
-            loc.inspectorPageReadError));
+      final capture = SocialWebCapture.parse(value);
+      if (!mounted) return;
+      if (capture == null) {
+        setState(() => _warnings.add(loc.inspectorPageReadError));
+        await _fetchPublicPreview();
         return;
       }
-      if (!mounted) return;
-      setState(() => _snapshot = result);
+      setState(() {
+        _snapshot = capture;
+        if (capture.loginRequired && !_loginWarningAdded) {
+          _loginWarningAdded = true;
+          _warnings.add(loc.inspectorLoginLimited);
+        }
+      });
       if (_query.text.trim().isEmpty) {
-        final hint = SocialShareText.hints(result.title + '\n' +
-            result.description);
+        final hint = SocialShareText.hints(
+            capture.title + '\n' + capture.description);
         if (hint.title.isNotEmpty) _query.text = hint.title;
+      }
+      if ((capture.description.isEmpty || capture.loginRequired) &&
+          widget.source?.canPreview == true) {
+        await _fetchPublicPreview();
       }
     } catch (error) {
       if (mounted) setState(() => _warnings.add(
           loc.inspectorPageAnalyzeError(error.toString())));
+      await _fetchPublicPreview();
+    }
+  }
+
+  Future<void> _readAfterLoad() async {
+    // Social web apps render asynchronously after onLoadStop.
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    if (mounted && _webReady) await _readWeb();
+    await Future<void>.delayed(const Duration(milliseconds: 1800));
+    if (mounted && _webReady) await _readWeb();
+  }
+
+  Future<void> _fetchPublicPreview() async {
+    final source = widget.source;
+    if (source == null || !source.canPreview || _publicPreview.isNotEmpty) {
+      return;
+    }
+    final client = http.Client();
+    try {
+      final preview = await PublicSourcePreview(client).fetchDetailed(source);
+      if (!mounted) return;
+      setState(() => _publicPreview = preview.text);
+    } catch (_) {
+      // HTTP preview may be blocked even when the WebView is accessible.
+    } finally {
+      client.close();
     }
   }
 
@@ -277,6 +331,10 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
     });
     final matches = await _index.search(_images);
     if (!mounted) return;
+    setState(() {
+      _localMatches..clear()..addAll(matches);
+      _localSearched = true;
+    });
     final ranked = VisualCandidateRanker.rank(
         extractedText: _collectedText,
         imageMatches: matches, savedWorks: widget.works);
@@ -288,6 +346,116 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
     if (ranked.isEmpty && mounted) setState(() => _warnings.add(
         loc.inspectorNoIdCandidates));
   });
+
+  Future<void> _searchRemote() => _run(() async {
+    final loc = AppLocalizations.of(context)!;
+    if (_images.isEmpty) {
+      setState(() => _warnings.add(loc.inspectorImageFirst));
+      return;
+    }
+    final client = http.Client();
+    try {
+      final imageIndex = _selectedImage < _images.length ? _selectedImage : 0;
+      final response = await ReverseImageSearch(client).search(
+          _images[imageIndex], sauceNaoKey: _sauceKey.text.trim());
+      if (!mounted) return;
+      setState(() {
+        _showRemote = true;
+        _remoteSearched = true;
+        _remoteHits..clear()..addAll(response.hits);
+        _candidates.clear();
+        _verification.clear();
+        _warnings.addAll(response.warnings.take(3));
+      });
+      // A source image result does not prove any unrelated gallery ID.
+      // Only a direct validated gallery URL can immediately offer its number.
+      if (response.hits.isNotEmpty) {
+        final direct = response.hits.where((hit) =>
+            hit.workId.isNotEmpty).take(5).map((hit) => VisualCandidate(
+              workId: hit.workId, title: hit.title,
+              author: hit.author,
+              evidence: loc.inspectorDirectSourceEvidence,
+              kind: VisualEvidenceKind.onlineMetadata, score: 80,
+            )).toList();
+        if (direct.isNotEmpty) {
+          setState(() => _candidates.addAll(direct));
+          await _verify(direct);
+        } else {
+          final best = response.hits.where((hit) =>
+              hit.title.trim().length >= 3 ||
+              hit.author.trim().length >= 3).firstOrNull;
+          if (best != null) await _lookupRemoteTitle(best);
+        }
+      }
+    } finally {
+      client.close();
+    }
+  });
+
+  Future<void> _lookupRemoteTitle(RemoteImageHit hit) async {
+    final query = hit.title.trim().length >= 3
+        ? hit.title.trim() : hit.author.trim().length >= 3
+            ? 'artist:' + hit.author.trim() : '';
+    if (query.length < 3 || query.length > 150) return;
+    final client = http.Client();
+    try {
+      final result = await OnlineWorkSearch(client).searchUnified(query);
+      if (!mounted) return;
+      final ranked = VisualCandidateRanker.rank(
+          extractedText: _collectedText,
+          onlineWorks: result.works.take(24).toList(),
+          savedWorks: widget.works);
+      setState(() {
+        _query.text = query;
+        _candidates..clear()..addAll(ranked);
+        _verification.clear();
+        _warnings.addAll(result.warnings.take(2));
+      });
+      await _verify(ranked);
+    } catch (error) {
+      if (mounted) setState(() => _warnings.add(
+          AppLocalizations.of(context)!
+              .inspectorRemoteLookupError(error.toString())));
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _findOnlineForHit(RemoteImageHit hit) =>
+      _run(() => _lookupRemoteTitle(hit));
+
+  Future<void> _openExternalUrl(String raw) async {
+    if (!ReverseImageSearch.safePublicUrl(raw)) return;
+    final uri = Uri.tryParse(raw);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _pasteManually() async {
+    final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+    final value = clipboard?.text?.trim() ?? '';
+    if (value.isNotEmpty && value.length <= 12000) {
+      setState(() => _manualText.text = value);
+    }
+  }
+
+  Future<Uint8List?> _readCover(String id) async {
+    WorkEntry? work;
+    for (final candidate in widget.works) {
+      if (candidate.workId == id) {
+        work = candidate;
+        break;
+      }
+    }
+    if (work == null || work.coverMode == 'preset') return null;
+    try {
+      return await widget.covers.read(id, mode: work.coverMode,
+          page: work.coverMode == 'page' ? work.coverPage : 1);
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<void> _searchOnline() => _run(() async {
     final loc = AppLocalizations.of(context)!;
@@ -354,9 +522,16 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
           final target = url == null ? null : Uri.tryParse(url);
           // No navigation to unrelated origin, non-HTTPS, or userinfo URLs.
           final original = widget.source!.uri;
+          final host = target?.host.toLowerCase() ?? '';
+          final instagram = widget.source!.kind == SourceKind.instagramPost ||
+              widget.source!.kind == SourceKind.instagramReel;
+          final family = instagram
+              ? const {'instagram.com', 'www.instagram.com', 'm.instagram.com'}
+              : const {'youtube.com', 'www.youtube.com', 'm.youtube.com'};
           if (target == null || target.scheme != 'https' ||
-              target.userInfo.isNotEmpty ||
-              target.host.toLowerCase() != original.host.toLowerCase()) {
+              target.userInfo.isNotEmpty || target.hasPort ||
+              !(host == original.host.toLowerCase() ||
+                  family.contains(host))) {
             return NavigationActionPolicy.CANCEL;
           }
           return NavigationActionPolicy.ALLOW;
@@ -364,50 +539,261 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
         onLoadStop: (controller, url) {
           if (!mounted) return;
           setState(() => _webReady = true);
-          unawaited(_readWeb());
+          unawaited(_readAfterLoad());
         },
       ),
     ));
+  }
+
+  Widget _resultThumb(String url, {Uint8List? memory}) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget placeholder = Icon(Icons.image_not_supported_outlined,
+        color: scheme.onSurfaceVariant, size: 32);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(11),
+      child: SizedBox(width: 94, height: 118,
+        child: ColoredBox(color: scheme.surfaceContainerHighest,
+          child: memory != null
+              ? Image.memory(memory, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => placeholder)
+              : url.isNotEmpty && ReverseImageSearch.safePublicUrl(url)
+                  ? Image.network(url, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => placeholder)
+                  : placeholder,
+        ),
+      ),
+    );
+  }
+
+  Widget _localThumb(String workId) {
+    final future = _coverPreview.putIfAbsent(
+        workId, () => _readCover(workId));
+    return FutureBuilder<Uint8List?>(
+      future: future,
+      builder: (context, snapshot) =>
+          _resultThumb('', memory: snapshot.data),
+    );
+  }
+
+  Widget _remoteCard(RemoteImageHit hit, AppLocalizations loc) {
+    final source = Uri.tryParse(hit.sourceUrl);
+    final hint = hit.similarity == null
+        ? loc.inspectorUnscoredMatch
+        : loc.inspectorSimilarity(hit.similarity!.toStringAsFixed(1));
+    return Card(
+      key: ValueKey('online-' + hit.sourceUrl),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _resultThumb(hit.thumbnailUrl),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(hit.provider, style: Theme.of(context)
+                      .textTheme.labelSmall),
+                  const SizedBox(height: 4),
+                  Text(hit.title.isEmpty ? loc.inspectorUnknownTitle : hit.title,
+                    maxLines: 3, overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall),
+                  if (hit.author.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(hit.author, maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                  const SizedBox(height: 5),
+                  Text(hint, style: Theme.of(context).textTheme.bodySmall),
+                  Text(source?.host ?? '', maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
+              )),
+            ]),
+            if (hit.workId.isNotEmpty) ...[
+              const SizedBox(height: 7),
+              Text(loc.inspectorLinkedWorkId(hit.workId),
+                  style: Theme.of(context).textTheme.labelMedium),
+            ],
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 4, children: [
+              OutlinedButton.icon(
+                onPressed: _busy ? null : () => _run(
+                    () => _openExternalUrl(hit.sourceUrl)),
+                icon: const Icon(Icons.open_in_new, size: 17),
+                label: Text(loc.inspectorOpenSource),
+              ),
+              if (hit.title.trim().length >= 3 ||
+                  hit.author.trim().length >= 3)
+                FilledButton.tonalIcon(
+                  onPressed: _busy ? null : () => _findOnlineForHit(hit),
+                  icon: const Icon(Icons.manage_search, size: 17),
+                  label: Text(loc.inspectorFindGalleryNumber),
+                ),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _localCard(LocalVisualMatch match, AppLocalizations loc) {
+    final validId = RegExp(r'^\d{6,9}$').hasMatch(match.workId);
+    return Card(
+      key: ValueKey('local-' + match.workId),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _localThumb(match.workId),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(match.title.isEmpty
+                      ? loc.workCardUntitled(match.workId) : match.title,
+                    maxLines: 3, overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall),
+                  if (match.author.isNotEmpty)
+                    Text(match.author, maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 5),
+                  Text(loc.inspectorSimilarity(
+                        (match.similarity * 100).toStringAsFixed(1)),
+                    style: Theme.of(context).textTheme.bodySmall),
+                  Text(match.evidence, maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  Text('#' + match.workId),
+                ],
+              )),
+            ]),
+            const SizedBox(height: 8),
+            Align(alignment: Alignment.centerRight,
+              child: FilledButton.tonalIcon(
+                onPressed: _busy || !validId ? null :
+                    () => _accept(selected: VisualCandidate(
+                      workId: match.workId, title: match.title,
+                      author: match.author,
+                      evidence: match.evidence,
+                      kind: VisualEvidenceKind.localImage,
+                      score: (match.similarity * 70).round())),
+                icon: const Icon(Icons.playlist_add, size: 18),
+                label: Text(loc.inspectorImportCandidate),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _candidateCard(VisualCandidate item, AppLocalizations loc) {
+    final status = _verification[item.workId];
+    final missed = status?.status == CandidateCheck.notFound;
+    final label = status?.exists == true
+        ? HypI18n.t(context, '번호 존재 확인')
+        : missed ? HypI18n.t(context, '번호 미발견')
+        : HypI18n.t(context, '번호 미검증');
+    return Card(
+      key: ValueKey('candidate-' + item.workId),
+      child: Padding(padding: const EdgeInsets.all(12),
+        child: Row(children: [
+          CircleAvatar(radius: 21,
+            child: Icon(item.kind == VisualEvidenceKind.directCode
+                ? Icons.numbers : Icons.library_books_outlined)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item.title.isEmpty
+                  ? loc.workCardUntitled(item.workId) : item.title,
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleSmall),
+              Text('#' + item.workId + ' · ' + label,
+                style: Theme.of(context).textTheme.bodySmall),
+              Text(item.evidence, maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall),
+            ],
+          )),
+          const SizedBox(width: 6),
+          IconButton(
+            tooltip: loc.inspectorImportCandidate,
+            onPressed: _busy || missed ? null :
+                () => _accept(selected: item),
+            icon: const Icon(Icons.add_circle_outline),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _emptyResult(IconData icon, String title, String detail) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Column(children: [
+        Icon(icon, size: 40, color: colors.onSurfaceVariant),
+        const SizedBox(height: 9),
+        Text(title, textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(detail, textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall),
+      ]),
+    );
+  }
+
+  Widget _resultGrid<T>(List<T> values, double width,
+      Widget Function(T) builder) {
+    final cardWidth = width > 800 ? (width - 66) / 2 : width - 40;
+    return Wrap(spacing: 9, runSpacing: 7,
+      children: [for (final item in values)
+        SizedBox(width: cardWidth, child: builder(item))]);
   }
 
   @override
   Widget build(BuildContext context) {
     final loc = AppLocalizations.of(context)!;
     final size = MediaQuery.sizeOf(context);
-    final width = size.width > 980 ? 960.0 : size.width * .96;
-    final height = size.height > 780 ? 740.0 : size.height * .94;
+    final width = size.width > 1020 ? 1000.0 : size.width * .96;
+    final height = size.height > 880 ? 830.0 : size.height * .95;
     final hasImages = _images.isNotEmpty;
     return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       child: SizedBox(width: width, height: height,
-        child: Padding(padding: const EdgeInsets.all(18),
+        child: Padding(padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(children: [
-                const Icon(Icons.auto_awesome, color: HypColors.lightPurple),
+                const Icon(Icons.travel_explore, color: HypColors.lightPurple),
                 const SizedBox(width: 9),
                 Expanded(child: Text(loc.inspectorTitle,
-                  style: Theme.of(context).textTheme.titleLarge)),
-                IconButton(tooltip: HypI18n.t(context, '닫기'),
+                    style: Theme.of(context).textTheme.titleLarge)),
+                IconButton(
+                  tooltip: HypI18n.t(context, '닫기'),
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close)),
+                  icon: const Icon(Icons.close),
+                ),
               ]),
               if (_busy) const LinearProgressIndicator(),
-              const SizedBox(height: 10),
+              const SizedBox(height: 6),
               Expanded(child: SingleChildScrollView(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (widget.source != null) ...[
                       Text(loc.inspectorOnlyPublic,
-                          style: Theme.of(context).textTheme.bodySmall),
-                      const SizedBox(height: 5),
+                        style: Theme.of(context).textTheme.bodySmall),
+                      const SizedBox(height: 6),
                       _browser(),
-                      const SizedBox(height: 9),
-                      Wrap(spacing: 7, runSpacing: 7, children: [
-                        OutlinedButton.icon(
+                      const SizedBox(height: 7),
+                      Wrap(spacing: 7, runSpacing: 6, children: [
+                        FilledButton.tonalIcon(
                           onPressed: _busy || !_webReady ? null :
                               () => _run(_readWeb),
-                          icon: const Icon(Icons.article_outlined),
-                          label: Text(loc.inspectorReadComments)),
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: Text(loc.inspectorRereadComments)),
                         OutlinedButton.icon(
                           onPressed: _busy || !_webReady ? null :
                               _importRenderedImages,
@@ -424,103 +810,235 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
                           icon: const Icon(Icons.movie_filter_outlined),
                           label: Text(loc.inspectorSampleVideo)),
                       ]),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 7),
+                      Text(loc.inspectorScrollBeforeRead,
+                        style: Theme.of(context).textTheme.bodySmall),
+                      if (_snapshot?.loginRequired == true) ...[
+                        const SizedBox(height: 6),
+                        Text(loc.inspectorLoginLimited),
+                      ],
+                      if (_snapshot != null || _publicPreview.isNotEmpty)
+                        ExpansionTile(
+                          initiallyExpanded: true,
+                          title: Text(loc.inspectorDisplayedComments(
+                              _snapshot?.comments.length ?? 0)),
+                          subtitle: Text(loc.inspectorPreviewPartial),
+                          childrenPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
+                          children: [
+                            if (_snapshot?.description.isNotEmpty == true)
+                              SelectableText(_snapshot!.description,
+                                  maxLines: 16),
+                            if (_publicPreview.isNotEmpty &&
+                                _publicPreview != _snapshot?.description)
+                              SelectableText(_publicPreview, maxLines: 12),
+                            for (final comment in
+                                (_snapshot?.comments ?? const <String>[])
+                                    .take(25))
+                              ListTile(dense: true,
+                                leading: const Icon(Icons.comment_outlined,
+                                    size: 18),
+                                title: SelectableText(comment)),
+                          ],
+                        ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _manualText,
+                        minLines: 2, maxLines: 4,
+                        maxLength: 12000,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          border: const OutlineInputBorder(),
+                          labelText: loc.inspectorManualPasteLabel,
+                          helperText: loc.inspectorManualPasteHint,
+                        ),
+                      ),
+                      Align(alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _pasteManually,
+                          icon: const Icon(Icons.content_paste),
+                          label: Text(loc.inspectorPasteClipboard),
+                        ),
+                      ),
                     ],
-                    Wrap(spacing: 7, runSpacing: 7, children: [
+                    Wrap(spacing: 8, runSpacing: 6, children: [
                       OutlinedButton.icon(
                         onPressed: _busy ? null : _pickImages,
                         icon: const Icon(Icons.add_photo_alternate_outlined),
                         label: Text(loc.inspectorChooseImage)),
-                      OutlinedButton.icon(
-                        onPressed: _busy ? null : _rebuildIndex,
-                        icon: const Icon(Icons.data_object_outlined),
-                        label: Text(loc.inspectorBuildVisualIndex)),
-                      FilledButton.icon(
-                        onPressed: _busy ? null : _analyze,
-                        icon: const Icon(Icons.travel_explore),
-                        label: Text(loc.inspectorLocalOcrSearch)),
+                      if (widget.source != null)
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : () => _run(_readWeb),
+                          icon: const Icon(Icons.article_outlined),
+                          label: Text(loc.inspectorReadComments)),
                     ]),
-                    if (_indexTotal > 0) ...[
-                      const SizedBox(height: 5),
-                      LinearProgressIndicator(value: _indexTotal == 0
-                          ? 0 : _indexProgress / _indexTotal),
-                      Text(loc.inspectorIndexingProgress(_indexProgress, _indexTotal, _indexed)),
-                    ],
                     if (hasImages) ...[
-                      const SizedBox(height: 12),
-                      Text(loc.inspectorImagesAnalyzed(_images.length), style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 10),
+                      Text(loc.inspectorImagesAnalyzed(_images.length),
+                        style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 6),
-                      SizedBox(height: 88, child: ListView.separated(
-                        scrollDirection: Axis.horizontal, itemCount: _images.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 7),
-                        itemBuilder: (_, index) => Tooltip(
-                          message: _imageSources[index],
-                          child: ClipRRect(borderRadius: BorderRadius.circular(8),
-                            child: Image.memory(_images[index],
-                                width: 88, height: 88, fit: BoxFit.cover)),
+                      SizedBox(height: 108,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _images.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 7),
+                          itemBuilder: (context, index) => Tooltip(
+                            message: _imageSources[index],
+                            child: InkWell(
+                              onTap: () => setState(() =>
+                                  _selectedImage = index),
+                              child: Container(
+                                width: 100, height: 100,
+                                padding: const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(width:
+                                    _selectedImage == index ? 3 : 1,
+                                    color: _selectedImage == index
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).dividerColor),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.memory(_images[index],
+                                    fit: BoxFit.cover),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      )),
-                    ],
-                    if (_snapshot != null) ...[
+                      ),
+                      Text(loc.inspectorSelectedImage(_selectedImage + 1),
+                        style: Theme.of(context).textTheme.bodySmall),
+                    ] else _emptyResult(Icons.add_photo_alternate_outlined,
+                        loc.inspectorImageFirst, loc.inspectorImageFirstHint),
+                    const SizedBox(height: 12),
+                    SegmentedButton<bool>(
+                      segments: [
+                        ButtonSegment(value: true,
+                          icon: const Icon(Icons.public),
+                          label: Text(loc.inspectorRemoteTab)),
+                        ButtonSegment(value: false,
+                          icon: const Icon(Icons.collections_bookmark_outlined),
+                          label: Text(loc.inspectorLocalTab)),
+                      ],
+                      selected: {_showRemote},
+                      onSelectionChanged: (value) =>
+                          setState(() => _showRemote = value.first),
+                    ),
+                    const SizedBox(height: 10),
+                    if (_showRemote) ...[
+                      Text(loc.inspectorRemoteIntro),
                       const SizedBox(height: 8),
-                      Text(loc.inspectorPageExcerpt(_snapshot!.description.characters.take(120).toString())),
-                      Text(loc.inspectorDisplayedComments(_snapshot!.comments.length)),
-                    ],
-                    if (_recognizedText.isNotEmpty) ...[
-                      const SizedBox(height: 9),
-                      Text(loc.inspectorOcrResult),
-                      SelectableText(_recognizedText,
-                          maxLines: 5),
+                      TextField(
+                        controller: _sauceKey,
+                        obscureText: true,
+                        enableSuggestions: false,
+                        autocorrect: false,
+                        decoration: InputDecoration(
+                          border: const OutlineInputBorder(),
+                          labelText: loc.inspectorSauceKey,
+                          helperText: loc.inspectorSauceHint,
+                          prefixIcon: const Icon(Icons.key),
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      FilledButton.icon(
+                        key: const Key('search-external-images'),
+                        onPressed: _busy || !hasImages ? null : _searchRemote,
+                        icon: const Icon(Icons.travel_explore),
+                        label: Text(loc.inspectorSearchExternal),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(loc.inspectorUploadPrivacy,
+                        style: Theme.of(context).textTheme.bodySmall),
+                      if (_remoteHits.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Text(loc.inspectorRemoteCount(_remoteHits.length),
+                          style: Theme.of(context).textTheme.titleMedium),
+                        _resultGrid(_remoteHits, width,
+                            (match) => _remoteCard(match, loc)),
+                      ] else if (_remoteSearched)
+                        _emptyResult(Icons.search_off,
+                          loc.inspectorRemoteEmpty,
+                          loc.inspectorRemoteEmptyHint),
+                    ] else ...[
+                      Text(loc.inspectorLocalIntro),
+                      const SizedBox(height: 7),
+                      Wrap(spacing: 8, runSpacing: 7, children: [
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : _rebuildIndex,
+                          icon: const Icon(Icons.dataset_outlined),
+                          label: Text(loc.inspectorBuildVisualIndex)),
+                        FilledButton.icon(
+                          key: const Key('search-local-images'),
+                          onPressed: _busy || !hasImages ? null : _analyze,
+                          icon: const Icon(Icons.manage_search),
+                          label: Text(loc.inspectorLocalOcrSearch)),
+                      ]),
+                      if (_indexTotal > 0) ...[
+                        const SizedBox(height: 6),
+                        LinearProgressIndicator(value: _indexTotal == 0
+                          ? 0 : _indexProgress / _indexTotal),
+                        Text(loc.inspectorIndexingProgress(
+                          _indexProgress, _indexTotal, _indexed)),
+                      ],
+                      if (_recognizedText.isNotEmpty)
+                        ExpansionTile(
+                          title: Text(loc.inspectorOcrResult),
+                          children: [
+                            SelectableText(_recognizedText, maxLines: 10),
+                          ],
+                        ),
+                      if (_localMatches.isNotEmpty) ...[
+                        const SizedBox(height: 11),
+                        Text(loc.inspectorLocalCount(_localMatches.length),
+                          style: Theme.of(context).textTheme.titleMedium),
+                        _resultGrid(_localMatches, width,
+                            (item) => _localCard(item, loc)),
+                      ] else if (_localSearched)
+                        _emptyResult(Icons.search_off,
+                          loc.inspectorLocalEmpty,
+                          loc.inspectorLocalEmptyHint),
                     ],
                     const SizedBox(height: 15),
                     TextField(
                       controller: _query, maxLength: 150,
                       decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
                         labelText: loc.inspectorSearchByTitle,
                         helperText: loc.inspectorSearchPrivacy,
                         suffixIcon: IconButton(
                           onPressed: _busy ? null : _searchOnline,
                           tooltip: loc.inspectorSearchTooltip,
-                          icon: const Icon(Icons.public),
+                          icon: const Icon(Icons.search),
                         ),
                       ),
-                      onSubmitted: (_) { if (!_busy) _searchOnline(); },
+                      onSubmitted: (_) {
+                        if (!_busy) _searchOnline();
+                      },
                     ),
-                    OutlinedButton.icon(onPressed: _busy ? null : _searchOnline,
-                        icon: const Icon(Icons.search),
-                        label: Text(loc.inspectorFindOnlineCandidates)),
                     if (_candidates.isNotEmpty) ...[
                       const SizedBox(height: 10),
                       Text(loc.inspectorIdCandidateCount(_candidates.length),
                           style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 4),
-                      for (final item in _candidates.take(20))
-                        Card(child: ListTile(
-                          dense: true,
-                          title: Text((item.title.isEmpty ? loc.workCardUntitled(item.workId) : item.title) + ' · #' + item.workId),
-                          subtitle: Text(item.evidence +
-                            ' · ' + (_verification[item.workId]?.exists == true
-                                ? HypI18n.t(context, '번호 존재 확인')
-                                : _verification[item.workId]?.status ==
-                                        CandidateCheck.notFound
-                                    ? HypI18n.t(context, '번호 미발견')
-                                    : HypI18n.t(context, '번호 미검증'))),
-                          trailing: TextButton(
-                            onPressed: _verification[item.workId]?.status ==
-                                    CandidateCheck.notFound
-                                ? null : () => _accept(selected: item),
-                            child: Text(loc.inspectorImportCandidate),
-                          ),
-                        )),
+                      Text(loc.inspectorCandidateNotConfirmed,
+                          style: Theme.of(context).textTheme.bodySmall),
+                      const SizedBox(height: 5),
+                      for (final candidate in _candidates.take(20))
+                        _candidateCard(candidate, loc),
                     ],
                     if (_warnings.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      for (final warning in _warnings.reversed.take(3))
-                        Text(warning, style: Theme.of(context)
-                            .textTheme.bodySmall),
+                      const Divider(height: 20),
+                      for (final warning in _warnings.reversed.take(4))
+                        Padding(padding: const EdgeInsets.only(bottom: 5),
+                          child: Text(warning, style:
+                              Theme.of(context).textTheme.bodySmall)),
                     ],
-                    const SizedBox(height: 8),
-                    Text(loc.inspectorCaution),
+                    const SizedBox(height: 10),
+                    Text(loc.inspectorCaution,
+                        style: Theme.of(context).textTheme.bodySmall),
                   ],
                 ),
               )),
@@ -528,7 +1046,7 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
               Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                 TextButton(onPressed: () => Navigator.pop(context),
                   child: Text(loc.cancel)),
-                const SizedBox(width: 9),
+                const SizedBox(width: 8),
                 FilledButton.icon(
                   onPressed: () => _accept(),
                   icon: const Icon(Icons.playlist_add),
