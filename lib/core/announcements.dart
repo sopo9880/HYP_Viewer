@@ -9,12 +9,49 @@ class AppAnnouncement {
   final String title;
   final String message;
   final DateTime publishedAt;
+  final Map<String, String> translatedTitles, translatedMessages;
   const AppAnnouncement({
     required this.id,
     required this.title,
     required this.message,
     required this.publishedAt,
+    this.translatedTitles = const {},
+    this.translatedMessages = const {},
   });
+
+  static Map<String, String> _translations(
+      Object? source, String field, int maximum) {
+    if (source is! Map) return {};
+    final result = <String, String>{};
+    for (final language in const ['en', 'ja']) {
+      final translated = source[language];
+      if (translated is! Map || translated[field] is! String) continue;
+      final value = (translated[field] as String).trim();
+      if (value.isNotEmpty && value.length <= maximum) {
+        result[language] = value;
+      }
+    }
+    return result;
+  }
+
+  String titleFor(String language) {
+    if (language == 'ko') return title;
+    final translated = translatedTitles[language];
+    if (translated != null) return translated;
+    if (!RegExp(r'[가-힣]').hasMatch(title)) return title;
+    return language == 'ja'
+        ? '翻訳されていないお知らせ' : 'Untranslated announcement';
+  }
+
+  String messageFor(String language) {
+    if (language == 'ko') return message;
+    final translated = translatedMessages[language];
+    if (translated != null) return translated;
+    if (!RegExp(r'[가-힣]').hasMatch(message)) return message;
+    return language == 'ja'
+        ? 'このお知らせは韓国語のみです。原文は言語を韓国語に切り替えて確認できます。'
+        : 'This notice is only available in Korean. Switch the app to Korean to read the original.';
+  }
 
   factory AppAnnouncement.fromJson(Map<String, dynamic> value) {
     final id = value['id'];
@@ -30,6 +67,8 @@ class AppAnnouncement {
     return AppAnnouncement(
       id: id, title: title.trim(),
       message: message.trim(), publishedAt: published.toUtc(),
+      translatedTitles: _translations(value['translations'], 'title', 120),
+      translatedMessages: _translations(value['translations'], 'message', 2000),
     );
   }
 }

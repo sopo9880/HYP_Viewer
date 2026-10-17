@@ -88,7 +88,10 @@ class BackgroundDownloadRuntime {
         final ok = await FlutterBackground.initialize(
           androidConfig: FlutterBackgroundAndroidConfig(
             notificationTitle: 'HYP Viewer',
-            notificationText: '승인된 작품을 오프라인으로 다운로드 중',
+            notificationText: HypI18n.translate(
+              '승인된 작품을 오프라인으로 다운로드 중',
+              HypLanguage.selected.value,
+            ),
             notificationImportance: AndroidNotificationImportance.normal,
             enableWifiLock: false,
             shouldRequestBatteryOptimizationsOff: false,

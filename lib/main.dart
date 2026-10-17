@@ -406,6 +406,22 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       if (mounted) setState(() => readerSettings = updated);
       unawaited(_backgroundDownloads.setCloseWindowExits(updated.closeWindowExitsApp));
       HypLanguage.selected.value = updated.languageCode;
+      // Refresh an active Android foreground notification immediately when
+      // the user changes the app language, not only after the next page.
+      if (Platform.isAndroid && _backgroundDownloads.hasTransfers) {
+        if (downloadingUpdate) {
+          unawaited(_backgroundDownloads.setProgress(
+            (updateProgress * 100).round(), 100,
+            isUpdate: true, language: updated.languageCode));
+        } else if (galleryDownloadToken != null) {
+          unawaited(_backgroundDownloads.setProgress(
+            downloadedGalleryPages, totalGalleryPages,
+            workId: activeDownloadWorkId,
+            queuedCount: _downloadQueue.length,
+            paused: isReaderTransferPaused,
+            language: updated.languageCode));
+        }
+      }
       _syncNoticesTimer();
       if (updated.receiveAnnouncements && !wasSubscribed) {
         unawaited(_checkAnnouncements(silent: true));
@@ -469,10 +485,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               itemBuilder: (_, index) {
                 final n = notices[index];
                 return ListTile(
-                  title: HypText(n.title),
+                  title: Text(n.titleFor(readerSettings.languageCode)),
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: HypText(n.message),
+                    child: Text(n.messageFor(readerSettings.languageCode)),
                   ),
                   isThreeLine: true,
                 );
@@ -607,10 +623,13 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     String sharedText = '',
   }) async {
     if (!mounted) return;
-    final selected = await showDialog<VisualInspectionResult>(
-      context: context,
-      builder: (_) => InstagramSourceInspector(
-        source: source, sharedText: sharedText));
+    final selected = await Navigator.of(context).push<VisualInspectionResult>(
+      MaterialPageRoute<VisualInspectionResult>(
+        fullscreenDialog: true,
+        builder: (_) => InstagramSourceInspector(
+          source: source, sharedText: sharedText),
+      ),
+    );
     if (selected == null || !mounted) return;
     setState(() {
       if (selected.sourceUrl.isNotEmpty) urlInput.text = selected.sourceUrl;

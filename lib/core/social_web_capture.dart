@@ -7,12 +7,13 @@ import 'social_share_text.dart';
 /// to download the entire thread or bypass a login wall.
 class SocialWebCapture {
   final String url, title, description;
-  final List<String> comments, imageUrls;
-  final bool limited, loginRequired;
+  final List<String> comments, pinnedComments, imageUrls;
+  final bool limited, loginRequired, commentAreaPresent;
 
   const SocialWebCapture({
     required this.url, required this.title, required this.description,
     required this.comments, required this.imageUrls,
+    this.pinnedComments = const [], this.commentAreaPresent = false,
     this.limited = true, this.loginRequired = false,
   });
 
@@ -38,7 +39,9 @@ class SocialWebCapture {
       return SocialWebCapture(
         url: read('url'), title: read('title'),
         description: read('description'),
+        pinnedComments: readList('pinnedComments').take(30).toList(),
         comments: readList('comments').take(60).toList(),
+        commentAreaPresent: decoded['commentAreaPresent'] == true,
         imageUrls: readList('images')
             .where((s) => s.startsWith('https://')).take(24).toList(),
         loginRequired: decoded['loginRequired'] == true,
@@ -110,10 +113,16 @@ class SocialWebCapture {
       document.querySelector('article') ||
       document.querySelector('[role="dialog"]')
     ) : document;
-    var comments = instagram ? collect(post, [
+    var commentRoot = instagram ? ((post && post.querySelector(
+      'ul li, [role="listitem"], [data-testid="comment"]')) ? post :
+      (document.querySelector('[role="dialog"]') ||
+       document.querySelector('main') || post || document)) : document;
+    var pinnedComments = instagram ? collect(commentRoot, [
       '[aria-label*="Pinned"]', '[aria-label*="고정"]',
-      '[aria-label*="固定"]',
-      'ul li', 'ul ul', '[role="listitem"]',
+      '[aria-label*="固定"]'
+    ], 20) : [];
+    var comments = instagram ? collect(commentRoot, [
+      'ul li', '[role="listitem"]',
       '[data-testid="comment"]', '[data-testid="post-comment-root"]'
     ], 60) : youtube ? collect(document, [
       'ytd-comment-thread-renderer #content-text',
@@ -121,6 +130,8 @@ class SocialWebCapture {
       'yt-comment-thread-renderer #content-text',
       'ytd-backstage-post-thread-renderer #content-text'
     ], 60) : [];
+    var commentAreaPresent = instagram && !!(commentRoot && commentRoot.querySelector(
+      'ul li, [role="listitem"], [data-testid="comment"], [data-testid="post-comment-root"]'));
     var captions = instagram ? collect(post, [
       'h1', '[data-testid="post-comment-root"]',
       'header + div', '[role="heading"]'
@@ -160,8 +171,81 @@ class SocialWebCapture {
       title: meta('og:title') || document.title.slice(0, 4000),
       description: description,
       comments: comments,
+      pinnedComments: pinnedComments,
+      commentAreaPresent: commentAreaPresent,
       images: images,
       loginRequired: loginRequired
     });
   })();''';
+}
+
+/// Keeps public comments already displayed in the user's current WebView.
+/// Instagram may unmount old rows while scrolling, so each DOM snapshot alone
+/// cannot represent all comments that the user has seen in this session.
+class SocialCommentAccumulator {
+  String _postKey = '';
+  String title = '';
+  String description = '';
+  bool loginRequired = false;
+  bool commentAreaPresent = false;
+  final Set<String> _seen = <String>{};
+  final List<String> _comments = [];
+  final Set<String> _pinned = <String>{};
+
+  static const int maxCollectedComments = 200;
+  List<String> get comments => List.unmodifiable(_comments);
+  List<String> get pinnedComments => List.unmodifiable(
+      _comments.where(_pinned.contains));
+  int get count => _comments.length;
+  String get combinedText => [
+    title, description, ...pinnedComments,
+    ..._comments.where((comment) => !_pinned.contains(comment)),
+  ].where((value) => value.trim().isNotEmpty).toSet().join('\n\n');
+
+  /// Ignore a location fragment or tracking query when identifying a post,
+  /// but clear the ledger if a user browses to another post/reel.
+  String _key(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return url;
+    final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+    if (segments.length >= 2 && {'p', 'reel', 'tv'}.contains(segments.first)) {
+      return segments.take(2).join('/');
+    }
+    return uri.host + uri.path;
+  }
+
+  void clear() {
+    _postKey = '';
+    title = '';
+    description = '';
+    loginRequired = false;
+    commentAreaPresent = false;
+    _seen.clear();
+    _comments.clear();
+    _pinned.clear();
+  }
+
+  /// Returns newly observed comment count. Does not scrape hidden/private
+  /// content, reach external endpoints or auto-expand comments.
+  int add(SocialWebCapture snapshot) {
+    final newKey = _key(snapshot.url);
+    if (_postKey.isNotEmpty && newKey.isNotEmpty && newKey != _postKey) clear();
+    if (newKey.isNotEmpty) _postKey = newKey;
+    if (snapshot.title.isNotEmpty) title = snapshot.title;
+    if (snapshot.description.length > description.length) {
+      description = snapshot.description;
+    }
+    loginRequired = snapshot.loginRequired;
+    commentAreaPresent = snapshot.commentAreaPresent;
+    final before = _comments.length;
+    for (final comment in [...snapshot.pinnedComments, ...snapshot.comments]) {
+      final trimmed = comment.trim();
+      if (trimmed.isEmpty || trimmed.length > 2000) continue;
+      if (_comments.length < maxCollectedComments && _seen.add(trimmed)) {
+        _comments.add(trimmed);
+      }
+      if (snapshot.pinnedComments.contains(comment)) _pinned.add(trimmed);
+    }
+    return _comments.length - before;
+  }
 }

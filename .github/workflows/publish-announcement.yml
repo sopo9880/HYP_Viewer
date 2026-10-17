@@ -11,6 +11,22 @@ on:
         description: '공지 본문 (최대 2000자)'
         required: true
         type: string
+      title_en:
+        description: 'English notice title (optional)'
+        required: false
+        type: string
+      message_en:
+        description: 'English notice body (optional)'
+        required: false
+        type: string
+      title_ja:
+        description: 'Japanese notice title (optional)'
+        required: false
+        type: string
+      message_ja:
+        description: 'Japanese notice body (optional)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -36,6 +52,10 @@ jobs:
         env:
           NOTICE_TITLE: ${{ inputs.title }}
           NOTICE_MESSAGE: ${{ inputs.message }}
+          NOTICE_TITLE_EN: ${{ inputs.title_en }}
+          NOTICE_MESSAGE_EN: ${{ inputs.message_en }}
+          NOTICE_TITLE_JA: ${{ inputs.title_ja }}
+          NOTICE_MESSAGE_JA: ${{ inputs.message_ja }}
         run: python3 /tmp/hyp_publish_announcement.py
       - name: Commit notice using repository author permissions
         run: |

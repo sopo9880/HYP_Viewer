@@ -1,6 +1,11 @@
 /// Additional 0.4 translations for on-device UI; titles remain verbatim.
 abstract final class HypExtraTranslations {
   static const Map<String, List<String>> labels = {
+    "수집된 내용": ["Collected content", "収集した内容"],
+    "누적 수집된 댓글": ["Comments collected in this session", "このセッションで収集したコメント"],
+    "인스타그램 화면에서 댓글을 직접 펼치고 스크롤한 뒤 다시 읽어줘.": ["Expand the comments in Instagram, scroll, then reread visible comments.", "Instagramでコメントを開いてスクロールし、表示中のコメントを再読込してください。"],
+    "기존 댓글을 유지하면서 새 댓글을 기다리는 중": ["Keeping previously collected comments · Waiting for more", "以前のコメントを保持し、新しいコメントを待機中"],
+    "댓글 영역 감지 · 댓글을 펼친 후 다시 읽어줘": ["Comment area detected · Expand comments and reread", "コメント欄を検出しました・コメントを開いて再読込してください。"],
     "링크 고급 분석": ["Advanced Link Inspection", "リンクの詳細解析"],
     "다운로드 중 종료 확인": ["Confirm Exit During Download", "ダウンロード中の終了確認"],
     "진행 중인 다운로드를 중단하고 앱을 완전히 종료할까? 저장된 대기열은 다음 실행 때 복구돼.": ["Quit the app and interrupt active downloads? Saved download jobs will resume at the next launch.", "進行中のダウンロードを中断してアプリを完全終了しますか？保存したキューは次回起動時に復元されます。"],

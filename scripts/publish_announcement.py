@@ -16,6 +16,24 @@ if not (1 <= len(title) <= 120) or "\n" in title:
     raise SystemExit("Invalid title (1..120 characters, single line)")
 if not (1 <= len(message) <= 2000):
     raise SystemExit("Invalid message length")
+
+# Translations are optional, but each provided language must include both
+# title and body. Existing single-language feed entries remain compatible.
+translations = {}
+for language in ("en", "ja"):
+    translated_title = os.environ.get("NOTICE_TITLE_" + language.upper(), "").strip()
+    translated_message = os.environ.get("NOTICE_MESSAGE_" + language.upper(), "").strip()
+    if bool(translated_title) != bool(translated_message):
+        raise SystemExit("Both localized title and message are required for " + language)
+    if translated_title:
+        if len(translated_title) > 120 or "\n" in translated_title:
+            raise SystemExit("Invalid localized title for " + language)
+        if len(translated_message) > 2000:
+            raise SystemExit("Invalid localized message for " + language)
+        translations[language] = {
+            "title": translated_title,
+            "message": translated_message,
+        }
 identifier = (
     "notice_" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S") +
     "_" + hashlib.sha256((title + message).encode("utf-8")).hexdigest()[:8]
@@ -25,12 +43,15 @@ path = pathlib.Path("notices/feed.json")
 feed = json.loads(path.read_text(encoding="utf-8"))
 if feed.get("schemaVersion") != 1 or not isinstance(feed.get("announcements"), list):
     raise SystemExit("Unsupported notice feed schema")
-feed["announcements"].insert(0, {
+entry = {
     "id": identifier,
     "title": title,
     "message": message,
     "publishedAt": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
-})
+}
+if translations:
+    entry["translations"] = translations
+feed["announcements"].insert(0, entry)
 feed["announcements"] = feed["announcements"][:30]
 temporary = path.with_suffix(".json.tmp")
 temporary.write_text(

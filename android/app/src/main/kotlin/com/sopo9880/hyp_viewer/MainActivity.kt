@@ -102,7 +102,7 @@ class MainActivity : FlutterActivity() {
         if (!paused && done < total && done > 0 && now - lastProgressUpdateAt < 200L)
             return
         lastProgressUpdateAt = now
-        val percent = (done * 100L / total).toInt()
+        val percent = if (preparing) 0 else (done * 100L / total).toInt()
         val title = when (language) {
             "en" -> if (paused) "HYP Viewer · Download paused" else "HYP Viewer · Downloading"
             "ja" -> if (paused) "HYP Viewer · 一時停止中" else "HYP Viewer · ダウンロード中"
@@ -118,7 +118,11 @@ class MainActivity : FlutterActivity() {
             "ja" -> "待機中: ${queued}作品"
             else -> "대기 중인 작품 ${queued}개"
         }
-        ensureChannel(foregroundChannelId, "HYP Viewer downloads")
+        ensureChannel(foregroundChannelId, when (language) {
+            "en" -> "HYP Viewer downloads"
+            "ja" -> "HYP Viewer ダウンロード"
+            else -> "HYP Viewer 다운로드"
+        })
         val notification = NotificationCompat.Builder(this, foregroundChannelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
@@ -151,7 +155,11 @@ class MainActivity : FlutterActivity() {
             "ja" -> "作品 #$workId ダウンロード$state"
             else -> "작품 #$workId 다운로드 $state"
         }
-        ensureChannel(resultChannelId, "HYP Viewer download results")
+        ensureChannel(resultChannelId, when (language) {
+            "en" -> "HYP Viewer download results"
+            "ja" -> "HYP Viewer ダウンロード結果"
+            else -> "HYP Viewer 다운로드 결과"
+        })
         val notification = NotificationCompat.Builder(this, resultChannelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("HYP Viewer")
