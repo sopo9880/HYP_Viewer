@@ -170,6 +170,50 @@ abstract final class WorkEditionService {
       collections: original.collections);
   }
 
+  /// Remove whole logical chapters (all translations), never the work files.
+  /// If the source has fewer than two chapters remaining, dissolve it.
+  static LibraryBackup removeFromSeries(
+      LibraryBackup original, String seriesId, List<String> selectedIds) {
+    final members = original.works.where((w) => w.groupId == seriesId).toList();
+    if (members.isEmpty || selectedIds.isEmpty) {
+      throw StateError('시리즈 또는 제외할 작품이 없어.');
+    }
+    final byId = {for (final w in members) w.workId: w};
+    if (selectedIds.any((id) => !byId.containsKey(id))) {
+      throw StateError('해당 시리즈에 없는 회차는 제외할 수 없어.');
+    }
+    final selectedKeys = selectedIds.map((id) =>
+        WorkEditions.groupKey(byId[id]!)).toSet();
+    final remainingKeys = members.map(WorkEditions.groupKey)
+        .toSet().difference(selectedKeys);
+    final dissolve = remainingKeys.length < 2;
+    return LibraryBackup(
+      works: original.works.map((w) {
+        if (w.groupId != seriesId) return w;
+        if (dissolve || selectedKeys.contains(WorkEditions.groupKey(w))) {
+          return w.copyWith(groupId: '', groupTitle: '', groupOrder: 0);
+        }
+        return w;
+      }).toList(),
+      collections: original.collections,
+    );
+  }
+
+  /// A single in-memory transaction: remove a chapter from its old series
+  /// and append all language editions to an existing destination series.
+  static LibraryBackup moveBetweenSeries(
+      LibraryBackup original, String sourceId, String targetId,
+      List<String> selectedIds) {
+    if (sourceId == targetId || targetId.isEmpty) {
+      throw StateError('서로 다른 대상 묶음을 선택해줘.');
+    }
+    if (!original.works.any((w) => w.groupId == targetId)) {
+      throw StateError('이동할 대상 묶음을 찾지 못했어.');
+    }
+    final removed = removeFromSeries(original, sourceId, selectedIds);
+    return appendSeries(removed, targetId, selectedIds);
+  }
+
   static LibraryBackup reorderSeries(
       LibraryBackup original, String seriesId, List<String> orderedIds) {
     final positions = _chapterPositions(

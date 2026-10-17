@@ -139,6 +139,8 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function(String id) onUngroupWorks;
   final Future<void> Function(String id, String title) onRenameGroup;
   final Future<void> Function(String id, List<String> ids) onReorderGroup;
+  final Future<void> Function(String groupId, List<String> ids)? onRemoveGroupChapters;
+  final Future<void> Function(String source, String target, List<String> ids)? onMoveGroupChapters;
   final Future<void> Function(List<String> ids) onExportSelectedDownloads;
   final Future<void> Function(List<String> ids) onDeleteSelectedOffline;
   final VoidCallback onToggleDownloadPause;
@@ -233,6 +235,8 @@ class HypDashboard extends StatefulWidget {
     required this.onUngroupWorks,
     required this.onRenameGroup,
     required this.onReorderGroup,
+    this.onRemoveGroupChapters,
+    this.onMoveGroupChapters,
     required this.onExportSelectedDownloads,
     required this.onDeleteSelectedOffline,
     required this.onToggleDownloadPause,
@@ -1562,6 +1566,7 @@ class _HypDashboardState extends State<HypDashboard> {
                 onSelected: (action) => _groupAction(
                     action, _openedGroupId!, selected),
                 itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'members', child: HypText('구성원 추가·제외·이동')),
                   PopupMenuItem(value: 'rename', child: HypText('묶음 이름 수정')),
                   PopupMenuItem(value: 'reorder', child: HypText('회차 순서 변경')),
                   PopupMenuItem(value: 'ungroup', child: HypText('묶음만 해제')),
@@ -1807,7 +1812,9 @@ class _HypDashboardState extends State<HypDashboard> {
 
   Future<void> _groupAction(String action, String id,
       List<WorkEntry> members) async {
-    if (action == 'ungroup') {
+    if (action == 'members') {
+      await _manageGroupMembers(id, members);
+    } else if (action == 'ungroup') {
       final approve = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -1899,6 +1906,61 @@ class _HypDashboardState extends State<HypDashboard> {
         ),
       );
       if (result != null) await widget.onReorderGroup(id, result);
+    }
+  }
+
+  Future<void> _manageGroupMembers(String id, List<WorkEntry> members) async {
+    final available = widget.library.works.where((w) => w.groupId.isEmpty)
+        .where((w) => w.editionGroupId.isEmpty ||
+            widget.library.works.every((peer) => peer.editionGroupId != w.editionGroupId || peer.groupId.isEmpty))
+        .toList();
+    final groups = widget.library.works.where((w) =>
+        w.groupId.isNotEmpty && w.groupId != id).map((w) => w.groupId).toSet().toList();
+    final commands = <String>['add', 'remove', 'move'];
+    final action = await showDialog<String>(context: context, builder: (ctx) =>
+      SimpleDialog(title: const HypText('묶음 구성원 관리'), children: [
+        for (final name in commands) SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, name),
+          child: HypText(name == 'add' ? '서재에서 작품 추가' :
+            name == 'remove' ? '회차를 묶음에서 제외' : '다른 묶음으로 이동'),
+        ),
+      ]));
+    if (!mounted || action == null) return;
+    final options = action == 'add' ? available : members;
+    if (options.isEmpty) return;
+    final picked = <String>{};
+    final selected = await showDialog<List<String>>(context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, update) => AlertDialog(
+        title: const HypText('회차 선택'),
+        content: SizedBox(width: 460, height: 350, child: ListView(
+          children: [for (final w in options) CheckboxListTile(
+            title: HypText(w.title), subtitle: HypText('#' + w.workId),
+            value: picked.contains(w.workId),
+            onChanged: (v) => update(() { if (v == true) { picked.add(w.workId); } else { picked.remove(w.workId); } }),
+          )])),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const HypText('취소')),
+          FilledButton(onPressed: picked.isEmpty ? null : () => Navigator.pop(ctx, picked.toList()),
+            child: const HypText('계속'))],
+      )));
+    if (selected == null || selected.isEmpty || !mounted) return;
+    try {
+      if (action == 'add') {
+        await widget.onAddWorksToGroup?.call(id, selected);
+      } else if (action == 'remove') {
+        await widget.onRemoveGroupChapters?.call(id, selected);
+      } else if (groups.isNotEmpty) {
+        final target = await showDialog<String>(context: context, builder: (ctx) =>
+          SimpleDialog(title: const HypText('대상 묶음 선택'), children: [
+            for (final targetId in groups) SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, targetId),
+              child: HypText(widget.library.works.firstWhere((w) => w.groupId == targetId).groupTitle),
+            ),
+          ]));
+        if (target != null) await widget.onMoveGroupChapters?.call(id, target, selected);
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('묶음 편집 실패: $error')));
     }
   }
 
@@ -3265,6 +3327,27 @@ class _HypDashboardState extends State<HypDashboard> {
               icon: const Icon(Icons.save_outlined),
               label: const HypText('소스 설정 저장'),
             )),
+        ],
+      )),
+      const SizedBox(height: 13),
+      _settingsPanel('deletion', '서재 삭제·Windows 종료', Column(
+        children: [
+          SwitchListTile.adaptive(
+            key: const Key('delete-local-files-default-setting'),
+            title: const HypText('로컬 파일도 함께 삭제 (기본 체크)'),
+            subtitle: const HypText('단일·다중 삭제 팝업에서 체크 상태를 미리 정해. 삭제할 때마다 해제할 수 있어.'),
+            value: widget.readerSettings.deleteLocalFilesByDefault,
+            onChanged: (v) => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(deleteLocalFilesByDefault: v)),
+          ),
+          if (Platform.isWindows) SwitchListTile.adaptive(
+            key: const Key('windows-close-exits-app-setting'),
+            title: const HypText('X 버튼을 누르면 완전 종료'),
+            subtitle: const HypText('끄면 창만 숨기고 트레이에 남아. 켜면 앱과 트레이를 종료해.'),
+            value: widget.readerSettings.closeWindowExitsApp,
+            onChanged: (v) => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(closeWindowExitsApp: v)),
+          ),
         ],
       )),
       const SizedBox(height: 13),
