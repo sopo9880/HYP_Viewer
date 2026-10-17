@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import '../core/i18n.dart';
 import '../core/number_extractor.dart';
 import '../core/social_web_capture.dart';
 import '../core/source_links.dart';
@@ -50,7 +51,7 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
             result.description.isEmpty && result.comments.isEmpty ?
               '본문·댓글 미로딩 또는 접근 제한' :
             result.comments.isEmpty ? '본문 확인 · 댓글 미로딩' :
-              '공개 화면에 표시된 댓글 ${result.comments.length}개 수집';
+              '공개 화면 댓글 수집 완료';
         }
       });
     } catch (_) {
@@ -82,13 +83,13 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
               Row(children: [
                 const Icon(Icons.article_outlined),
                 const SizedBox(width: 10),
-                const Expanded(child: Text('Instagram 게시물·릴스 분석',
+                const Expanded(child: HypText('Instagram 게시물·릴스 분석',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
                 IconButton(onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close)),
               ]),
               const SizedBox(height: 8),
-              Text(_status),
+              HypText(_status),
               const SizedBox(height: 8),
               Expanded(child: ListView(children: [
                 if (Platform.isAndroid || Platform.isWindows)
@@ -118,43 +119,43 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
                       unawaited(_read());
                     },
                   ))
-                else const Text('현재 플랫폼에서는 웹뷰를 지원하지 않아.'),
+                else const HypText('현재 플랫폼에서는 웹뷰를 지원하지 않아.'),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(onPressed: () => unawaited(_read()),
                   icon: const Icon(Icons.refresh),
-                  label: const Text('화면에서 보이는 본문·댓글 다시 읽기')),
+                  label: const HypText('화면에서 보이는 본문·댓글 다시 읽기')),
                 const SizedBox(height: 10),
-                const Text('게시글 본문',
+                const HypText('게시글 본문',
                     style: TextStyle(fontWeight: FontWeight.bold)),
                 SelectableText(_snapshot?.description.isNotEmpty == true
-                  ? _snapshot!.description : '읽은 본문이 없어.'),
+                  ? _snapshot!.description : HypI18n.t(context, '읽은 본문이 없어.')),
                 const SizedBox(height: 12),
-                Text('댓글 (화면에서 확인된 ${_snapshot?.comments.length ?? 0}개)',
+                Text('${HypI18n.t(context, '화면에서 확인된 댓글')}: ${_snapshot?.comments.length ?? 0}',
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 for (final comment in _snapshot?.comments ?? <String>[])
                   ListTile(dense: true, title: SelectableText(comment)),
                 if (_snapshot?.comments.isEmpty != false)
-                  const Text('댓글이 없는 것으로 단정할 수 없어. 직접 스크롤 후 다시 읽어줘.'),
+                  const HypText('댓글이 없는 것으로 단정할 수 없어. 직접 스크롤 후 다시 읽어줘.'),
                 const SizedBox(height: 12),
-                Text('번호 후보: ${ids.join(', ')}'),
+                Text('${HypI18n.t(context, '번호 후보')}: ${ids.join(', ')}'),
                 const SizedBox(height: 10),
                 TextField(controller: _manual, maxLines: 4, minLines: 2,
                   maxLength: 12000,
-                  decoration: const InputDecoration(
-                    labelText: '본문·댓글 직접 붙여넣기',
-                    border: OutlineInputBorder()),
+                  decoration: InputDecoration(
+                    labelText: HypI18n.t(context, '본문·댓글 직접 붙여넣기'),
+                    border: const OutlineInputBorder()),
                   onChanged: (_) => setState(() {})),
-                const Text('비공개 게시물이나 로드되지 않은 댓글은 자동으로 수집하지 않아.'),
+                const HypText('비공개 게시물이나 로드되지 않은 댓글은 자동으로 수집하지 않아.'),
               ])),
               const SizedBox(height: 9),
               Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                 TextButton(onPressed: () => Navigator.pop(context),
-                    child: const Text('취소')),
+                    child: const HypText('취소')),
                 const SizedBox(width: 8),
                 FilledButton(onPressed: () => Navigator.pop(context,
                   VisualInspectionResult(text: _text,
                     sourceUrl: widget.source.url)),
-                  child: const Text('후보를 Finder로 전달')),
+                  child: const HypText('후보를 Finder로 전달')),
               ]),
             ],
           ),

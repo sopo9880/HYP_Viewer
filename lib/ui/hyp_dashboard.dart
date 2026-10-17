@@ -1960,7 +1960,7 @@ class _HypDashboardState extends State<HypDashboard> {
       }
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('묶음 편집 실패: $error')));
+        SnackBar(content: HypText('묶음 편집 실패: $error')));
     }
   }
 
