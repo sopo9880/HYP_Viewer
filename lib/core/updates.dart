@@ -57,6 +57,71 @@ class ReleaseUpdate {
   }
 }
 
+/// Limits expensive Flutter/native progress updates during large installer
+/// downloads. Always dispatches 0% and 100% and keeps significant changes.
+class UpdateProgressLimiter {
+  final Duration minInterval;
+  final double minDelta;
+  DateTime? _lastAt;
+  double? _lastValue;
+
+  UpdateProgressLimiter({
+    this.minInterval = const Duration(milliseconds: 300),
+    this.minDelta = 0.05,
+  });
+
+  bool shouldEmit(double raw, DateTime now) {
+    if (!raw.isFinite) return false;
+    final value = raw.clamp(0.0, 1.0).toDouble();
+    final previous = _lastValue;
+    if (previous == null ||
+        (value >= 1.0 && previous < 1.0) ||
+        (value == 0.0 && previous != 0.0)) {
+      _lastAt = now;
+      _lastValue = value;
+      return true;
+    }
+    if (value == previous) return false;
+    if (_lastAt != null && now.difference(_lastAt!) < minInterval &&
+        (value - previous).abs() < minDelta) return false;
+    _lastAt = now;
+    _lastValue = value;
+    return true;
+  }
+}
+
+/// Small, best-effort LOCAL diagnostic log to distinguish a network error,
+/// verified download and installer handover from an unexpected native exit.
+/// Never logs URLs, titles, authentication, or the downloaded asset contents.
+abstract final class UpdateDiagnostics {
+  static Future<void> record(String phase, {
+    Object? error, StackTrace? stack, Directory? baseDirectory,
+  }) async {
+    try {
+      final base = baseDirectory ?? await getApplicationSupportDirectory();
+      final directory = Directory(base.path +
+          Platform.pathSeparator + 'hyp_updates');
+      await directory.create(recursive: true);
+      final file = File(directory.path +
+          Platform.pathSeparator + 'update_diagnostics.log');
+      if (await file.exists() && await file.length() > 1024 * 1024) {
+        await file.writeAsString('');
+      }
+      final timestamp = DateTime.now().toUtc().toIso8601String();
+      final errorClass = error == null ? '' : ' type=' +
+          error.runtimeType.toString();
+      final firstFrame = stack == null ? '' :
+          ' stack=' + stack.toString().split('\n').first.trim();
+      await file.writeAsString(
+        '$timestamp $phase$errorClass$firstFrame\n',
+        mode: FileMode.append, flush: true,
+      );
+    } catch (_) {
+      // Diagnostics must never cause or interrupt an update.
+    }
+  }
+}
+
 /// Checks public GitHub releases and downloads a SHA-256-verified installer.
 /// A download never triggers execution without separate, explicit user input.
 class UpdateService {

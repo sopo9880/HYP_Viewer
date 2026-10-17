@@ -3,8 +3,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/i18n.dart';
+import '../core/instagram_navigation.dart';
 import '../core/number_extractor.dart';
 import '../core/social_web_capture.dart';
 import '../core/source_links.dart';
@@ -27,7 +29,10 @@ class InstagramSourceInspector extends StatefulWidget {
 
 class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
   InAppWebViewController? _web;
+  InAppWebViewController? _popupWeb;
   Timer? _poll;
+  bool _resultsOpen = false;
+  String _diagnostics = '';
   final SocialCommentAccumulator _collected = SocialCommentAccumulator();
   final TextEditingController _manual = TextEditingController();
   String _status = '페이지를 불러오는 중';
@@ -44,10 +49,11 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
     text: _text, sourceUrl: widget.source.url));
 
   Future<void> _read() async {
-    if (!_loaded || _web == null || _reading || !mounted) return;
+    final controller = _popupWeb ?? _web;
+    if (!_loaded || controller == null || _reading || !mounted) return;
     _reading = true;
     try {
-      final raw = await _web!.evaluateJavascript(
+      final raw = await controller.evaluateJavascript(
         source: SocialWebCapture.javascript);
       final snapshot = SocialWebCapture.parse(raw);
       if (!mounted) return;
@@ -56,6 +62,7 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
           _status = '본문 구조 확인 실패 · 다시 읽거나 직접 붙여넣기';
           return;
         }
+        _diagnostics = snapshot.collectorDiagnostics;
         final newCount = _collected.add(snapshot);
         if (_collected.loginRequired) {
           _status = 'Instagram 로그인 필요';
@@ -79,6 +86,95 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
     }
   }
 
+  /// The page's actual touch controls remain unobstructed on Android.
+  /// This is a user-initiated fallback for pages whose comment button
+  /// does not respond to a normal tap inside Android WebView.
+  Future<void> _requestComments() async {
+    final browser = _popupWeb ?? _web;
+    if (browser == null) return;
+    try {
+      final result = await browser.evaluateJavascript(
+        source: SocialWebCapture.openCommentsJavascript);
+      if (!mounted) return;
+      setState(() => _status = result.toString().contains('clicked')
+          ? '댓글 열기 요청 · 화면에 표시되면 자동으로 읽을게'
+          : '댓글 버튼을 찾지 못했어 · Instagram 로그인 또는 접근 제한을 확인해줘');
+      unawaited(_read());
+    } catch (_) {
+      if (mounted) setState(() =>
+          _status = '댓글 버튼 조작에 실패했어 · 브라우저에서 열기를 사용해줘');
+    }
+  }
+
+  Future<void> _openExternal() async {
+    final link = Uri.tryParse(widget.source.url);
+    if (!InstagramNavigation.isInstagram(link)) return;
+    try {
+      await launchUrl(link!, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (mounted) setState(() =>
+          _status = '외부 브라우저를 열지 못했어. 링크를 복사해 사용해줘.');
+    }
+  }
+
+  Future<NavigationActionPolicy> _allowNavigation(
+      NavigationAction action) async {
+    if (action.isForMainFrame == false) return NavigationActionPolicy.ALLOW;
+    final dest = Uri.tryParse(action.request.url?.toString() ?? '');
+    final allowed = InstagramNavigation.isAllowed(dest);
+    if (!allowed && mounted) setState(() =>
+        _status = 'Instagram 외부 주소 이동은 제한돼. 필요한 경우 외부 브라우저를 사용해줘.');
+    return allowed
+        ? NavigationActionPolicy.ALLOW
+        : NavigationActionPolicy.CANCEL;
+  }
+
+  Future<void> _showPopup(int windowId) async {
+    if (!mounted) return;
+    try {
+      await Navigator.of(context).push<void>(MaterialPageRoute<void>(
+        builder: (popupContext) => Scaffold(
+          appBar: AppBar(
+            title: const HypText('Instagram 댓글 창'),
+            actions: [
+              IconButton(
+                tooltip: HypI18n.t(popupContext, '댓글 다시 읽기'),
+                icon: const Icon(Icons.refresh),
+                onPressed: () => unawaited(_read()),
+              ),
+            ],
+          ),
+          body: InAppWebView(
+            windowId: windowId,
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              useShouldOverrideUrlLoading: true,
+              supportMultipleWindows: true,
+              javaScriptCanOpenWindowsAutomatically: true,
+            ),
+            onWebViewCreated: (controller) {
+              _popupWeb = controller;
+              _loaded = true;
+            },
+            shouldOverrideUrlLoading: (_, action) =>
+                _allowNavigation(action),
+            onLoadStop: (controller, _) {
+              _loaded = true;
+              unawaited(_read());
+            },
+            onCloseWindow: (_) {
+              if (popupContext.mounted) Navigator.of(popupContext).pop();
+            },
+          ),
+        ),
+      ));
+    } finally {
+      _popupWeb = null;
+      _loaded = true;
+      if (mounted) unawaited(_read());
+    }
+  }
+
   Widget _browser() {
     if (!Platform.isAndroid && !Platform.isWindows) {
       return const Center(
@@ -90,16 +186,24 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
         javaScriptEnabled: true,
         useShouldOverrideUrlLoading: true,
         mediaPlaybackRequiresUserGesture: true,
+        supportMultipleWindows: true,
+        javaScriptCanOpenWindowsAutomatically: true,
       ),
       onWebViewCreated: (controller) => _web = controller,
-      shouldOverrideUrlLoading: (_, action) async {
-        final target = Uri.tryParse(action.request.url.toString());
-        final host = target?.host.toLowerCase() ?? '';
-        return target != null && target.scheme == 'https' &&
-            target.userInfo.isEmpty && !target.hasPort &&
-            (host == 'instagram.com' || host.endsWith('.instagram.com'))
-            ? NavigationActionPolicy.ALLOW
-            : NavigationActionPolicy.CANCEL;
+      shouldOverrideUrlLoading: (_, action) => _allowNavigation(action),
+      onCreateWindow: (_, request) async {
+        // Popups are allowed only for an explicit user gesture, on Instagram
+        // or its HTTPS login flow (including an initial about:blank window).
+        if (request.hasGesture == false) return false;
+        final uri = Uri.tryParse(request.request.url?.toString() ?? '');
+        if (uri != null && !InstagramNavigation.isAllowed(uri, popup: true)) {
+          if (mounted) setState(() => _status =
+              '차단된 새 창 요청 · Instagram 또는 로그인 페이지에서만 열 수 있어');
+          return false;
+        }
+        if (!mounted) return false;
+        unawaited(_showPopup(request.windowId));
+        return true;
       },
       onLoadStart: (_, __) {
         _loaded = false;
@@ -161,6 +265,9 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
             _collected.count.toString(),
           style: const TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 5),
+        if (_diagnostics.isNotEmpty) Text(
+          HypI18n.t(context, '댓글 수집 진단') + ': ' + _diagnostics,
+          style: Theme.of(context).textTheme.bodySmall),
         if (strings.isEmpty) const HypText(
           '인스타그램 화면에서 댓글을 직접 펼치고 스크롤한 뒤 다시 읽어줘.'),
         for (final comment in strings)
@@ -211,6 +318,21 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
       title: const HypText('Instagram 게시물·릴스 분석'),
       actions: [
         IconButton(
+          tooltip: HypI18n.t(context, '댓글 열기 시도'),
+          onPressed: _requestComments,
+          icon: const Icon(Icons.mode_comment_outlined),
+        ),
+        IconButton(
+          tooltip: HypI18n.t(context, '외부 브라우저로 열기'),
+          onPressed: _openExternal,
+          icon: const Icon(Icons.open_in_browser),
+        ),
+        if (Platform.isAndroid) IconButton(
+          tooltip: HypI18n.t(context, '댓글 분석 결과 열기'),
+          onPressed: () => setState(() => _resultsOpen = !_resultsOpen),
+          icon: Icon(_resultsOpen ? Icons.close : Icons.list_alt),
+        ),
+        IconButton(
           tooltip: HypI18n.t(context, '화면에서 보이는 본문·댓글 다시 읽기'),
           onPressed: _loaded && !_reading ? () => unawaited(_read()) : null,
           icon: const Icon(Icons.refresh),
@@ -229,12 +351,12 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
       // results sheet floats above it and never competes for scroll gestures.
       return Stack(children: [
         Positioned.fill(child: _browser()),
-        DraggableScrollableSheet(
-          initialChildSize: 0.22,
-          minChildSize: 0.12,
+        if (_resultsOpen) DraggableScrollableSheet(
+          initialChildSize: 0.67,
+          minChildSize: 0.20,
           maxChildSize: 0.92,
           snap: true,
-          snapSizes: const [0.12, 0.22, 0.65],
+          snapSizes: const [0.20, 0.67],
           builder: (context, scrollController) => Material(
             elevation: 12,
             color: Theme.of(context).colorScheme.surface,

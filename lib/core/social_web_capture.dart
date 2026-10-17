@@ -9,12 +9,14 @@ class SocialWebCapture {
   final String url, title, description;
   final List<String> comments, pinnedComments, imageUrls;
   final bool limited, loginRequired, commentAreaPresent;
+  final String collectorDiagnostics;
 
   const SocialWebCapture({
     required this.url, required this.title, required this.description,
     required this.comments, required this.imageUrls,
     this.pinnedComments = const [], this.commentAreaPresent = false,
     this.limited = true, this.loginRequired = false,
+    this.collectorDiagnostics = '',
   });
 
   String get combinedText => [title, description, ...comments]
@@ -42,6 +44,7 @@ class SocialWebCapture {
         pinnedComments: readList('pinnedComments').take(30).toList(),
         comments: readList('comments').take(60).toList(),
         commentAreaPresent: decoded['commentAreaPresent'] == true,
+        collectorDiagnostics: read('diagnostics'),
         imageUrls: readList('images')
             .where((s) => s.startsWith('https://')).take(24).toList(),
         loginRequired: decoded['loginRequired'] == true,
@@ -67,6 +70,34 @@ class SocialWebCapture {
     window.__hypVisibleObserver.observe(document.body, {
       childList: true, subtree: true, characterData: true
     });
+  })();''';
+
+  /// A one-shot click only when the user explicitly selects 'Open comments'
+  /// in the inspector. Never clicks 'login', 'follow' or private controls.
+  static const String openCommentsJavascript = r'''(function () {
+    var selectors = [
+      'svg[aria-label*="Comment"]', 'svg[aria-label*="comment"]',
+      'svg[aria-label*="댓글"]', 'svg[aria-label*="コメント"]',
+      '[aria-label="View all comments"]',
+      '[aria-label="댓글 보기"]',
+      'button[aria-label*="comment"]',
+      'button[aria-label*="Comment"]',
+      'a[href*="/comments/"]'
+    ];
+    for (var i = 0; i < selectors.length; i++) {
+      var nodes = document.querySelectorAll(selectors[i]);
+      for (var j = 0; j < nodes.length; j++) {
+        var node = nodes[j];
+        var target = node.closest('button, a, [role="button"]') || node;
+        var bounds = target.getBoundingClientRect();
+        if (bounds.width <= 0 || bounds.height <= 0) continue;
+        var style = window.getComputedStyle(target);
+        if (style.display === 'none' || style.visibility === 'hidden') continue;
+        target.click();
+        return 'clicked';
+      }
+    }
+    return 'not_found';
   })();''';
 
   static const String javascript = r'''(function () {
@@ -113,25 +144,62 @@ class SocialWebCapture {
       document.querySelector('article') ||
       document.querySelector('[role="dialog"]')
     ) : document;
-    var commentRoot = instagram ? ((post && post.querySelector(
-      'ul li, [role="listitem"], [data-testid="comment"]')) ? post :
-      (document.querySelector('[role="dialog"]') ||
-       document.querySelector('main') || post || document)) : document;
-    var pinnedComments = instagram ? collect(commentRoot, [
+    // Instagram can render the comments OUTSIDE the post article (especially
+    // in desktop modal and Reels). Search document-level visible comment rows
+    // rather than assuming the first article/dialog owns the entire thread.
+    var commentSelectors = [
+      '[role="dialog"] [role="listitem"]',
+      '[role="dialog"] ul li',
+      '[role="dialog"] [data-testid="comment"]',
+      '[role="dialog"] [data-testid="post-comment-root"]',
+      'main [role="listitem"]', 'main ul li',
+      'article [role="listitem"]', 'article ul li',
+      '[data-testid="post-comment-root"]',
+      '[role="listitem"]', 'ul li'
+    ];
+    var pinnedComments = instagram ? collect(document, [
       '[aria-label*="Pinned"]', '[aria-label*="고정"]',
-      '[aria-label*="固定"]'
+      '[aria-label*="固定"]',
+      '[role="dialog"] [data-testid*="pinned"]'
     ], 20) : [];
-    var comments = instagram ? collect(commentRoot, [
-      'ul li', '[role="listitem"]',
-      '[data-testid="comment"]', '[data-testid="post-comment-root"]'
-    ], 60) : youtube ? collect(document, [
+    var comments = instagram ? collect(document,
+      commentSelectors, 60) : youtube ? collect(document, [
       'ytd-comment-thread-renderer #content-text',
       'ytd-comment-view-model #content-text',
       'yt-comment-thread-renderer #content-text',
       'ytd-backstage-post-thread-renderer #content-text'
     ], 60) : [];
-    var commentAreaPresent = instagram && !!(commentRoot && commentRoot.querySelector(
-      'ul li, [role="listitem"], [data-testid="comment"], [data-testid="post-comment-root"]'));
+    var matchingRows = instagram ? document.querySelectorAll(
+      commentSelectors.join(',')).length : 0;
+    // Some desktop Instagram layouts use text spans with no list item wrapper.
+    // Only as a fallback, collect short rendered fragments with likely work
+    // IDs from the current post/dialog. Never request hidden server content.
+    var fallbackCount = 0;
+    if (instagram) {
+      var seenText = {};
+      comments.forEach(function(value) { seenText[value] = true; });
+      var candidates = document.querySelectorAll(
+        '[role="dialog"] span, [role="dialog"] div[dir="auto"], ' +
+        'main span, main div[dir="auto"], article span');
+      for (var i = 0; i < candidates.length && i < 650 &&
+           comments.length < 60; i++) {
+        var node = candidates[i];
+        if (node.closest('nav, [role="navigation"], header')) continue;
+        var value = text(node);
+        if (value.length < 5 || value.length > 550 ||
+            !/[0-9]{5,12}/.test(value) || seenText[value]) continue;
+        seenText[value] = true;
+        comments.push(value);
+        fallbackCount++;
+      }
+    }
+    var commentAreaPresent = instagram &&
+      (matchingRows > 0 || document.querySelector('[role="dialog"]') != null);
+    var diagnostics = instagram
+      ? ('rows=' + matchingRows + '; modal=' +
+        (document.querySelector('[role="dialog"]') ? 'yes' : 'no') +
+        '; fallback=' + fallbackCount)
+      : '';
     var captions = instagram ? collect(post, [
       'h1', '[data-testid="post-comment-root"]',
       'header + div', '[role="heading"]'
@@ -173,6 +241,7 @@ class SocialWebCapture {
       comments: comments,
       pinnedComments: pinnedComments,
       commentAreaPresent: commentAreaPresent,
+      diagnostics: diagnostics,
       images: images,
       loginRequired: loginRequired
     });

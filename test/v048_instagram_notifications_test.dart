@@ -72,7 +72,8 @@ void main() {
     ));
     expect(find.byType(Scaffold), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
-    expect(find.byType(DraggableScrollableSheet), findsOneWidget);
+    // The WebView must be completely tappable until the user opens results.
+    expect(find.byType(DraggableScrollableSheet), findsNothing);
     expect(find.text('Analyze Instagram Posts & Reels'), findsOneWidget);
   }, skip: Platform.isAndroid || Platform.isWindows);
 
