@@ -114,7 +114,8 @@ void main() {
     expect(updater, contains("phase = 'download'"));
     expect(updater, contains('UpdateDiagnostics.record('));
     expect(updater, contains('if (Platform.isAndroid) {'));
-    expect(updater, contains(
+    // Windows reads source files with CRLF; normalize line endings first.
+    expect(updater.replaceAll('\r\n', '\n'), contains(
         'if (Platform.isAndroid) {\n              unawaited(_backgroundDownloads.setProgress('));
   });
 
