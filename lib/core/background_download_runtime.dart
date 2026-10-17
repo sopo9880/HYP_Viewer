@@ -59,6 +59,12 @@ class BackgroundDownloadRuntime {
 
   bool get hasTransfers => _leases > 0;
 
+  /// Pure-Dart update flag: keep Windows X-close confirmations without
+  /// invoking any tray/taskbar plugin while streaming installer bytes.
+  void setInstallerDownloadActive(bool active) {
+    if (Platform.isWindows) _desktop.setInstallerDownloadActive(active);
+  }
+
   void setWindowExitConfirmationHandler(Future<bool> Function()? handler) {
     _desktop.setWindowExitConfirmationHandler(handler);
   }
@@ -185,6 +191,7 @@ class _DesktopDownloadTray with WindowListener, TrayListener {
   bool _initialized = false;
   bool _exitOnClose = false;
   bool _closing = false;
+  bool _installerDownloadActive = false;
   void Function()? _openDownloads;
   Future<bool> Function()? _confirmExit;
   int _active = 0;
@@ -193,6 +200,10 @@ class _DesktopDownloadTray with WindowListener, TrayListener {
 
   void setDownloadsNavigationHandler(void Function()? handler) {
     _openDownloads = handler;
+  }
+
+  void setInstallerDownloadActive(bool active) {
+    _installerDownloadActive = active;
   }
 
   void setWindowExitConfirmationHandler(Future<bool> Function()? handler) {
@@ -280,7 +291,7 @@ class _DesktopDownloadTray with WindowListener, TrayListener {
     if (_closing) return;
     _closing = true;
     try {
-      if (_active > 0) {
+      if (_active > 0 || _installerDownloadActive) {
         if (fromTray) await _show();
         final confirm = _confirmExit;
         if (confirm == null || !await confirm()) return;

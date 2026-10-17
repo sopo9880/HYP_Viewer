@@ -1,6 +1,18 @@
 /// Additional 0.4 translations for on-device UI; titles remain verbatim.
 abstract final class HypExtraTranslations {
   static const Map<String, List<String>> labels = {
+    "댓글 열기 시도": ["Try Opening Comments", "コメントを開く"],
+    "외부 브라우저로 열기": ["Open in External Browser", "外部ブラウザで開く"],
+    "댓글 분석 결과 열기": ["Show Comment Results", "コメント解析結果を表示"],
+    "Instagram 댓글 창": ["Instagram Comments", "Instagramコメント"],
+    "댓글 다시 읽기": ["Reread Comments", "コメントを再取得"],
+    "댓글 수집 진단": ["Comment Collection Diagnostics", "コメント取得診断"],
+    "댓글 열기 요청 · 화면에 표시되면 자동으로 읽을게": ["Requested comments · Visible replies will be collected", "コメント表示を要求しました。表示されたコメントを取得します"],
+    "댓글 버튼을 찾지 못했어 · Instagram 로그인 또는 접근 제한을 확인해줘": ["Comment button not found · Check Instagram login or access restrictions", "コメントボタンが見つかりません。ログインまたはアクセス制限を確認してください"],
+    "댓글 버튼 조작에 실패했어 · 브라우저에서 열기를 사용해줘": ["Unable to activate comments · Try the external browser", "コメントを開けませんでした。外部ブラウザをお試しください"],
+    "외부 브라우저를 열지 못했어. 링크를 복사해 사용해줘.": ["Unable to launch the browser. Copy the link instead.", "ブラウザを開けませんでした。リンクをコピーして使用してください。"],
+    "Instagram 외부 주소 이동은 제한돼. 필요한 경우 외부 브라우저를 사용해줘.": ["Navigation outside Instagram is restricted. Use the external browser if needed.", "Instagram以外への移動は制限されています。必要に応じて外部ブラウザを使用してください。"],
+    "차단된 새 창 요청 · Instagram 또는 로그인 페이지에서만 열 수 있어": ["Blocked popup · Only Instagram and login pages may open here", "ポップアップをブロックしました。Instagramとログインページのみ開けます"],
     "수집된 내용": ["Collected content", "収集した内容"],
     "누적 수집된 댓글": ["Comments collected in this session", "このセッションで収集したコメント"],
     "인스타그램 화면에서 댓글을 직접 펼치고 스크롤한 뒤 다시 읽어줘.": ["Expand the comments in Instagram, scroll, then reread visible comments.", "Instagramでコメントを開いてスクロールし、表示中のコメントを再読込してください。"],

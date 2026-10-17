@@ -2457,6 +2457,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _status('오프라인 저장 실패: ' + e.toString());
       return false;
     } finally {
+      if (Platform.isWindows) {
+        _backgroundDownloads.setInstallerDownloadActive(false);
+      }
       client.close();
       if (holdsBackground) {
         await _backgroundDownloads.clearProgress();
@@ -2897,6 +2900,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     if (downloadingUpdate) return;
     final client = http.Client();
     var holdsBackground = false;
+    var phase = 'initializing';
+    final progressLimiter = UpdateProgressLimiter();
     setState(() {
       downloadingUpdate = true;
       updateProgress = 0;
@@ -2904,26 +2909,43 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       message = '설치 파일을 내려받는 중이야.';
     });
     try {
-      await _backgroundDownloads.acquire();
-      holdsBackground = true;
+      if (Platform.isWindows) {
+        _backgroundDownloads.setInstallerDownloadActive(true);
+      }
+      await UpdateDiagnostics.record('begin');
+      // Windows updates must NOT start native tray/taskbar progress plugins;
+      // those can fault the host process and are unrelated to the HTTP stream.
+      // Android still holds its required foreground-service lease.
+      if (Platform.isAndroid) {
+        phase = 'android-foreground';
+        await _backgroundDownloads.acquire();
+        holdsBackground = true;
+      }
+      phase = 'download';
       final installer = await UpdateService(client).download(
         release,
         asset,
         onProgress: (value) {
-          if (mounted) {
+          if (mounted && progressLimiter.shouldEmit(value, DateTime.now())) {
             setState(() => updateProgress = value.clamp(0.0, 1.0));
-            unawaited(_backgroundDownloads.setProgress(
+            if (Platform.isAndroid) {
+              unawaited(_backgroundDownloads.setProgress(
                 (value * 100).round(), 100,
                 isUpdate: true, language: readerSettings.languageCode));
+            }
           }
         },
         onStatus: (status) {
           if (mounted) setState(() => updateStatus = status);
         },
       );
-      await _backgroundDownloads.clearProgress();
-      await _backgroundDownloads.release();
-      holdsBackground = false;
+      phase = 'verified';
+      await UpdateDiagnostics.record(phase);
+      if (holdsBackground) {
+        await _backgroundDownloads.clearProgress();
+        await _backgroundDownloads.release();
+        holdsBackground = false;
+      }
       if (!mounted) return;
       bool install;
       if (Platform.isAndroid) {
@@ -2972,6 +2994,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         ) == true;
       }
       if (install == true) {
+        phase = 'installer-handover';
+        await UpdateDiagnostics.record(phase);
         final pending = await _pendingUpdateFile();
         await pending.writeAsString(release.version, flush: true);
         try {
@@ -2987,13 +3011,19 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       } else {
         _status('검증된 설치 파일을 앱 보관함에 저장했어. 다시 다운로드할 필요 없어.');
       }
-    } catch (e) {
+    } catch (e, stack) {
+      await UpdateDiagnostics.record(phase, error: e, stack: stack);
       _status('업데이트 실패: ' + e.toString());
     } finally {
       client.close();
       if (holdsBackground) {
-        await _backgroundDownloads.clearProgress();
-        await _backgroundDownloads.release();
+        try {
+          await _backgroundDownloads.clearProgress();
+          await _backgroundDownloads.release();
+        } catch (error, stack) {
+          await UpdateDiagnostics.record(
+              'foreground-cleanup', error: error, stack: stack);
+        }
       }
       if (mounted) setState(() => downloadingUpdate = false);
     }
