@@ -1,6 +1,12 @@
 /// Additional 0.4 translations for on-device UI; titles remain verbatim.
 abstract final class HypExtraTranslations {
   static const Map<String, List<String>> labels = {
+    "링크 고급 분석": ["Advanced Link Inspection", "リンクの詳細解析"],
+    "다운로드 중 종료 확인": ["Confirm Exit During Download", "ダウンロード中の終了確認"],
+    "진행 중인 다운로드를 중단하고 앱을 완전히 종료할까? 저장된 대기열은 다음 실행 때 복구돼.": ["Quit the app and interrupt active downloads? Saved download jobs will resume at the next launch.", "進行中のダウンロードを中断してアプリを完全終了しますか？保存したキューは次回起動時に復元されます。"],
+    "완전 종료": ["Quit Completely", "完全に終了"],
+    "이미지 공유·업로드 파일은 아직 분석하지 않아. 서재와 링크 분석은 그대로 사용할 수 있어.": ["Shared and uploaded images are not analyzed yet. Library and link analysis remain available.", "共有・アップロードされた画像はまだ解析しません。本棚とリンク解析は引き続き利用できます。"],
+    "회차 제목 수정": ["Edit Chapter Title", "話数のタイトルを編集"],
     "이미지로 작품 찾기": ["Find a Work by Image", "画像から作品を探す"],
     "이미지 검색은 준비 중이야. 이번 버전에서는 이미지 검색을 실행하지 않아.": ["Image search is being prepared and is unavailable in this version.", "画像検索は準備中です。このバージョンでは利用できません。"],
     "설정 기본값 적용. 체크하면 이 작품들의 다운로드 파일과 표지 미리보기도 삭제해.": ["Uses the saved default. When checked, downloads and cover previews for these works are also deleted.", "設定した初期値を使います。チェックすると作品のダウンロードファイルと表紙プレビューも削除されます。"],

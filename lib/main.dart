@@ -29,6 +29,7 @@ import 'core/hitomi_gallery.dart';
 import 'ui/gallery_reader.dart';
 import 'ui/visual_source_inspector.dart';
 import 'ui/instagram_source_inspector.dart';
+import 'ui/image_search_placeholder.dart';
 import 'ui/cover_picker.dart';
 import 'ui/cover_cropper.dart';
 import 'ui/work_editor.dart';
@@ -163,6 +164,28 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     if (mounted) setState(() => downloadNavigationEpoch++);
   }
 
+  Future<bool> _confirmExitWhileDownloading() async {
+    if (!mounted) return false;
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialog) => AlertDialog(
+        title: const HypText('다운로드 중 종료 확인'),
+        content: const HypText('진행 중인 다운로드를 중단하고 앱을 완전히 종료할까? 저장된 대기열은 다음 실행 때 복구돼.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const HypText('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const HypText('완전 종료'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
   void _clearSavedFinderOnTabExit() {
     if (!busy && _finderResetPolicy.consumeOnLeave(_finderSnapshot())) {
       _clearFinder();
@@ -187,6 +210,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     _loadHeroArtwork();
     _listenForSharedShorts();
     _backgroundDownloads.setDownloadsNavigationHandler(_openDownloadsFromNotification);
+    if (Platform.isWindows) {
+      _backgroundDownloads.setWindowExitConfirmationHandler(
+        _confirmExitWhileDownloading);
+    }
     unawaited(_backgroundDownloads.consumePendingDownloadsNavigation().then((open) {
       if (open && mounted) _openDownloadsFromNotification();
     }));
@@ -679,11 +706,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   Future<void> _inspectLocalImages() async {
     if (!mounted) return;
-    await showDialog<void>(context: context, builder: (ctx) => AlertDialog(
-      title: const HypText('이미지로 작품 찾기'),
-      content: const HypText('이미지 검색은 준비 중이야. 이번 버전에서는 이미지 검색을 실행하지 않아.'),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const HypText('닫기'))],
-    ));
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const ImageSearchPlaceholder(),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -3030,6 +3057,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       ctrl.dispose();
     }
     _backgroundDownloads.setDownloadsNavigationHandler(null);
+    _backgroundDownloads.setWindowExitConfirmationHandler(null);
     super.dispose();
   }
 

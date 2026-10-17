@@ -111,7 +111,14 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
                           ? NavigationActionPolicy.ALLOW
                           : NavigationActionPolicy.CANCEL;
                     },
-                    onLoadStop: (_, __) {
+                    onLoadStop: (controller, __) async {
+                      try {
+                        await controller.evaluateJavascript(
+                          source: SocialWebCapture.observerJavascript);
+                      } catch (_) {
+                        // Some embedded pages restrict JS observers.
+                      }
+                      if (!mounted) return;
                       _loaded = true;
                       _poll?.cancel();
                       _poll = Timer.periodic(const Duration(seconds: 3),

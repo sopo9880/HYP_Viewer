@@ -1916,17 +1916,21 @@ class _HypDashboardState extends State<HypDashboard> {
         .toList();
     final groups = widget.library.works.where((w) =>
         w.groupId.isNotEmpty && w.groupId != id).map((w) => w.groupId).toSet().toList();
-    final commands = <String>['add', 'remove', 'move'];
+    final commands = <String>[
+      'add', 'remove', if (groups.isNotEmpty) 'move', 'edit'];
     final action = await showDialog<String>(context: context, builder: (ctx) =>
       SimpleDialog(title: const HypText('묶음 구성원 관리'), children: [
         for (final name in commands) SimpleDialogOption(
           onPressed: () => Navigator.pop(ctx, name),
           child: HypText(name == 'add' ? '서재에서 작품 추가' :
-            name == 'remove' ? '회차를 묶음에서 제외' : '다른 묶음으로 이동'),
+            name == 'remove' ? '회차를 묶음에서 제외' :
+            name == 'edit' ? '회차 제목 수정' : '다른 묶음으로 이동'),
         ),
       ]));
     if (!mounted || action == null) return;
-    final options = action == 'add' ? available : members;
+    final seenEditions = <String>{};
+    final options = (action == 'add' ? available : members).where((w) =>
+      w.editionGroupId.isEmpty || seenEditions.add(w.editionGroupId)).toList();
     if (options.isEmpty) return;
     final picked = <String>{};
     final selected = await showDialog<List<String>>(context: context,
@@ -1939,12 +1943,16 @@ class _HypDashboardState extends State<HypDashboard> {
             onChanged: (v) => update(() { if (v == true) { picked.add(w.workId); } else { picked.remove(w.workId); } }),
           )])),
         actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const HypText('취소')),
-          FilledButton(onPressed: picked.isEmpty ? null : () => Navigator.pop(ctx, picked.toList()),
+          FilledButton(onPressed: picked.isEmpty || (action == 'edit' && picked.length != 1)
+              ? null : () => Navigator.pop(ctx, picked.toList()),
             child: const HypText('계속'))],
       )));
     if (selected == null || selected.isEmpty || !mounted) return;
     try {
-      if (action == 'add') {
+      if (action == 'edit') {
+        final target = members.firstWhere((w) => w.workId == selected.single);
+        await widget.onEditWorkDetails(target);
+      } else if (action == 'add') {
         await widget.onAddWorksToGroup?.call(id, selected);
       } else if (action == 'remove') {
         await widget.onRemoveGroupChapters?.call(id, selected);

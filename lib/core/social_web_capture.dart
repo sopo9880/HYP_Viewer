@@ -53,6 +53,19 @@ class SocialWebCapture {
   /// "load more" programmatically, read cookies or bypass access controls.
   /// Rerunning this script AFTER the user scrolls/expands comments captures
   /// newly rendered comments; the first page load often shows none.
+  /// Observe dynamic public comment rendering in the user-opened WebView.
+  /// Polling the existing snapshot remains the fallback when DOM events stall.
+  static const String observerJavascript = r'''(function() {
+    if (window.__hypVisibleObserver || !document.body) return;
+    window.__hypVisibleDomRevision = 0;
+    window.__hypVisibleObserver = new MutationObserver(function() {
+      window.__hypVisibleDomRevision += 1;
+    });
+    window.__hypVisibleObserver.observe(document.body, {
+      childList: true, subtree: true, characterData: true
+    });
+  })();''';
+
   static const String javascript = r'''(function () {
     function visible(el) {
       if (!el || !el.getBoundingClientRect) return false;
@@ -98,6 +111,8 @@ class SocialWebCapture {
       document.querySelector('[role="dialog"]')
     ) : document;
     var comments = instagram ? collect(post, [
+      '[aria-label*="Pinned"]', '[aria-label*="고정"]',
+      '[aria-label*="固定"]',
       'ul li', 'ul ul', '[role="listitem"]',
       '[data-testid="comment"]', '[data-testid="post-comment-root"]'
     ], 60) : youtube ? collect(document, [
