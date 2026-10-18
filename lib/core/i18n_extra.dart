@@ -21,7 +21,6 @@ abstract final class HypExtraTranslations {
     "차단 해제": ["Unblock", "ブロック解除"],
     "작품 번호 형식을 확인해 줘.": ["Enter a valid work ID.", "有効な作品番号を入力してください。"],
     "제목 키워드": ["Title Keyword", "タイトルのキーワード"],
-    "닫기": ["Close", "閉じる"],
     "작품 번호": ["Work ID", "作品番号"],
     "작가": ["Artist", "作者"],
     "서클": ["Circle", "サークル"],

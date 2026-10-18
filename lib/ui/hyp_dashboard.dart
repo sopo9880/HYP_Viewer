@@ -294,7 +294,6 @@ class _HypDashboardState extends State<HypDashboard> {
   Map<String, List<String>> _remoteFieldMatches = const {};
   String _remoteFieldFilter = '';
   final Set<String> _searchedRemoteFields = <String>{};
-  bool _showEmptyRemoteFields = false;
   final Set<String> _loadedRemoteFacets = {};
   final Set<String> _loadingRemoteFacets = {};
   final Map<String, int> _remoteFacetPages = {};
@@ -540,7 +539,6 @@ class _HypDashboardState extends State<HypDashboard> {
     _remoteFieldMatches = const {};
     _remoteFieldFilter = '';
     _searchedRemoteFields.clear();
-    _showEmptyRemoteFields = false;
     _loadedRemoteFacets.clear();
     _loadingRemoteFacets.clear();
     _remoteFacetPages.clear();
@@ -2486,8 +2484,8 @@ class _HypDashboardState extends State<HypDashboard> {
     final visibleRemote = _remoteResults.where((work) =>
         !_isBlockedOnline(work)).toList();
     final hiddenCount = _remoteResults.length - visibleRemote.length;
-    final visibleFieldTotals = OnlineWorkSearch.facetCounts(
-        visibleRemote, _remoteFieldMatches);
+    final visibleFieldTotals = hiddenCount == 0 ? _remoteFieldTotals :
+        OnlineWorkSearch.facetCounts(visibleRemote, _remoteFieldMatches);
     final existingIds = widget.library.works.map((w) => w.workId).toSet();
     final remoteFiltered = visibleRemote.where((w) =>
         (_remoteFieldFilter.isEmpty ||
@@ -2805,6 +2803,14 @@ class _HypDashboardState extends State<HypDashboard> {
               },
               icon: const Icon(Icons.bookmark_add_outlined),
               label: const HypText('서재 추가'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _openReaderWith(() => widget.onReadOnlineSearchWork(work));
+              },
+              icon: const Icon(Icons.menu_book),
+              label: const HypText('서재 추가하고 읽기'),
             ),
             FilledButton.icon(
               key: const Key('online-preview-without-save'),
