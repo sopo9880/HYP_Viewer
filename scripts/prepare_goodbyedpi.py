@@ -20,6 +20,8 @@ SOURCE = f"https://github.com/ValdikSS/GoodbyeDPI/releases/download/{TAG}/{ASSET
 SHA256 = "37f96b32d050dadcc930a639eba68e1ccd57ed5c04a5f77dfca908f01905a4c5"
 MAX_ARCHIVE = 5 * 1024 * 1024
 MAX_UNPACKED_FILE = 2 * 1024 * 1024
+# Official pinned release ships a multi-megabyte blacklist; keep a separate bounded limit.
+MAX_BLACKLIST_FILE = 32 * 1024 * 1024
 TOOLS = ("goodbyedpi.exe", "WinDivert.dll", "WinDivert64.sys")
 LICENSES = ("LICENSE-goodbyedpi.txt", "LICENSE-windivert.txt",
             "LICENSE-getline.txt", "LICENSE-uthash.txt")
@@ -55,7 +57,8 @@ def unpack_verified(contents: bytes, dest: Path, *, expected_sha256: str = SHA25
         for name in (*LICENSES, BLACKLIST):
             member = _single_member(zipped, "/" + name)
             item = zipped.getinfo(member)
-            if item.file_size > MAX_UNPACKED_FILE:
+            size_limit = MAX_BLACKLIST_FILE if name == BLACKLIST else MAX_UNPACKED_FILE
+            if item.file_size > size_limit:
                 raise ValueError("Release notice/list exceeds safety limit")
             output = dest / name
             output.write_bytes(zipped.read(member))
