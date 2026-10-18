@@ -70,6 +70,11 @@ jobs:
       - run: flutter pub get
       - run: flutter test
       - run: flutter build windows --release
+      - name: Bundle verified official GoodbyeDPI for Windows
+        shell: pwsh
+        run: |
+          python -m unittest discover -s scripts -p test_prepare_goodbyedpi.py
+          python scripts/prepare_goodbyedpi.py --destination build/windows/x64/runner/Release/tools
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup -y --no-progress
