@@ -18,6 +18,8 @@ import '../core/i18n.dart';
 import '../l10n/app_localizations.dart';
 import '../core/number_extractor.dart';
 import '../core/online_search.dart';
+import '../core/hitomi_web_search.dart';
+import 'hitomi_web_search_page.dart';
 import '../core/online_edition_groups.dart';
 import '../core/reading_history.dart';
 import 'reading_insights.dart';
@@ -285,12 +287,15 @@ class _HypDashboardState extends State<HypDashboard> {
   bool _remoteBusy = false;
   String? _remoteError;
   List<OnlineSearchWork> _remoteResults = [];
+  // User-approved public Hitomi web results stay distinct from mirror
+  // snapshots, which can arrive later and otherwise replace their lists.
+  final Map<String, OnlineSearchWork> _webSearchResults = {};
+  String _webSearchQuery = '';
   int _remoteTotal = 0;
   int _remotePage = 0;
   bool _remoteHasMore = false;
   int _remoteProgressDone = 0;
   int _remoteProgressTotal = 0;
-  Map<String, int> _remoteFieldTotals = const {};
   Map<String, List<String>> _remoteFieldMatches = const {};
   String _remoteFieldFilter = '';
   final Set<String> _searchedRemoteFields = <String>{};
@@ -529,13 +534,17 @@ class _HypDashboardState extends State<HypDashboard> {
     _activeRemoteSearchClient = null;
     _searchEpoch++;
     _remoteResults = [];
+    final currentQuery = _search.text.trim();
+    if (currentQuery != _webSearchQuery) {
+      _webSearchResults.clear();
+      _webSearchQuery = currentQuery;
+    }
     _remoteError = null;
     _remotePage = 0;
     _remoteTotal = 0;
     _remoteHasMore = false;
     _remoteProgressDone = 0;
     _remoteProgressTotal = 0;
-    _remoteFieldTotals = const {};
     _remoteFieldMatches = const {};
     _remoteFieldFilter = '';
     _searchedRemoteFields.clear();
@@ -653,8 +662,6 @@ class _HypDashboardState extends State<HypDashboard> {
       _remoteResults = [...next ? _remoteResults : <OnlineSearchWork>[],
         ...result.works].where((work) => seen.add(work.workId)).toList();
       _remoteTotal = _remoteResults.length;
-      _remoteFieldTotals = OnlineWorkSearch.facetCounts(
-          _remoteResults, _remoteFieldMatches);
       // Avoid an endless Load More button when a mirror repeats the same
       // result page or a page contains only already collected IDs.
       _remoteHasMore = result.hasNextPage &&
@@ -740,8 +747,6 @@ class _HypDashboardState extends State<HypDashboard> {
           for (final entry in fields.entries)
             entry.key: entry.value.toList(),
         };
-        _remoteFieldTotals = OnlineWorkSearch.facetCounts(
-            _remoteResults, _remoteFieldMatches);
         _remoteTotal = _remoteResults.length;
         _loadedRemoteFacets.add(field);
         _remoteFacetPages[field] = page;
@@ -1333,14 +1338,51 @@ class _HypDashboardState extends State<HypDashboard> {
     }
   }
 
-  Widget _searchField() => TextField(
-    key: const Key('library-search-input'),
-    focusNode: _searchFocus,
-    controller: _search,
-    decoration: InputDecoration(
-      hintText: HypI18n.t(context, '작품 제목, 작가, 번호, 목록으로 검색하세요...'),
-      prefixIcon: Icon(Icons.search_rounded, color: HypColors.muted),
-    ),
+  Future<void> _openHitomiWebSearch() async {
+    final query = _search.text.trim();
+    if (query.isEmpty || query.length > 150) return;
+    final epoch = _searchEpoch;
+    _searchFocus.unfocus();
+    final imported = await Navigator.of(context)
+        .push<List<HitomiWebGallery>>(MaterialPageRoute(
+      builder: (_) => HitomiWebSearchPage(query: query),
+    ));
+    if (!mounted || epoch != _searchEpoch ||
+        imported == null || imported.isEmpty) return;
+    setState(() {
+      for (final entry in imported) {
+        _webSearchResults[entry.workId] = OnlineSearchWork(
+          workId: entry.workId, title: entry.title);
+      }
+      if (_searchScope == 'local') _searchScope = 'all';
+    });
+  }
+
+  Widget _searchField() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextField(
+        key: const Key('library-search-input'),
+        focusNode: _searchFocus,
+        controller: _search,
+        decoration: InputDecoration(
+          hintText: HypI18n.t(context,
+              '작품 제목, 작가, 번호, 목록으로 검색하세요...'),
+          prefixIcon: Icon(Icons.search_rounded, color: HypColors.muted),
+        ),
+      ),
+      Align(
+        alignment: Alignment.centerRight,
+        child: TextButton.icon(
+          key: const Key('search-web-site'),
+          onPressed: _search.text.trim().isNotEmpty &&
+                  _search.text.trim().length <= 150
+              ? _openHitomiWebSearch : null,
+          icon: const Icon(Icons.public_outlined, size: 18),
+          label: Text(AppLocalizations.of(context)!.webSearchAction),
+        ),
+      ),
+    ],
   );
 
   Widget _contents() {
@@ -2481,22 +2523,39 @@ class _HypDashboardState extends State<HypDashboard> {
   );
 
   Widget _searchContent() {
-    final visibleRemote = _remoteResults.where((work) =>
+    final merged = <String, OnlineSearchWork>{
+      for (final work in _remoteResults) work.workId: work,
+    };
+    for (final work in _webSearchResults.values) {
+      merged.update(work.workId,
+          (existing) => OnlineWorkSearch.combineWorks(existing, work),
+          ifAbsent: () => work);
+    }
+    final webFieldMatches = <String, List<String>>{
+      ..._remoteFieldMatches,
+      for (final work in _webSearchResults.values)
+        work.workId: <String>{
+          ...?_remoteFieldMatches[work.workId], 'general',
+        }.toList(),
+    };
+    final visibleRemote = merged.values.where((work) =>
         !_isBlockedOnline(work)).toList();
-    final hiddenCount = _remoteResults.length - visibleRemote.length;
-    final visibleFieldTotals = hiddenCount == 0 ? _remoteFieldTotals :
-        OnlineWorkSearch.facetCounts(visibleRemote, _remoteFieldMatches);
+    final hiddenCount = merged.length - visibleRemote.length;
+    // Web-captured works must be counted even if no blacklist rule hid
+    // anything; the mirror's cached totals alone omit these new works.
+    final visibleFieldTotals =
+        OnlineWorkSearch.facetCounts(visibleRemote, webFieldMatches);
     final existingIds = widget.library.works.map((w) => w.workId).toSet();
     final remoteFiltered = visibleRemote.where((w) =>
         (_remoteFieldFilter.isEmpty ||
-         (_remoteFieldMatches[w.workId] ?? const <String>[])
+         (webFieldMatches[w.workId] ?? const <String>[])
              .contains(_remoteFieldFilter))).toList();
     final savedOnline = remoteFiltered.where((w) =>
         existingIds.contains(w.workId)).toList();
     final online = visibleRemote.where((w) =>
         !existingIds.contains(w.workId) &&
         (_remoteFieldFilter.isEmpty ||
-         (_remoteFieldMatches[w.workId] ?? const <String>[])
+         (webFieldMatches[w.workId] ?? const <String>[])
              .contains(_remoteFieldFilter))).toList();
     const facetOrder = [
       'general', 'artist', 'group', 'series', 'tag',
@@ -2572,6 +2631,9 @@ class _HypDashboardState extends State<HypDashboard> {
         const SizedBox(height: 18),
         Text(AppLocalizations.of(context)!.searchFetchedUnique(visibleRemote.length),
             style: Theme.of(context).textTheme.titleMedium),
+        if (_webSearchResults.isNotEmpty)
+          Text(AppLocalizations.of(context)!
+              .webSearchImported(_webSearchResults.length)),
         if (hiddenCount > 0)
           HypText('블랙리스트로 $hiddenCount개 숨김'),
         if (_search.text.trim().isNotEmpty)
@@ -2693,10 +2755,10 @@ class _HypDashboardState extends State<HypDashboard> {
                     '#' + group.first.workId,
                     if (_savedOnlineEditionHint(group).isNotEmpty)
                       _savedOnlineEditionHint(group),
-                    if ((_remoteFieldMatches[group.first.workId] ??
+                    if ((webFieldMatches[group.first.workId] ??
                          const <String>[]).isNotEmpty)
                       AppLocalizations.of(context)!.searchResultMatches(
-                        _remoteFieldMatches[group.first.workId]!
+                        webFieldMatches[group.first.workId]!
                           .map((field) => _searchFieldLabel(context, field))
                           .join(', ')),
                   ].join(' · '), maxLines: 3),

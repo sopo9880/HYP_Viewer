@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:hyp_viewer/core/hitomi_gallery.dart';
+import 'package:hyp_viewer/core/online_reader_failure.dart';
 
 void main() {
   const id = '2711759';
@@ -94,9 +96,13 @@ void main() {
     final gallery = await HitomiGalleryProvider(client).load(id);
     await expectLater(
       gallery.loadPage(0),
-      throwsA(isA<FormatException>().having(
-          (e) => e.message, 'message',
-          allOf(contains('DNS 조회 실패'), contains('w2.gold-usergeneratedcontent.net')))),
+      throwsA(isA<OnlineReaderFailure>()
+          .having((e) => e.code, 'code', 'IMAGE_DNS_FAILURE')
+          .having((e) => e.stage, 'stage', OnlineReaderStage.image)
+          .having((e) => e.host, 'diagnostic host',
+              'w2.gold-usergeneratedcontent.net')
+          .having((e) => e.message, 'safe message',
+              contains('DNS 조회 실패'))),
     );
     client.close();
   });
@@ -178,4 +184,138 @@ void main() {
     expect(requests.last.host, startsWith('w'));
     client.close();
   });
+  test('metadata failures identify the exact field and safe response type',
+      () async {
+    final samples = <Map<String, Object?>>[
+      {'id': 2711759},
+      {'id': 2711759, 'files': 'unexpected'},
+      {'id': 2711759, 'files': []},
+      {'id': 999999, 'files': []},
+      {'files': []},
+    ];
+    const expected = [
+      'META_FILES_MISSING', 'META_FILES_TYPE', 'META_FILES_EMPTY',
+      'META_ID_MISMATCH', 'META_ID_MISSING',
+    ];
+    for (var i = 0; i < samples.length; i++) {
+      final client = MockClient((request) async =>
+          http.Response('var galleryinfo = ' + jsonEncode(samples[i]) + ';', 200));
+      try {
+        await HitomiGalleryProvider(client).load(id);
+        fail('Expected ' + expected[i]);
+      } on OnlineReaderFailure catch (error) {
+        expect(error.code, expected[i]);
+        expect(error.stage, OnlineReaderStage.metadata);
+        expect(error.workId, id);
+        expect(error.httpStatus, 200);
+        if (error.code == 'META_FILES_TYPE') {
+          expect(error.actualType, 'string');
+        }
+      } finally {
+        client.close();
+      }
+    }
+  });
+
+  test('invalid JSON and invalid image entry have distinct codes', () async {
+    final badJson = MockClient((request) async =>
+        http.Response('var galleryinfo = {"id":broken};', 200));
+    await expectLater(
+      HitomiGalleryProvider(badJson).load(id),
+      throwsA(isA<OnlineReaderFailure>().having(
+          (e) => e.code, 'code', 'META_JSON_INVALID')),
+    );
+    badJson.close();
+
+    final badEntry = MockClient((request) async {
+      if (request.url.path == '/gg.js') {
+        return http.Response("var o = 0; var x = {b: '2026/'};", 200);
+      }
+      return http.Response(metadata([
+        {'hash': hash},
+      ]).replaceFirst('"hash":"'+hash+'"', '"hash":42'), 200);
+    });
+    await expectLater(HitomiGalleryProvider(badEntry).load(id),
+        throwsA(isA<OnlineReaderFailure>().having(
+            (e) => e.code, 'code', 'ROUTING_HASH_INVALID')));
+    badEntry.close();
+  });
+
+  test('metadata HTTP status is recorded without response contents', () async {
+    final client = MockClient((request) async =>
+        http.Response('PRIVATE_RESPONSE_BODY', 503));
+    try {
+      await HitomiGalleryProvider(client).load(id);
+      fail('Expected metadata error');
+    } on OnlineReaderFailure catch (error) {
+      expect(error.code, 'META_HTTP_ERROR');
+      expect(error.httpStatus, 503);
+      expect(error.toString(), isNot(contains('PRIVATE_RESPONSE_BODY')));
+    } finally {
+      client.close();
+    }
+  });
+
+  test('image HTTP status includes the page and keeps retryable 503 text',
+      () async {
+    final client = MockClient((request) async {
+      if (request.url.path == '/galleries/2711759.js') {
+        return http.Response(metadata([{'hash': hash}]), 200);
+      }
+      if (request.url.path == '/gg.js') {
+        return http.Response("var o = 0; var x = {b: '2026/'};", 200);
+      }
+      return http.Response('PRIVATE_IMAGE_BODY', 503);
+    });
+    try {
+      final source = await HitomiGalleryProvider(client).load(id);
+      await source.loadPage(0);
+      fail('Expected image status error');
+    } on OnlineReaderFailure catch (error) {
+      expect(error.code, 'IMAGE_HTTP_ERROR');
+      expect(error.httpStatus, 503);
+      expect(error.stage, OnlineReaderStage.image);
+      expect(error.page, 1);
+      expect(error.toString(), contains('HTTP 503'));
+      expect(error.toString(), isNot(contains('PRIVATE_IMAGE_BODY')));
+    } finally {
+      client.close();
+    }
+  });
+
+  test('DNS and timeout classification do not leak query strings', () {
+    final dns = OnlineReaderFailure.classify(
+      http.ClientException('Failed host lookup: host, token=PRIVATE'),
+      workId: id, stage: OnlineReaderStage.image,
+      host: 'w1.gold-usergeneratedcontent.net', page: 2,
+    );
+    expect(dns.code, 'IMAGE_DNS_FAILURE');
+    expect(dns.page, 2);
+    expect(dns.toString(), isNot(contains('PRIVATE')));
+    final timeout = OnlineReaderFailure.classify(
+      TimeoutException('PRIVATE_LINK'),
+      workId: id, stage: OnlineReaderStage.metadata,
+    );
+    expect(timeout.code, 'META_TIMEOUT');
+    expect(timeout.toString(), isNot(contains('PRIVATE_LINK')));
+  });
+
+  test('unexpected gg.js format surfaces image-routing stage', () async {
+    final client = MockClient((request) async {
+      if (request.url.path == '/gg.js') {
+        return http.Response('not current routing javascript', 200);
+      }
+      return http.Response(metadata([{'hash': hash}]), 200);
+    });
+    try {
+      await HitomiGalleryProvider(client).load(id);
+      fail('Expected routing error');
+    } on OnlineReaderFailure catch (error) {
+      expect(error.code, 'ROUTING_FORMAT_CHANGED');
+      expect(error.stage, OnlineReaderStage.routing);
+    } finally {
+      client.close();
+    }
+  });
+
 }

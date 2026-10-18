@@ -12,6 +12,8 @@ import '../core/gallery.dart';
 import '../core/android_controls.dart';
 import '../core/reader_settings.dart';
 import '../core/reader_disk_cache.dart';
+import '../core/online_reader_failure.dart';
+import 'online_reader_error_dialog.dart';
 import '../l10n/app_localizations.dart';
 import '../core/reader_tap_zones.dart';
 import '../core/work.dart';
@@ -572,9 +574,12 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   Widget _failedImage(int index, Object error) {
     final raw = error.toString();
     final l = AppLocalizations.of(context)!;
-    final reason = RegExp(r'\b(429|502|503|504)\b').hasMatch(raw)
-        ? l.readerFailureHttp
-        : raw.length <= 280 ? raw : raw.substring(0, 280) + '…';
+    final diagnostic = error is OnlineReaderFailure ? error : null;
+    final reason = diagnostic != null
+        ? OnlineReaderErrorText.reason(l, diagnostic)
+        : RegExp(r'\b(429|502|503|504)\b').hasMatch(raw)
+            ? l.readerFailureHttp
+            : raw.length <= 280 ? raw : raw.substring(0, 280) + '…';
     return Center(child: Padding(
       padding: const EdgeInsets.all(14),
       child: ConstrainedBox(
@@ -593,6 +598,22 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
             SelectableText(reason,
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            if (diagnostic != null) ...[
+              const SizedBox(height: 6),
+              SelectableText(
+                l.readerOnlineFieldCode + ': ' + diagnostic.code +
+                (diagnostic.httpStatus == null ? '' :
+                    ' · HTTP ' + diagnostic.httpStatus.toString()),
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+              ),
+              TextButton.icon(
+                key: const Key('reader-copy-diagnostic'),
+                onPressed: () => Clipboard.setData(ClipboardData(
+                  text: OnlineReaderErrorText.report(l, diagnostic))),
+                icon: const Icon(Icons.copy),
+                label: Text(l.readerOnlineCopy),
+              ),
+            ],
             const SizedBox(height: 12),
             Wrap(alignment: WrapAlignment.center,
                 spacing: 8, runSpacing: 7, children: [

@@ -26,6 +26,8 @@ import 'core/announcements.dart';
 import 'core/android_controls.dart';
 import 'core/hitomi_reader_link.dart';
 import 'core/hitomi_gallery.dart';
+import 'core/online_reader_failure.dart';
+import 'ui/online_reader_error_dialog.dart';
 import 'ui/gallery_reader.dart';
 import 'ui/visual_source_inspector.dart';
 import 'ui/instagram_source_inspector.dart';
@@ -1293,6 +1295,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       return;
     }
     final client = http.Client();
+    OnlineReaderErrorAction? recovery;
     try {
       final archive = await HitomiGalleryProvider(client).load(id,
           dataSaver: readerSettings.dataSaverMode);
@@ -1329,9 +1332,19 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         ),
       ));
     } catch (error) {
-      _status('미리보기 실패: $error');
+      if (mounted) {
+        recovery = await showOnlineReaderErrorDialog(context,
+          OnlineReaderFailure.classify(error, workId: id,
+            stage: OnlineReaderStage.reader));
+      }
     } finally {
       client.close();
+    }
+    if (!mounted) return;
+    if (recovery == OnlineReaderErrorAction.retry) {
+      unawaited(_previewById(id, online: online));
+    } else if (recovery == OnlineReaderErrorAction.web) {
+      await _openWebReader(WorkEntry.create(workId: id));
     }
   }
 
@@ -2305,6 +2318,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   /// If the remote source blocks the client, the web-reader action is available.
   Future<void> _readOnline(WorkEntry work) async {
     final client = http.Client();
+    OnlineReaderErrorAction? recovery;
     try {
       final remote = await HitomiGalleryProvider(client).load(work.workId,
           dataSaver: readerSettings.dataSaverMode);
@@ -2373,11 +2387,20 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       } finally {
         await _finishReading(reading);
       }
-    } catch (e) {
-      _status('앱 내 온라인 읽기 실패: ' + e.toString() +
-          ' / 작품 메뉴의 웹 리더로 열기를 이용할 수 있어.');
+    } catch (error) {
+      if (mounted) {
+        recovery = await showOnlineReaderErrorDialog(context,
+          OnlineReaderFailure.classify(error, workId: work.workId,
+            stage: OnlineReaderStage.reader));
+      }
     } finally {
       client.close();
+    }
+    if (!mounted) return;
+    if (recovery == OnlineReaderErrorAction.retry) {
+      unawaited(_readOnline(work));
+    } else if (recovery == OnlineReaderErrorAction.web) {
+      await _openWebReader(work);
     }
   }
 
