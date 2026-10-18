@@ -1272,6 +1272,68 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     _status('선택한 언어판만 묶음에서 분리했어.');
   }
 
+  Future<void> _previewOnlineSearchWork(OnlineSearchWork work) async =>
+      _previewById(work.workId, online: work);
+
+  Future<void> _previewCandidate(String code) async =>
+      _previewById(code);
+
+  /// Preview uses the shared reader but does not enter the saved library or
+  /// touch reading history, download jobs, completion or chosen covers.
+  Future<void> _previewById(String id, {OnlineSearchWork? online}) async {
+    if (!RegExp(r'^\d{6,12}$').hasMatch(id)) {
+      _status('미리보기 작품 번호를 확인해 줘.');
+      return;
+    }
+    if (blacklist.blocks(id: id, title: online?.title ?? '',
+        artists: online?.artists ?? const [],
+        groups: online?.groups ?? const [], tags: online?.tags ?? const [])) {
+      _status('블랙리스트에 있는 작품은 미리보기가 차단돼.');
+      return;
+    }
+    final client = http.Client();
+    try {
+      final archive = await HitomiGalleryProvider(client).load(id,
+          dataSaver: readerSettings.dataSaverMode);
+      if (!mounted) return;
+      final transient = WorkEntry.create(workId: id,
+        title: online?.title ?? archive.title,
+        author: online?.artists.join(', ') ?? '',
+      ).copyWith(sourceGroup: online?.groups.join(', ') ?? '',
+          sourceSeries: online?.series.join(', ') ?? '',
+          sourceLanguage: online?.language ?? '',
+          totalPages: archive.pageCount, coverMode: 'preset');
+      await Navigator.push<void>(context, MaterialPageRoute(
+        builder: (readerContext) => GalleryReader(
+          work: transient,
+          archive: archive,
+          previewMode: true,
+          diskCacheEnabled: false,
+          settings: readerSettings.copyWith(preloadPages: 2),
+          onPageChanged: (_) {},
+          onSavePreview: () async {
+            if (online != null) {
+              await _saveOnlineSearchWork(online);
+            } else {
+              await _saveSelectedWorks([id], openReaderAfterSave: false);
+            }
+            return library.works.any((w) => w.workId == id);
+          },
+          onBlockPreview: () async {
+            await _addBlacklist(BlacklistRule(kind: 'id', value: id));
+            if (readerContext.mounted) Navigator.of(readerContext).pop();
+          },
+          onOpenInBrowser: (page) =>
+              _openWebReader(transient, page: page),
+        ),
+      ));
+    } catch (error) {
+      _status('미리보기 실패: $error');
+    } finally {
+      client.close();
+    }
+  }
+
   Future<void> _readOnlineSearchWork(OnlineSearchWork result) async {
     try {
       await _saveOnlineSearchWork(result);
@@ -1294,7 +1356,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     await _saveSelectedWorks([code]);
   }
 
-  Future<void> _saveSelectedWorks(List<String> selectedCodes) async {
+  Future<void> _saveSelectedWorks(List<String> selectedCodes,
+      {bool openReaderAfterSave = true}) async {
     if (busy) return;
     final codes = selectedCodes.map((code) => code.trim()).toSet().toList();
     if (codes.isEmpty ||
@@ -1385,7 +1448,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       // Clear only when a successful save is followed by leaving Home.
       // Preserve unsaved/new input and the persistent API key.
       _finderResetPolicy.recordSuccessfulSave(savedFinderInput);
-      if (readerSettings.openAfterSave && works.length == 1) {
+      if (openReaderAfterSave && readerSettings.openAfterSave &&
+          works.length == 1) {
         openAfterSave = works.single;
       }
       if (readerSettings.autoCoverEnabled) {
@@ -3394,6 +3458,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     onLinkEditions: _linkEditionBatch,
     onUnlinkEdition: _unlinkEdition,
     onReadOnlineSearchWork: _readOnlineSearchWork,
+    onPreviewOnlineSearchWork: _previewOnlineSearchWork,
+    onPreviewCandidate: _previewCandidate,
     onSaveSelectedWorks: _saveSelectedWorks,
     onVerifyCandidateCodes: _verifyCandidateCodes,
     onCrossLineFallback: _crossLineFallback,
