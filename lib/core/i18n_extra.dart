@@ -1,6 +1,10 @@
 /// Additional 0.4 translations for on-device UI; titles remain verbatim.
 abstract final class HypExtraTranslations {
   static const Map<String, List<String>> labels = {
+    "분야별 수치는 현재 수집된 고유 작품 기준이야.": ["Field counts reflect the unique works loaded so far.", "分野別件数は現在取得済みの作品の重複を除いた数です。"],
+    "분야 검색 다시 시도": ["Retry Field Search", "分野検索を再試行"],
+    "0건 분야 숨기기": ["Hide Empty Fields", "0件の分野を非表示"],
+    "0건 분야 보기": ["Show Empty Fields", "0件の分野を表示"],
     "모든 다운로드 취소": ["Cancel All Downloads", "すべてのダウンロードをキャンセル"],
     "현재 진행 중인 작품과 대기 중인 다운로드를 모두 취소할까? 이미 저장한 작품은 그대로 유지돼.": ["Cancel the active and queued downloads? Already saved works will be kept.", "進行中と待機中のダウンロードをすべてキャンセルしますか？保存済みの作品は保持されます。"],
     "돌아가기": ["Go Back", "戻る"],

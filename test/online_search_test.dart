@@ -103,7 +103,7 @@ void main() {
     expect(result.works.map((entry) => entry.workId).toSet(),
         {'100', '101'});
     expect(result.total, 2);
-    expect(result.fieldTotals['artist'], 10);
+    expect(result.fieldTotals['artist'], 1);
     expect(result.warnings, isEmpty);
     client.close();
   });
@@ -113,7 +113,8 @@ void main() {
     final client = MockClient((request) async {
       seen.add((jsonDecode(request.body)['query'] as List).first as String);
       return http.Response(jsonEncode({
-        'results': [], 'count': 0,
+        'results': [{'id': 111, 'title': 'Pochi',
+                     'artists': ['Pochi']}], 'count': 1,
       }), 200);
     });
     await OnlineWorkSearch(client).searchUnified(
@@ -130,6 +131,135 @@ void main() {
     expect(OnlineWorkSearch.planQueries('Original | Translated')
       .map((entry) => entry.$2).toList().take(2),
       ['Original','Translated']);
+  });
+
+  test('multiple long verified aliases are separately validated', () {
+    final first = List.filled(80, 'A').join();
+    final second = List.filled(80, 'B').join();
+    final plan = OnlineWorkSearch.planQueries(first + ' | ' + second);
+    expect(plan.take(2).map((e) => e.$2), [first, second]);
+    expect(plan.every((e) => e.$2.length <= 150), true);
+  });
+
+  test('empty first mirror retries a second independent index', () async {
+    final hosts = <String>[];
+    final client = MockClient((request) async {
+      hosts.add(request.url.host);
+      return http.Response(jsonEncode({
+        'results': request.url.host == 'inst.psec.dev'
+            ? [] : [{'id': 991122, 'title': 'Second index result'}],
+        'count': request.url.host == 'inst.psec.dev' ? 0 : 1,
+      }), 200);
+    });
+    final found = await OnlineWorkSearch(client).search('Second index');
+    expect(found.works.single.workId, '991122');
+    expect(hosts, ['inst.psec.dev', 'heliotrope.saebasol.org']);
+    client.close();
+  });
+
+  test('rich title results skip unrelated metadata queries', () async {
+    final seen = <String>[];
+    final client = MockClient((request) async {
+      final query = (jsonDecode(request.body)['query'] as List).first as String;
+      seen.add(query);
+      return http.Response(jsonEncode({
+        'results': List.generate(9, (i) => {
+          'id': 100001 + i, 'title': 'Direct story'
+        }),
+        'count': 9,
+      }), 200);
+    });
+    await OnlineWorkSearch(client).searchUnified('Direct story');
+    expect(seen, ['Direct story']);
+    client.close();
+  });
+
+  test('plain gallery number avoids metadata field expansion', () {
+    expect(OnlineWorkSearch.planQueries('1234567'),
+        [('general', '1234567')]);
+  });
+
+  test('pochi artist metadata appears as an artist facet even when the '
+      'broad title round skips artist queries', () async {
+    final queried = <String>[];
+    final client = MockClient((request) async {
+      final query = (jsonDecode(request.body)['query'] as List).first as String;
+      queried.add(query);
+      return http.Response(jsonEncode({
+        'results': [
+          {'id': 1012074, 'title': 'Ane Naru Mono 4',
+           'artists': ['pochi'], 'language': 'korean'},
+          for (var i = 0; i < 8; i++)
+            {'id': 1002000 + i, 'title': 'Pochi book ' + i.toString()},
+        ],
+        // Provider count may include overlaps and must not be the facet count.
+        'count': 39,
+      }), 200);
+    });
+    final found = await OnlineWorkSearch(client)
+        .searchUnified('pochi', language: 'korean');
+    expect(queried, ['pochi']);
+    expect(found.total, 9);
+    expect(found.fieldTotals['artist'], 1);
+    expect(found.fieldTotals['general'], 8);
+    expect(found.matchedFields['1012074'], contains('artist'));
+    expect(found.matchedFields['1012074'], isNot(contains('general')));
+    expect(OnlineWorkSearch.facetCounts(found.works, found.matchedFields),
+        found.fieldTotals);
+    client.close();
+  });
+
+  test('one gallery returned by multiple fields counts only once per facet',
+      () async {
+    final client = MockClient((request) async {
+      final query = (jsonDecode(request.body)['query'] as List).first as String;
+      return http.Response(jsonEncode({
+        'results': [
+          {'id': 808808, 'title': 'Unrelated',
+           'artists': ['pochi'], 'tags': ['female:pochi']},
+        ],
+        'count': query == 'pochi' ? 100 : 200,
+      }), 200);
+    });
+    final found = await OnlineWorkSearch(client).searchUnified('pochi');
+    expect(found.total, 1);
+    expect(found.fieldTotals['artist'], 1);
+    expect(found.fieldTotals['female'], 1);
+    expect(found.fieldTotals['tag'], 1);
+    expect(found.matchedFields['808808'], contains('artist'));
+    client.close();
+  });
+
+  test('community mirror object metadata yields creator and gender facets', () {
+    final work = OnlineSearchWork.fromJson({
+      'id': 876543,
+      'title': 'An unrelated title',
+      'artists': [{'artist': 'pochi'}],
+      'groups': [{'group': 'Circle'}],
+      'tags': [
+        {'tag': 'pochi', 'female': true},
+        {'tag': 'other', 'male': true},
+      ],
+    });
+    expect(work.artists, ['pochi']);
+    expect(work.groups, ['Circle']);
+    expect(work.tags, contains('female:pochi'));
+    expect(OnlineWorkSearch.metadataFields(work, 'pochi'),
+        containsAll(['artist', 'tag', 'female']));
+    expect(OnlineWorkSearch.metadataFields(work, 'pochi'),
+        isNot(contains('male')));
+  });
+
+  test('direct field lookup keeps source evidence if mirror omits artist',
+      () {
+    const remote = OnlineSearchWork(workId: '1012074',
+        title: 'Ane Naru Mono 4');
+    expect(OnlineWorkSearch.metadataFields(remote, 'pochi'), isEmpty);
+    final combined = OnlineWorkSearch.combineWorks(remote,
+        const OnlineSearchWork(workId: '1012074',
+            title: 'Ane Naru Mono 4', artists: ['pochi']));
+    expect(OnlineWorkSearch.metadataFields(combined, 'pochi'),
+        contains('artist'));
   });
 
   test('international results prefer all-language provider only', () async {

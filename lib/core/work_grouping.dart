@@ -16,6 +16,44 @@ class WorkGroupSuggestion {
 /// A conservative series recommender based on each work's OWN metadata.
 /// Shared Shorts comments are not valid per-work episode numbers.
 class WorkGrouping {
+
+  static final _chapterRange = RegExp(
+    r'(\d{1,3})\s*(?:~|～|〜|-|–|—|to)\s*(\d{1,3})\s*'
+    r'(?:편|화|부|권|회|話|巻|episode|ep\.?|chapter|ch\.?)',
+    caseSensitive: false);
+  static final _variant = RegExp(
+    r'(?:번외편|외전|특별편|후일담|에필로그|합본|합권|완전판|확장판|'
+    r'개정판|수정판|재편집|총집편|통합본|추가편|보너스편|'
+    r'omnibus|compilation|complete\s*edition|revised\s*edition|'
+    r'after\s*story|special\s*edition|bonus|epilogue|外伝|番外編|総集編|完全版|改訂版)',
+    caseSensitive: false);
+
+  static ({int start, int end})? episodeRange(String title) {
+    final m = _chapterRange.firstMatch(title.split('|').first);
+    if (m == null) return null;
+    final a = int.tryParse(m.group(1)!);
+    final b = int.tryParse(m.group(2)!);
+    if (a == null || b == null || a > b || b > 999) return null;
+    return (start: a, end: b);
+  }
+
+  static bool isDerivative(String title) =>
+      _variant.hasMatch(title) || episodeRange(title) != null;
+
+  static String relationLabel(WorkEntry work) {
+    final range = episodeRange(work.title);
+    if (range != null) {
+      return range.start.toString() + '~' + range.end.toString() + '화 합본/범위';
+    }
+    if (_variant.hasMatch(work.title)) return '파생·확장 콘텐츠';
+    final chapter = episodeNumber(work);
+    return chapter == null ? '관련 작품' : chapter.toString() + '화';
+  }
+
+  static String baseTitle(String title) => normalizedSeries(title)
+      .replaceAll(_variant, ' ')
+      .replaceAll(RegExp(r'[\s+]+'), ' ').trim();
+
   static final _chapter = RegExp(
       r'(?:제\s*)?(\d{1,3})\s*(?:편|화|부|권|회|episode|ep\.?|part)(?!\d)',
       caseSensitive: false);
@@ -43,6 +81,7 @@ class WorkGrouping {
     // A saved Shorts batch keeps the same originalComment for EVERY work.
     // Reading the first "1편" in that shared block assigns 1 to all works.
     final original = work.title.split('|').first.trim();
+    if (episodeRange(original) != null) return null;
     final titleChapter = _chapterInText(original);
     if (titleChapter != null) return titleChapter;
     // Bare trailing numerals in the ORIGINAL title denote a sequel:
@@ -74,7 +113,8 @@ class WorkGrouping {
     var s = rawTitle.split('|').first.toLowerCase().trim();
     // Metadata titles often start with a circle or artist in brackets.
     s = s.replaceFirst(RegExp(r'^(?:\[[^\]]{1,75}\]\s*)+'), '');
-    s = s.replaceAll(_afterStory, ' ')
+    s = s.replaceAll(_chapterRange, ' ')
+        .replaceAll(_afterStory, ' ')
         .replaceAll(_chapter, ' ')
         .replaceAll(_prefixChapter, ' ')
         .replaceAll(_japaneseChapter, ' ')
@@ -136,8 +176,8 @@ class WorkGrouping {
   static bool _sameSeries(WorkEntry a, WorkEntry b) {
     if (!_usableTitle(a) || !_usableTitle(b) ||
         _creatorConflict(a, b)) return false;
-    final first = normalizedSeries(a.title);
-    final second = normalizedSeries(b.title);
+    final first = baseTitle(a.title);
+    final second = baseTitle(b.title);
     if (first == second) return true;
     // Similar titles must have independent creator evidence. A shared
     // sourceSeries alone can mean a parody/franchise, not a sequel.
@@ -204,7 +244,8 @@ class WorkGrouping {
       if (!_usableTitle(work)) continue;
       final matches = <List<WorkEntry>>[];
       for (final group in clusters) {
-        if (group.any((other) => _sameSeries(other, work))) {
+        if (_sameSeries(group.first, work) &&
+            group.every((other) => _sameSeries(other, work))) {
           matches.add(group);
         }
       }
@@ -226,6 +267,7 @@ class WorkGrouping {
       final base = existing.isEmpty ? newcomers.first : existing.first;
       final reference = cluster.first;
       final chapters = cluster.map(episodeNumber).whereType<int>().toList();
+      final derivatives = cluster.where((w) => isDerivative(w.title)).toList();
       final uniqueChapters = chapters.toSet().length == chapters.length;
       final matchingCreators = cluster.every(
           (w) => w.workId == reference.workId ||
@@ -233,12 +275,18 @@ class WorkGrouping {
       final exactNames = cluster.every((w) =>
           normalizedSeries(w.title) == normalizedSeries(reference.title));
       final hasAfterStory = cluster.any((w) => _isAfterStory(w.title));
-      final confidence = exactNames && hasAfterStory && matchingCreators
+      final confidence = derivatives.isNotEmpty && matchingCreators
+          ? 94 : derivatives.isNotEmpty ? 80
+          : exactNames && hasAfterStory && matchingCreators
           ? 95 : exactNames && chapters.length >= 2 && uniqueChapters
           ? 95 : exactNames && matchingCreators ? 89 : exactNames ? 77 : 70;
       final title = existing.isNotEmpty && base.groupTitle.isNotEmpty
           ? base.groupTitle : normalizedSeries(base.title);
-      final reason = existing.isNotEmpty
+      final reason = derivatives.isNotEmpty
+          ? '동일 기본 제목과 파생 콘텐츠 후보 · ' +
+              derivatives.map(relationLabel).toSet().join(', ') +
+              ' · 회차와 구성 확인 필요'
+          : existing.isNotEmpty
           ? '기존 시리즈와 제목·제작 정보가 일치하는 새 작품'
           : exactNames && hasAfterStory
           ? '본편과 후일담·외전의 제목 및 제작 정보 확인 필요'

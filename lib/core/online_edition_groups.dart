@@ -15,6 +15,7 @@ abstract final class OnlineEditionGroups {
         sourceLanguage: work.language,
         sourceGroup: work.groups.join(', '),
         sourceSeries: work.series.join(', '),
+        totalPages: work.pageCount,
       );
 
   /// Find one unambiguous saved logical work for an online edition.
