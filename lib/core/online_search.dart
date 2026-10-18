@@ -179,6 +179,31 @@ class OnlineWorkSearch {
     return planned.take(16).toList();
   }
 
+  static OnlineSearchWork combineWorks(OnlineSearchWork old, OnlineSearchWork next) {
+    List<String> merge(List<String> first, List<String> second) =>
+        {...first, ...second}.where((item) => item.trim().isNotEmpty).toList();
+    final oldPlaceholder = old.title.startsWith('작품 ');
+    final title = oldPlaceholder && !next.title.startsWith('작품 ')
+        ? next.title : old.title;
+    return OnlineSearchWork(
+      workId: old.workId,
+      title: title,
+      titleAliases: merge(old.titleAliases, [
+        ...next.titleAliases,
+        if (next.title != title) next.title,
+        if (old.title != title && !oldPlaceholder) old.title,
+      ]),
+      artists: merge(old.artists, next.artists),
+      groups: merge(old.groups, next.groups),
+      series: merge(old.series, next.series),
+      tags: merge(old.tags, next.tags),
+      language: old.language.isEmpty ? next.language : old.language,
+      type: old.type.isEmpty ? next.type : old.type,
+      date: old.date.isEmpty ? next.date : old.date,
+      pageCount: old.pageCount > 0 ? old.pageCount : next.pageCount,
+    );
+  }
+
   /// Infer facets from actual returned metadata, not only which provider
   /// query found the gallery. A gallery returned for a general query may
   /// match its artist while having no keyword in the title.
@@ -300,30 +325,6 @@ class OnlineWorkSearch {
       'group': 7, 'tag': 4, 'female': 4, 'male': 4,
     };
 
-    OnlineSearchWork combine(OnlineSearchWork old, OnlineSearchWork next) {
-      List<String> merge(List<String> first, List<String> second) =>
-          {...first, ...second}.where((item) => item.trim().isNotEmpty).toList();
-      final oldPlaceholder = old.title.startsWith('작품 ');
-      final title = oldPlaceholder && !next.title.startsWith('작품 ')
-          ? next.title : old.title;
-      return OnlineSearchWork(
-        workId: old.workId,
-        title: title,
-        titleAliases: merge(old.titleAliases, [
-          ...next.titleAliases,
-          if (next.title != title) next.title,
-          if (old.title != title && !oldPlaceholder) old.title,
-        ]),
-        artists: merge(old.artists, next.artists),
-        groups: merge(old.groups, next.groups),
-        series: merge(old.series, next.series),
-        tags: merge(old.tags, next.tags),
-        language: old.language.isEmpty ? next.language : old.language,
-        type: old.type.isEmpty ? next.type : old.type,
-        date: old.date.isEmpty ? next.date : old.date,
-        pageCount: old.pageCount > 0 ? old.pageCount : next.pageCount,
-      );
-    }
 
     OnlineSearchResult snapshot() {
       final ordered = unique.values.toList();
@@ -381,7 +382,7 @@ class OnlineWorkSearch {
                 (result.total > page * 25 || result.works.length >= 25);
             for (final work in result.works) {
               final old = unique[work.workId];
-              unique[work.workId] = old == null ? work : combine(old, work);
+              unique[work.workId] = old == null ? work : combineWorks(old, work);
               // General searches are broad and may match a creator but
               // not the title. Only explicit field-query evidence is tagged.
               if (entry.$1 != 'general') {
