@@ -124,12 +124,58 @@ void main() {
 
   test('query plan covers all supported categories without guessing count', () {
     expect(OnlineWorkSearch.planQueries('Pochi').map((e) => e.$1).toList(),
-      ['general','artist','group','series','tag','female','male']);
+      ['general','artist','group','series','tag']);
     expect(OnlineWorkSearch.planQueries('artist:Pochi'),
       [('advanced','artist:Pochi')]);
     expect(OnlineWorkSearch.planQueries('Original | Translated')
       .map((entry) => entry.$2).toList().take(2),
       ['Original','Translated']);
+  });
+
+  test('multiple long verified aliases are separately validated', () {
+    final first = List.filled(80, 'A').join();
+    final second = List.filled(80, 'B').join();
+    final plan = OnlineWorkSearch.planQueries(first + ' | ' + second);
+    expect(plan.take(2).map((e) => e.$2), [first, second]);
+    expect(plan.every((e) => e.$2.length <= 150), true);
+  });
+
+  test('empty first mirror retries a second independent index', () async {
+    final hosts = <String>[];
+    final client = MockClient((request) async {
+      hosts.add(request.url.host);
+      return http.Response(jsonEncode({
+        'results': request.url.host == 'inst.psec.dev'
+            ? [] : [{'id': 991122, 'title': 'Second index result'}],
+        'count': request.url.host == 'inst.psec.dev' ? 0 : 1,
+      }), 200);
+    });
+    final found = await OnlineWorkSearch(client).search('Second index');
+    expect(found.works.single.workId, '991122');
+    expect(hosts, ['inst.psec.dev', 'heliotrope.saebasol.org']);
+    client.close();
+  });
+
+  test('rich title results skip unrelated metadata queries', () async {
+    final seen = <String>[];
+    final client = MockClient((request) async {
+      final query = (jsonDecode(request.body)['query'] as List).first as String;
+      seen.add(query);
+      return http.Response(jsonEncode({
+        'results': List.generate(9, (i) => {
+          'id': 100001 + i, 'title': 'Direct story'
+        }),
+        'count': 9,
+      }), 200);
+    });
+    await OnlineWorkSearch(client).searchUnified('Direct story');
+    expect(seen, ['Direct story']);
+    client.close();
+  });
+
+  test('plain gallery number avoids metadata field expansion', () {
+    expect(OnlineWorkSearch.planQueries('1234567'),
+        [('general', '1234567')]);
   });
 
   test('international results prefer all-language provider only', () async {
