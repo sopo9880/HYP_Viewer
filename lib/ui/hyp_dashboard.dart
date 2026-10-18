@@ -2474,8 +2474,8 @@ class _HypDashboardState extends State<HypDashboard> {
             )),
             IconButton(
               key: const Key('search-facet-show-zeros'),
-              tooltip: _showEmptyRemoteFields
-                  ? '0건 분야 숨기기' : '0건 분야 보기',
+              tooltip: HypI18n.t(context, _showEmptyRemoteFields
+                  ? '0건 분야 숨기기' : '0건 분야 보기'),
               onPressed: () => setState(() =>
                   _showEmptyRemoteFields = !_showEmptyRemoteFields),
               icon: Icon(_showEmptyRemoteFields
