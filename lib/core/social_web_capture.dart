@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'social_share_text.dart';
+import 'instagram_comment_html_parser.dart';
 
 /// Snapshot of rendered PUBLIC content of a user-opened social page.
 /// Comments are only those already visible in the WebView, never a promise
@@ -8,6 +9,7 @@ import 'social_share_text.dart';
 class SocialWebCapture {
   final String url, title, description;
   final List<String> comments, pinnedComments, imageUrls;
+  final List<InstagramCommentRecord> commentRecords;
   final bool limited, loginRequired, commentAreaPresent;
   final String collectorDiagnostics;
 
@@ -15,6 +17,7 @@ class SocialWebCapture {
     required this.url, required this.title, required this.description,
     required this.comments, required this.imageUrls,
     this.pinnedComments = const [], this.commentAreaPresent = false,
+    this.commentRecords = const [],
     this.limited = true, this.loginRequired = false,
     this.collectorDiagnostics = '',
   });
@@ -38,13 +41,27 @@ class SocialWebCapture {
             .where((s) => s.isNotEmpty && s.length <= 2000)
             .toSet().toList();
       }
+      final htmlSnippet = decoded['commentHtml'] is String
+          ? decoded['commentHtml'] as String : '';
+      final parsed = InstagramCommentHtmlParser.parse(htmlSnippet);
+      final hasDom = htmlSnippet.isNotEmpty;
+      final records = parsed.comments;
+      final log = read('diagnostics');
       return SocialWebCapture(
         url: read('url'), title: read('title'),
         description: read('description'),
-        pinnedComments: readList('pinnedComments').take(30).toList(),
-        comments: readList('comments').take(60).toList(),
-        commentAreaPresent: decoded['commentAreaPresent'] == true,
-        collectorDiagnostics: read('diagnostics'),
+        commentRecords: records,
+        pinnedComments: hasDom
+            ? records.where((e) => e.pinned).map((e) => e.text).toList()
+            : readList('pinnedComments').take(30).toList(),
+        comments: hasDom
+            ? records.map((e) => e.text).toList()
+            : readList('comments').take(60).toList(),
+        commentAreaPresent: decoded['commentAreaPresent'] == true ||
+            parsed.candidateRows > 0,
+        collectorDiagnostics: hasDom
+            ? '$log; domRows=${parsed.candidateRows}; parsed=${records.length}'
+            : log,
         imageUrls: readList('images')
             .where((s) => s.startsWith('https://')).take(24).toList(),
         loginRequired: decoded['loginRequired'] == true,
@@ -219,6 +236,54 @@ class SocialWebCapture {
         loginRequired = /log in|sign in|로그인|ログイン/.test(labels);
       }
     }
+    // Inspect only the DOM that Instagram has already mounted in this
+    // user-opened WebView. Send a compact sanitized fragment to a shared
+    // Dart parser, so Windows and Android use identical extraction rules.
+    // Never export cookies, scripts, form controls, tokens or whole page HTML.
+    var commentHtml = '';
+    if (instagram) {
+      var root = null;
+      var dialogs = document.querySelectorAll('[role="dialog"]');
+      for (var di = 0; di < dialogs.length; di++) {
+        if (dialogs[di].querySelector('._a9zr, ._ac6x, li._a9zj')) {
+          root = dialogs[di];
+          break;
+        }
+      }
+      root = root || document.querySelector('main') || post;
+      if (root) {
+        var clone = root.cloneNode(true);
+        clone.querySelectorAll(
+          'script, style, svg, img, video, canvas, iframe, source, ' +
+          'picture, textarea, input, noscript').forEach(function(node) {
+          node.remove();
+        });
+        var allowedClass = {
+          '_a9zr': true, '_a9zj': true, '_ac6x': true, '_ap3a': true
+        };
+        clone.querySelectorAll('*').forEach(function(node) {
+          Array.from(node.attributes).forEach(function(attribute) {
+            if (['role', 'dir', 'href', 'class', 'aria-label']
+                .indexOf(attribute.name) < 0) {
+              node.removeAttribute(attribute.name);
+            }
+          });
+          if (node.hasAttribute('class')) {
+            var classes = node.getAttribute('class').split(/\s+/)
+                .filter(function(value) { return !!allowedClass[value]; });
+            if (classes.length) node.setAttribute('class', classes.join(' '));
+            else node.removeAttribute('class');
+          }
+          if (node.hasAttribute('href')) {
+            var href = node.getAttribute('href');
+            if (!href.startsWith('/') || href.startsWith('//') ||
+                href.length > 160) node.removeAttribute('href');
+          }
+        });
+        var markup = clone.outerHTML || '';
+        if (markup.length <= 250000) commentHtml = markup;
+      }
+    }
     var images = [], seenImages = {};
     var imageRoot = post || document;
     imageRoot.querySelectorAll('img, video[poster]').forEach(function(node) {
@@ -240,6 +305,7 @@ class SocialWebCapture {
       description: description,
       comments: comments,
       pinnedComments: pinnedComments,
+      commentHtml: commentHtml,
       commentAreaPresent: commentAreaPresent,
       diagnostics: diagnostics,
       images: images,
@@ -258,17 +324,22 @@ class SocialCommentAccumulator {
   bool loginRequired = false;
   bool commentAreaPresent = false;
   final Set<String> _seen = <String>{};
-  final List<String> _comments = [];
-  final Set<String> _pinned = <String>{};
+  final List<InstagramCommentRecord> _records = [];
 
   static const int maxCollectedComments = 200;
-  List<String> get comments => List.unmodifiable(_comments);
-  List<String> get pinnedComments => List.unmodifiable(
-      _comments.where(_pinned.contains));
-  int get count => _comments.length;
+  List<InstagramCommentRecord> get commentRecords => List.unmodifiable([
+    ..._records.where((e) => e.pinned),
+    ..._records.where((e) => !e.pinned),
+  ]);
+  List<String> get comments =>
+      List.unmodifiable(_records.map((e) => e.text));
+  List<String> get pinnedComments =>
+      List.unmodifiable(_records.where((e) => e.pinned).map((e) => e.text));
+  int get count => _records.length;
   String get combinedText => [
-    title, description, ...pinnedComments,
-    ..._comments.where((comment) => !_pinned.contains(comment)),
+    title, description,
+    ..._records.where((e) => e.pinned).map((e) => e.text),
+    ..._records.where((e) => !e.pinned).map((e) => e.text),
   ].where((value) => value.trim().isNotEmpty).toSet().join('\n\n');
 
   /// Ignore a location fragment or tracking query when identifying a post,
@@ -290,8 +361,7 @@ class SocialCommentAccumulator {
     loginRequired = false;
     commentAreaPresent = false;
     _seen.clear();
-    _comments.clear();
-    _pinned.clear();
+    _records.clear();
   }
 
   /// Returns newly observed comment count. Does not scrape hidden/private
@@ -306,15 +376,26 @@ class SocialCommentAccumulator {
     }
     loginRequired = snapshot.loginRequired;
     commentAreaPresent = snapshot.commentAreaPresent;
-    final before = _comments.length;
-    for (final comment in [...snapshot.pinnedComments, ...snapshot.comments]) {
-      final trimmed = comment.trim();
+    final before = _records.length;
+    // Keep the author as part of the identity, but pass ONLY the body text
+    // into NumberExtractor; numeric usernames are not gallery identifiers.
+    final observed = snapshot.commentRecords.isNotEmpty
+        ? snapshot.commentRecords
+        : <InstagramCommentRecord>[
+            ...snapshot.pinnedComments.map((text) =>
+                InstagramCommentRecord(author: '', text: text, pinned: true)),
+            ...snapshot.comments.map((text) =>
+                InstagramCommentRecord(author: '', text: text)),
+          ];
+    for (final comment in observed) {
+      final trimmed = comment.text.trim();
       if (trimmed.isEmpty || trimmed.length > 2000) continue;
-      if (_comments.length < maxCollectedComments && _seen.add(trimmed)) {
-        _comments.add(trimmed);
+      final record = InstagramCommentRecord(
+        author: comment.author, text: trimmed, pinned: comment.pinned);
+      if (_records.length < maxCollectedComments && _seen.add(record.key)) {
+        _records.add(record);
       }
-      if (snapshot.pinnedComments.contains(comment)) _pinned.add(trimmed);
     }
-    return _comments.length - before;
+    return _records.length - before;
   }
 }
