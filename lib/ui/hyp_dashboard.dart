@@ -774,6 +774,7 @@ class _HypDashboardState extends State<HypDashboard> {
       if (page != HypPage.library) {
         _selectingWorks = false;
         _selectedWorkIds.clear();
+        _selectedGroupIds.clear();
       }
     });
   }
@@ -869,6 +870,7 @@ class _HypDashboardState extends State<HypDashboard> {
     if (completed) {
       setState(() {
         _selectedWorkIds.clear();
+        _selectedGroupIds.clear();
         _selectingWorks = false;
       });
       await _refreshOffline();
@@ -2196,7 +2198,8 @@ class _HypDashboardState extends State<HypDashboard> {
         child: Wrap(spacing: 8, runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            HypText('선택됨: ' + _selectedWorkIds.length.toString() + '개'),
+            HypText('선택됨: ' + _selectedWorkIds.length.toString() +
+                '개 작품 · ' + _selectedGroupIds.length.toString() + '개 묶음'),
             OutlinedButton(
               key: const Key('library-select-visible'),
               onPressed: visible.isEmpty ? null : () => setState(() {
@@ -2205,31 +2208,41 @@ class _HypDashboardState extends State<HypDashboard> {
                 if (_search.text.trim().isNotEmpty) {
                   _selectedWorkIds.clear();
                 }
-                _selectedWorkIds.addAll(visible.map((w) => w.workId));
+                if (_page == HypPage.library && _search.text.isEmpty) {
+                  for (final work in visible) {
+                    if (work.groupId.isNotEmpty) {
+                      _selectedGroupIds.add(work.groupId);
+                    } else {
+                      _selectedWorkIds.add(work.workId);
+                    }
+                  }
+                } else {
+                  _selectedWorkIds.addAll(visible.map((w) => w.workId));
+                }
               }),
               child: const HypText('전체 선택'),
             ),
             OutlinedButton(
               key: const Key('library-clear-selection'),
-              onPressed: _selectedWorkIds.isEmpty ? null
-                  : () => setState(() => _selectedWorkIds.clear()),
+              onPressed: _selectedWorkIds.isEmpty && _selectedGroupIds.isEmpty
+                  ? null : () => setState(() {
+                    _selectedWorkIds.clear();
+                    _selectedGroupIds.clear();
+                  }),
               child: const HypText('선택 해제'),
             ),
             if (_page == HypPage.library)
               OutlinedButton.icon(
                 key: const Key('library-group-selected'),
-                onPressed: _selectedWorkIds.length < 2 ||
-                    widget.library.works.any((work) =>
-                      _selectedWorkIds.contains(work.workId) &&
-                      work.groupId.isNotEmpty)
+                onPressed: _selectedWorkIds.length + _selectedGroupIds.length < 2
                     ? null : _groupSelectedWorks,
                 icon: const Icon(Icons.bookmarks_outlined),
                 label: const HypText('선택 묶기'),
               ),
             OutlinedButton.icon(
               key: const Key('library-edit-selected'),
-              onPressed: _selectedWorkIds.length == 1
-                  ? _editSelectedWork : null,
+              onPressed: _selectedGroupIds.isEmpty &&
+                    _selectedWorkIds.length == 1 ? _editSelectedWork : null,
               icon: const Icon(Icons.edit_outlined),
               label: const HypText('정보 수정'),
             ),
@@ -2259,8 +2272,8 @@ class _HypDashboardState extends State<HypDashboard> {
             else
               FilledButton.icon(
                 key: const Key('library-delete-selected'),
-                onPressed: _selectedWorkIds.isNotEmpty
-                    ? _removeSelectedWorks : null,
+                onPressed: _selectedGroupIds.isEmpty &&
+                    _selectedWorkIds.isNotEmpty ? _removeSelectedWorks : null,
                 icon: const Icon(Icons.delete_outline_rounded),
                 label: const HypText('선택 삭제'),
               ),

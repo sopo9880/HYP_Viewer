@@ -1563,17 +1563,16 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       await _commitLibrary((latest) {
         final members = latest.works
             .where((work) => selected.contains(work.workId)).toList();
-        if (members.length != selected.length ||
-            members.any((work) => work.groupId.isNotEmpty)) {
-          throw StateError('이미 묶인 작품은 Auto/수동 묶기로 바꿀 수 없어. '
-              '먼저 기존 묶음을 해제해줘.');
+        if (members.length != selected.length) {
+          throw StateError('선택한 작품을 서재에서 찾을 수 없어.');
         }
-        return WorkEditionService.createSeries(latest,
+        return WorkEditionService.mergeSeries(latest,
             workIds, id, name);
       });
       _status('작품 ' + selected.length.toString() + '개를 묶었어.');
     } catch (error) {
       _status('묶음 만들기 실패: ' + error.toString());
+      rethrow;
     }
   }
 

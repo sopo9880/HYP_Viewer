@@ -7,6 +7,8 @@ abstract final class HypExtraTranslations {
     "블랙리스트에 등록된 작품": ["Blacklisted work", "ブロック済みの作品"],
     "차단된 작품은 검색과 번호 검증에서 제외돼.": ["Blocked works are excluded from searches and ID checks.", "ブロックされた作品は検索と番号確認から除外されます。"],
     "미검색": ["Not searched", "未検索"],
+    "선택한 작품과 묶음 통합": ["Merge Selected Works and Groups", "選択した作品とグループを統合"],
+    "한 묶음으로 통합": ["Merge into One Group", "1つのグループに統合"],
     "검색 중": ["Searching", "検索中"],
     "차단할 값": ["Value to block", "ブロック対象"],
     "차단 이유 (선택)": ["Reason (optional)", "理由（任意）"],
