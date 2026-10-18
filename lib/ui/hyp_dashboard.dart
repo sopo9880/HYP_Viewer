@@ -23,6 +23,8 @@ import '../core/reading_history.dart';
 import 'reading_insights.dart';
 import 'candidate_editor.dart';
 import '../core/work.dart';
+import '../core/blacklist.dart';
+import 'blacklist_manager.dart';
 import '../core/work_grouping.dart';
 import '../core/work_editions.dart';
 import '../core/title_alias_index.dart';
@@ -64,6 +66,11 @@ extension HypPageInfo on HypPage {
 /// YouTube, CBZ and updater services instead of imitating them with mock data.
 class HypDashboard extends StatefulWidget {
   final LibraryBackup library;
+  final BlacklistRules blacklist;
+  final Future<void> Function(BlacklistRules) onSaveBlacklist;
+  final Future<void> Function(BlacklistRule) onBlacklistAdd;
+  final Future<void> Function() onBlacklistExport;
+  final Future<BlacklistRules?> Function() onBlacklistImport;
   final String? editionLookupId;
   final int editionLookupEpoch;
   final List<ReadingSession> readingSessions;
@@ -161,6 +168,11 @@ class HypDashboard extends StatefulWidget {
   const HypDashboard({
     super.key,
     required this.library,
+    required this.blacklist,
+    required this.onSaveBlacklist,
+    required this.onBlacklistAdd,
+    required this.onBlacklistExport,
+    required this.onBlacklistImport,
     this.editionLookupId,
     this.editionLookupEpoch = 0,
     required this.readingSessions,
@@ -277,6 +289,7 @@ class _HypDashboardState extends State<HypDashboard> {
   Map<String, int> _remoteFieldTotals = const {};
   Map<String, List<String>> _remoteFieldMatches = const {};
   String _remoteFieldFilter = '';
+  final Set<String> _searchedRemoteFields = <String>{};
   bool _showEmptyRemoteFields = false;
   final Set<String> _loadedRemoteFacets = {};
   final Set<String> _loadingRemoteFacets = {};
@@ -521,6 +534,7 @@ class _HypDashboardState extends State<HypDashboard> {
     _remoteFieldTotals = const {};
     _remoteFieldMatches = const {};
     _remoteFieldFilter = '';
+    _searchedRemoteFields.clear();
     _showEmptyRemoteFields = false;
     _loadedRemoteFacets.clear();
     _loadingRemoteFacets.clear();
@@ -620,6 +634,8 @@ class _HypDashboardState extends State<HypDashboard> {
     final previousCount = _remoteResults.length;
     setState(() {
       _remotePage = result.page;
+      if (!next) _searchedRemoteFields.clear();
+      _searchedRemoteFields.addAll(result.searchedFields);
       _remoteFieldMatches = <String, List<String>>{
         if (next) ..._remoteFieldMatches,
         for (final entry in result.matchedFields.entries)
@@ -716,6 +732,7 @@ class _HypDashboardState extends State<HypDashboard> {
           }
         }
         _remoteResults = known.values.toList();
+        _searchedRemoteFields.add(field);
         _remoteFieldMatches = {
           for (final entry in fields.entries)
             entry.key: entry.value.toList(),
@@ -958,7 +975,10 @@ class _HypDashboardState extends State<HypDashboard> {
 
   List<WorkEntry> get _results => LocalWorkSearch.rankResults(
       LocalWorkSearch.queryLibrary(_works, _search.text,
-          language: _searchLanguage), _search.text);
+          language: _searchLanguage).where((work) => !widget.blacklist.blocks(
+            id: work.workId, title: work.title,
+            artists: [work.author], groups: [work.sourceGroup],
+            tags: work.tags)), _search.text);
 
   KeyEventResult _onKeyboardShortcut(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent ||
@@ -1394,6 +1414,8 @@ class _HypDashboardState extends State<HypDashboard> {
         onSaveSelectedWorks: widget.onSaveSelectedWorks,
         onVerifyCandidateCodes: widget.onVerifyCandidateCodes,
         onCrossLineFallback: widget.onCrossLineFallback,
+        blacklist: widget.blacklist,
+        onBlacklistAdd: widget.onBlacklistAdd,
       ),
       const SizedBox(height: 24),
       Row(children: [
@@ -2355,15 +2377,34 @@ class _HypDashboardState extends State<HypDashboard> {
     return '';
   }
 
+  bool _isBlockedOnline(OnlineSearchWork work) => widget.blacklist.blocks(
+    id: work.workId, title: work.title, artists: work.artists,
+    groups: work.groups, tags: work.tags);
+
+  Future<void> _showBlacklistManager() => showDialog<void>(
+    context: context,
+    builder: (_) => BlacklistManagerDialog(
+      rules: widget.blacklist,
+      onSave: widget.onSaveBlacklist,
+      onExport: widget.onBlacklistExport,
+      onImport: widget.onBlacklistImport,
+    ),
+  );
+
   Widget _searchContent() {
+    final visibleRemote = _remoteResults.where((work) =>
+        !_isBlockedOnline(work)).toList();
+    final hiddenCount = _remoteResults.length - visibleRemote.length;
+    final visibleFieldTotals = OnlineWorkSearch.facetCounts(
+        visibleRemote, _remoteFieldMatches);
     final existingIds = widget.library.works.map((w) => w.workId).toSet();
-    final remoteFiltered = _remoteResults.where((w) =>
+    final remoteFiltered = visibleRemote.where((w) =>
         (_remoteFieldFilter.isEmpty ||
          (_remoteFieldMatches[w.workId] ?? const <String>[])
              .contains(_remoteFieldFilter))).toList();
     final savedOnline = remoteFiltered.where((w) =>
         existingIds.contains(w.workId)).toList();
-    final online = _remoteResults.where((w) =>
+    final online = visibleRemote.where((w) =>
         !existingIds.contains(w.workId) &&
         (_remoteFieldFilter.isEmpty ||
          (_remoteFieldMatches[w.workId] ?? const <String>[])
@@ -2372,13 +2413,10 @@ class _HypDashboardState extends State<HypDashboard> {
       'general', 'artist', 'group', 'series', 'tag',
       'female', 'male', 'advanced',
     ];
+    // Never hide a field merely because it has not yet been queried.
     final visibleFacets = facetOrder.where((field) =>
-        (field != 'advanced' ||
-            _remoteFieldTotals.containsKey('advanced') ||
-            _remoteFieldFilter == 'advanced') &&
-        (_showEmptyRemoteFields ||
-         (_remoteFieldTotals[field] ?? 0) > 0 ||
-         _remoteFieldFilter == field)).toList();
+        field != 'advanced' || _searchedRemoteFields.contains('advanced') ||
+        _remoteFieldFilter == 'advanced').toList();
     final showLocal = _searchScope != 'online';
     final showOnline = _searchScope != 'local';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -2443,8 +2481,10 @@ class _HypDashboardState extends State<HypDashboard> {
       ],
       if (showOnline) ...[
         const SizedBox(height: 18),
-        Text(AppLocalizations.of(context)!.searchFetchedUnique(_remoteTotal),
+        Text(AppLocalizations.of(context)!.searchFetchedUnique(visibleRemote.length),
             style: Theme.of(context).textTheme.titleMedium),
+        if (hiddenCount > 0)
+          HypText('블랙리스트로 $hiddenCount개 숨김'),
         if (_search.text.trim().isNotEmpty)
           Row(children: [
             Expanded(child: SingleChildScrollView(
@@ -2461,10 +2501,16 @@ class _HypDashboardState extends State<HypDashboard> {
                 for (final field in visibleFacets) ...[
                   FilterChip(
                     key: Key('search-facet-' + field),
-                    label: Text(AppLocalizations.of(context)!.searchFieldCount(
-                      _searchFieldLabel(context, field),
-                      _remoteFieldTotals[field] ?? 0,
-                    )),
+                    label: Text(!_searchedRemoteFields.contains(field) &&
+                        !_loadingRemoteFacets.contains(field)
+                        ? _searchFieldLabel(context, field) + ' · ' +
+                            HypI18n.t(context, '미검색')
+                        : _loadingRemoteFacets.contains(field)
+                            ? _searchFieldLabel(context, field) + ' · ' +
+                                HypI18n.t(context, '검색 중')
+                            : AppLocalizations.of(context)!.searchFieldCount(
+                                _searchFieldLabel(context, field),
+                                visibleFieldTotals[field] ?? 0)),
                     selected: _remoteFieldFilter == field,
                     onSelected: (chosen) => _selectRemoteFacet(field, chosen),
                   ),
@@ -2473,14 +2519,10 @@ class _HypDashboardState extends State<HypDashboard> {
               ]),
             )),
             IconButton(
-              key: const Key('search-facet-show-zeros'),
-              tooltip: HypI18n.t(context, _showEmptyRemoteFields
-                  ? '0건 분야 숨기기' : '0건 분야 보기'),
-              onPressed: () => setState(() =>
-                  _showEmptyRemoteFields = !_showEmptyRemoteFields),
-              icon: Icon(_showEmptyRemoteFields
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined),
+              key: const Key('search-blacklist-manage'),
+              tooltip: HypI18n.t(context, '블랙리스트 관리'),
+              onPressed: _showBlacklistManager,
+              icon: const Icon(Icons.shield_outlined),
             ),
           ]),
         if (_remoteResults.isNotEmpty)
@@ -2569,7 +2611,15 @@ class _HypDashboardState extends State<HypDashboard> {
                           .map((field) => _searchFieldLabel(context, field))
                           .join(', ')),
                   ].join(' · '), maxLines: 3),
-            trailing: IconButton(
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(
+                key: Key('blacklist-online-' + group.first.workId),
+                tooltip: HypI18n.t(context, '블랙리스트에 추가'),
+                onPressed: () => widget.onBlacklistAdd(BlacklistRule(
+                    kind: 'id', value: group.first.workId)),
+                icon: const Icon(Icons.block_outlined),
+              ),
+              IconButton(
               tooltip: group.length > 1
                   ? AppLocalizations.of(context)!.editionChoose
                   : AppLocalizations.of(context)!.tooltipAddLibrary,
@@ -2579,6 +2629,7 @@ class _HypDashboardState extends State<HypDashboard> {
               icon: Icon(group.length > 1 ? Icons.language
                   : Icons.bookmark_add_outlined),
             ),
+            ]),
             onTap: group.length > 1
                 ? () => _showOnlineEditionCandidates(group)
                 : () => _showOnlineWork(group.first),
@@ -3149,6 +3200,18 @@ class _HypDashboardState extends State<HypDashboard> {
               style: const TextStyle(fontSize: 12, color: HypColors.muted)),
         ],
       )),
+      const SizedBox(height: 10),
+      _settingsPanel('blacklist', HypI18n.t(context, '블랙리스트'),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          HypText(HypI18n.t(context, '차단된 작품은 검색과 번호 검증에서 제외돼.')),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const Key('settings-blacklist-open'),
+            onPressed: _showBlacklistManager,
+            icon: const Icon(Icons.shield_outlined),
+            label: HypText(HypI18n.t(context, '블랙리스트 관리')),
+          ),
+        ])),
       const SizedBox(height: 10),
       _settingsPanel('viewer', AppLocalizations.of(context)!.settingsViewer, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

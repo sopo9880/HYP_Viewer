@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/blacklist.dart';
 import 'package:flutter/services.dart';
 
 import '../core/candidate_verifier.dart';
@@ -31,6 +32,8 @@ class _Slot {
 class CandidateEditor extends StatefulWidget {
   final List<NumberCandidate> suggestions;
   final CandidateBatchVerify? onVerify;
+  final BlacklistRules blacklist;
+  final Future<void> Function(BlacklistRule)? onBlacklistAdd;
   final List<NumberCandidate> Function()? onCrossLineFallback;
   final Future<void> Function(List<String>) onSave;
   final bool busy;
@@ -41,6 +44,8 @@ class CandidateEditor extends StatefulWidget {
     required this.onSave,
     required this.busy,
     this.onVerify,
+    this.blacklist = const BlacklistRules(),
+    this.onBlacklistAdd,
     this.onCrossLineFallback,
   });
 
@@ -166,10 +171,18 @@ class CandidateEditorState extends State<CandidateEditor> {
     _scheduleVerify();
   }
 
+  BlacklistRule? _blocked(_Slot slot) => widget.blacklist.firstMatch(
+    id: slot.controller.text.trim(),
+    title: slot.result?.title ?? '',
+    artists: slot.result?.artists ?? const [],
+    groups: slot.result?.groups ?? const [],
+    tags: slot.result?.tags ?? const [],
+  );
+
   Future<void> _verifyAll({bool force = false}) async {
     if (_checking || widget.onVerify == null) return;
     final matching = _slots.where((s) =>
-        _valid.hasMatch(s.controller.text.trim()) &&
+        _blocked(s) == null && _valid.hasMatch(s.controller.text.trim()) &&
         (force || s.checkedCode != s.controller.text.trim() ||
             s.result == null ||
             s.result!.status == CandidateCheck.unavailable))
@@ -220,7 +233,8 @@ class CandidateEditorState extends State<CandidateEditor> {
         slot.result = results[code] ??
             const CandidateVerification(CandidateCheck.unavailable);
         if (!slot.touched) {
-          slot.selected = slot.result!.status == CandidateCheck.verified;
+          slot.selected = slot.result!.status == CandidateCheck.verified &&
+              _blocked(slot) == null;
         }
       }
     });
@@ -243,12 +257,17 @@ class CandidateEditorState extends State<CandidateEditor> {
     final used = <String>{};
     for (final slot in _slots) {
       final code = slot.controller.text.trim();
-      if (slot.selected && _valid.hasMatch(code)) used.add(code);
+      if (slot.selected && _valid.hasMatch(code) &&
+          _blocked(slot) == null) used.add(code);
     }
     return used.toList();
   }
 
   Widget _status(_Slot slot) {
+    if (_blocked(slot) != null) {
+      return HypText(HypI18n.t(context, '블랙리스트에 등록된 작품'),
+          style: const TextStyle(color: Colors.redAccent));
+    }
     if (slot.checking) return const HypText('작품 확인 중…');
     if (!_valid.hasMatch(slot.controller.text.trim())) {
       return const HypText('숫자 6~9자리 입력');
@@ -290,8 +309,8 @@ class CandidateEditorState extends State<CandidateEditor> {
         Row(children: [
           Checkbox(
             key: Key('candidate-select-' + slot.id.toString()),
-            value: slot.selected,
-            onChanged: (value) => setState(() {
+            value: slot.selected && _blocked(slot) == null,
+            onChanged: _blocked(slot) != null ? null : (value) => setState(() {
               slot.touched = true;
               slot.selected = value == true;
             }),
@@ -320,6 +339,15 @@ class CandidateEditorState extends State<CandidateEditor> {
               ),
             ),
           ),
+          if (_valid.hasMatch(slot.controller.text.trim()) &&
+              widget.onBlacklistAdd != null && _blocked(slot) == null)
+            IconButton(
+              key: Key('candidate-blacklist-' + slot.id.toString()),
+              tooltip: HypI18n.t(context, '블랙리스트에 추가'),
+              onPressed: () => widget.onBlacklistAdd!(BlacklistRule(
+                kind: 'id', value: slot.controller.text.trim())),
+              icon: const Icon(Icons.block_outlined),
+            ),
           IconButton(
             key: Key('candidate-remove-' + slot.id.toString()),
             tooltip: HypI18n.t(context, '후보 삭제'),

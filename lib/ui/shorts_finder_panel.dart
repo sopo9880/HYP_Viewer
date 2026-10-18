@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 
 import '../core/number_extractor.dart';
 import 'candidate_editor.dart';
+import '../core/blacklist.dart';
 import 'hyp_theme.dart';
 
 /// The existing Shorts parser and YouTube client stay in the parent controller.
@@ -28,6 +29,8 @@ class ShortsFinderPanel extends StatefulWidget {
   final Future<void> Function(String code)? onQuickAddNumber;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
   final CandidateBatchVerify? onVerifyCandidateCodes;
+  final BlacklistRules blacklist;
+  final Future<void> Function(BlacklistRule)? onBlacklistAdd;
   final List<NumberCandidate> Function()? onCrossLineFallback;
 
   const ShortsFinderPanel({
@@ -51,6 +54,8 @@ class ShortsFinderPanel extends StatefulWidget {
     this.onQuickAddNumber,
     required this.onSaveSelectedWorks,
     this.onVerifyCandidateCodes,
+    this.blacklist = const BlacklistRules(),
+    this.onBlacklistAdd,
     this.onCrossLineFallback,
   });
 
@@ -380,6 +385,8 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             suggestions: widget.candidates,
             onVerify: widget.onVerifyCandidateCodes,
             onCrossLineFallback: widget.onCrossLineFallback,
+            blacklist: widget.blacklist,
+            onBlacklistAdd: widget.onBlacklistAdd,
             onSave: widget.onSaveSelectedWorks,
             busy: widget.busy,
           ),
