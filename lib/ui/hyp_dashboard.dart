@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import '../core/gallery.dart';
 import '../core/cover_store.dart';
 import '../core/reader_settings.dart';
+import 'windows_dpi_panel.dart';
 import '../core/i18n.dart';
 import '../l10n/app_localizations.dart';
 import '../core/number_extractor.dart';
@@ -3289,7 +3290,12 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 10),
-      _settingsPanel('hero', AppLocalizations.of(context)!.settingsHero, Column(
+      if (Platform.isWindows) ...[
+         _settingsPanel('dpi', AppLocalizations.of(context)!.dpiSettingsTitle,
+           const WindowsDpiSettingsPanel()),
+         const SizedBox(height: 10),
+       ],
+       _settingsPanel('hero', AppLocalizations.of(context)!.settingsHero, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('홈 배너 일러스트',

@@ -18,6 +18,7 @@ import 'core/gallery.dart';
 import 'core/cover_store.dart';
 import 'core/hero_artwork_store.dart';
 import 'core/reader_settings.dart';
+import 'core/windows_dpi.dart';
 import 'core/i18n.dart';
 import 'l10n/app_localizations.dart';
 import 'core/reader_downloader.dart';
@@ -67,6 +68,9 @@ void main() async {
     try {
       await BackgroundDownloadRuntime.instance.configureDesktop();
     } catch (_) { /* Download attempts surface the unavailable tray. */ }
+  }
+  if (Platform.isWindows) {
+    unawaited(WindowsDpiManager.instance.initialize());
   }
   runApp(const HypViewerApp());
 }
