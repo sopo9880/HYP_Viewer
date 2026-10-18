@@ -318,4 +318,82 @@ void main() {
     }
   });
 
+  test('wrong CDN gallery ID is retried once with cache bypass', () async {
+    var galleryCalls = 0;
+    final client = MockClient((request) async {
+      if (request.url.path == '/galleries/3538281.js') {
+        galleryCalls++;
+        if (galleryCalls == 1) {
+          expect(request.url.queryParameters.containsKey('_hyp_retry'), false);
+          return http.Response('var galleryinfo = ' +
+              jsonEncode({'id': 7777777, 'files': []}) + ';', 200);
+        }
+        expect(request.url.queryParameters.containsKey('_hyp_retry'), true);
+        expect(request.headers['cache-control'], contains('no-cache'));
+        return http.Response('var galleryinfo = ' +
+            jsonEncode({'id': 3538281, 'title': 'Verified gallery',
+              'files': [{'hash': hash}]}) + ';', 200);
+      }
+      return http.Response("var o = 0; var x = {b: '2026/'};", 200);
+    });
+    try {
+      final gallery = await HitomiGalleryProvider(client).load('3538281');
+      expect(gallery.workId, '3538281');
+      expect(gallery.pageCount, 1);
+      expect(galleryCalls, 2);
+    } finally {
+      client.close();
+    }
+  });
+
+  test('persistent mismatches preserve returned ID without leaking response',
+      () async {
+    final seen = <Uri>[];
+    final client = MockClient((request) async {
+      seen.add(request.url);
+      return http.Response('var galleryinfo = ' +
+          jsonEncode({'id': 9999999, 'title': 'DO_NOT_USE',
+            'files': [{'hash': hash}]}) + ';', 200);
+    });
+    try {
+      await HitomiGalleryProvider(client).fetchInfo('3603632');
+      fail('Should never accept an unrelated gallery');
+    } on OnlineReaderFailure catch (error) {
+      expect(error.code, 'META_ID_MISMATCH');
+      expect(error.workId, '3603632');
+      expect(error.returnedWorkId, '9999999');
+      expect(error.retried, true);
+      expect(error.toString(), isNot(contains('DO_NOT_USE')));
+      expect(seen.length, 2);
+    } finally {
+      client.close();
+    }
+  });
+
+  test('fetchTitle, fetchInfo and load reject poisoned gallery metadata',
+      () async {
+    var requests = 0;
+    final client = MockClient((request) async {
+      requests++;
+      return http.Response('var galleryinfo = ' +
+          jsonEncode({'id': 1234567, 'title': 'Poisoned title',
+            'files': [{'hash': hash}]}) + ';', 200);
+    });
+    try {
+      final provider = HitomiGalleryProvider(client);
+      for (final action in <Future<Object> Function()>[
+        () => provider.fetchTitle('3665953'),
+        () => provider.fetchInfo('3665953'),
+        () => provider.load('3665953'),
+      ]) {
+        await expectLater(action(),
+            throwsA(isA<OnlineReaderFailure>()
+                .having((e) => e.code, 'code', 'META_ID_MISMATCH')));
+      }
+      expect(requests, 6);
+    } finally {
+      client.close();
+    }
+  });
+
 }

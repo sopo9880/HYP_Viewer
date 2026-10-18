@@ -15,6 +15,9 @@ class OnlineReaderFailure extends FormatException {
   final String? actualType;
   final String? host;
   final int? page;
+  /// Numeric-only, verified for display; never the raw server payload.
+  final String? returnedWorkId;
+  final bool retried;
 
   OnlineReaderFailure({
     required this.code,
@@ -25,6 +28,8 @@ class OnlineReaderFailure extends FormatException {
     this.actualType,
     this.host,
     this.page,
+    this.returnedWorkId,
+    this.retried = false,
   }) : super(description +
         (httpStatus == null ? '' : ' · HTTP ' + httpStatus.toString()));
 

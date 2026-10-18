@@ -177,38 +177,82 @@ class HitomiGalleryProvider {
   static const _host = 'ltn.gold-usergeneratedcontent.net';
   static const _maxScriptBytes = 1024 * 1024;
 
-  /// Fetch a title only; saving a work must not download images or gg.js.
-  Future<String> fetchTitle(String workId) async {
+  /// Shared, verified metadata reader for title, work info and reader.
+  /// One cache-bypass request is allowed on ID mismatches only. Returning
+  /// another gallery's images as though they belonged to this ID is forbidden.
+  Future<Map<dynamic, dynamic>> _verifiedGalleryInfo(String workId) async {
     if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
       throw const FormatException('작품 번호는 숫자 1~12자리여야 해.');
     }
-    final raw = await _readScript(Uri.https(_host, '/galleries/$workId.js'));
-    final start = raw.indexOf('{');
-    final end = raw.lastIndexOf('}');
-    if (start < 0 || end <= start) {
-      throw const FormatException('작품 제목 메타데이터가 올바르지 않아.');
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final noCache = attempt == 1;
+      final uri = Uri.https(_host, '/galleries/$workId.js',
+        noCache ? {'_hyp_retry': DateTime.now()
+            .microsecondsSinceEpoch.toString()} : null);
+      final raw = await _readScript(uri, workId: workId, noCache: noCache);
+      final match = RegExp(r'\bgalleryinfo\s*=').firstMatch(raw);
+      // Some mirrors return a bare JSON object instead of JS assignment.
+      // Never parse an unrelated script object.
+      final start = match != null ? raw.indexOf('{', match.end)
+          : raw.trimLeft().startsWith('{') ? raw.indexOf('{') : -1;
+      final end = raw.lastIndexOf('}');
+      if (start < 0 || end <= start) {
+        throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',
+          stage: OnlineReaderStage.metadata, workId: workId,
+          httpStatus: 200, host: _host,
+          description: '메타데이터에 galleryinfo JSON 객체가 없어.');
+      }
+      Object? decoded;
+      try {
+        decoded = jsonDecode(raw.substring(start, end + 1));
+      } on FormatException {
+        throw OnlineReaderFailure(code: 'META_JSON_INVALID',
+          stage: OnlineReaderStage.metadata, workId: workId,
+          httpStatus: 200, host: _host,
+          description: '메타데이터 JSON 해석에 실패했어.');
+      }
+      if (decoded is! Map) {
+        throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',
+          stage: OnlineReaderStage.metadata, workId: workId,
+          actualType: OnlineReaderFailure.jsonType(decoded),
+          httpStatus: 200, host: _host,
+          description: '메타데이터가 JSON 객체가 아니야.');
+      }
+      if (!decoded.containsKey('id') || decoded['id'] == null) {
+        throw OnlineReaderFailure(code: 'META_ID_MISSING',
+          stage: OnlineReaderStage.metadata, workId: workId,
+          httpStatus: 200, host: _host,
+          description: '메타데이터에 작품 번호가 없어.');
+      }
+      final rawId = decoded['id'];
+      final reported = rawId is num && rawId.isFinite &&
+          rawId == rawId.toInt()
+          ? rawId.toInt().toString()
+          : rawId is String ? rawId.trim() : '';
+      if (reported != workId) {
+        if (attempt == 0) continue;
+        throw OnlineReaderFailure(code: 'META_ID_MISMATCH',
+          stage: OnlineReaderStage.metadata, workId: workId,
+          returnedWorkId: RegExp(r'^\d{1,12}$').hasMatch(reported)
+              ? reported : null,
+          actualType: OnlineReaderFailure.jsonType(rawId),
+          retried: true, httpStatus: 200, host: _host,
+          description: '재요청 후에도 서버에서 다른 작품 번호를 반환했어.');
+      }
+      return decoded;
     }
-    final decoded = jsonDecode(raw.substring(start, end + 1));
-    if (decoded is! Map || decoded['id'].toString() != workId) {
-      throw const FormatException('작품 번호가 일치하지 않아.');
-    }
-    return decoded['title'] is String ? (decoded['title'] as String).trim() : '';
+    throw StateError('Unreachable gallery metadata state');
+  }
+
+  /// Fetching a title does not download images or gg.js.
+  Future<String> fetchTitle(String workId) async {
+    final decoded = await _verifiedGalleryInfo(workId);
+    return decoded['title'] is String
+        ? (decoded['title'] as String).trim() : '';
   }
 
   Future<GalleryInfo> fetchInfo(String workId) async {
-    if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
-      throw const FormatException('작품 번호가 유효하지 않아.');
-    }
-    final raw = await _readScript(Uri.https(_host, '/galleries/$workId.js'));
-    final start = raw.indexOf('{');
-    final end = raw.lastIndexOf('}');
-    if (start < 0 || end <= start) {
-      throw const FormatException('갤러리 메타데이터가 손상됐어.');
-    }
-    final decoded = jsonDecode(raw.substring(start, end + 1));
-    if (decoded is! Map) {
-      throw const FormatException('갤러리 메타데이터가 유효하지 않아.');
-    }
+    final decoded = await _verifiedGalleryInfo(workId);
     return GalleryInfo.parse(workId, decoded);
   }
 
@@ -217,46 +261,7 @@ class HitomiGalleryProvider {
       throw const FormatException('작품 번호는 숫자 1~12자리여야 해.');
     }
 
-    final metadataText = await _readScript(
-      Uri.https(_host, '/galleries/' + workId + '.js'),
-      workId: workId,
-    );
-    final start = metadataText.indexOf('{');
-    final end = metadataText.lastIndexOf('}');
-    if (start < 0 || end <= start) {
-      throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',
-        stage: OnlineReaderStage.metadata, workId: workId,
-        httpStatus: 200, host: _host,
-        description: '메타데이터에 JSON 객체가 없어.');
-    }
-    Object? decoded;
-    try {
-      decoded = jsonDecode(metadataText.substring(start, end + 1));
-    } on FormatException {
-      throw OnlineReaderFailure(code: 'META_JSON_INVALID',
-        stage: OnlineReaderStage.metadata, workId: workId,
-        httpStatus: 200, host: _host,
-        description: '메타데이터 JSON 해석에 실패했어.');
-    }
-    if (decoded is! Map) {
-      throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',
-        stage: OnlineReaderStage.metadata, workId: workId,
-        httpStatus: 200, host: _host,
-        actualType: OnlineReaderFailure.jsonType(decoded),
-        description: '메타데이터가 JSON 객체가 아니야.');
-    }
-    if (!decoded.containsKey('id') || decoded['id'] == null) {
-      throw OnlineReaderFailure(code: 'META_ID_MISSING',
-        stage: OnlineReaderStage.metadata, workId: workId,
-        httpStatus: 200, host: _host,
-        description: '메타데이터에 작품 번호가 없어.');
-    }
-    if (decoded['id'].toString() != workId) {
-      throw OnlineReaderFailure(code: 'META_ID_MISMATCH',
-        stage: OnlineReaderStage.metadata, workId: workId,
-        httpStatus: 200, host: _host,
-        description: '요청 작품 번호와 서버 작품 번호가 달라.');
-    }
+    final decoded = await _verifiedGalleryInfo(workId);
     if (!decoded.containsKey('files')) {
       throw OnlineReaderFailure(code: 'META_FILES_MISSING',
         stage: OnlineReaderStage.metadata, workId: workId,
@@ -326,6 +331,7 @@ class HitomiGalleryProvider {
   Future<String> _readScript(Uri uri, {
     String workId = '',
     OnlineReaderStage stage = OnlineReaderStage.metadata,
+    bool noCache = false,
   }) async {
     if (uri.scheme != 'https' || uri.host != _host) {
       throw const FormatException('지원하지 않는 소스 서버야.');
@@ -334,6 +340,10 @@ class HitomiGalleryProvider {
       ..followRedirects = false
       ..headers['Accept'] = 'text/javascript,application/javascript,text/plain,*/*'
       ..headers['Referer'] = 'https://hitomi.la/';
+    if (noCache) {
+      request.headers['Cache-Control'] = 'no-cache, no-store';
+      request.headers['Pragma'] = 'no-cache';
+    }
     late final http.StreamedResponse response;
     try {
       response = await client.send(request)

@@ -58,6 +58,9 @@ class OnlineReaderErrorText {
       l.readerOnlineFieldWorkId + ': ' + failure.workId,
       l.readerOnlineFieldStage + ': ' + stage(l, failure.stage),
       l.readerOnlineFieldCode + ': ' + failure.code,
+      if (failure.returnedWorkId != null)
+        l.readerOnlineReturnedId + ': ' + failure.returnedWorkId!,
+      if (failure.retried) l.readerOnlineRetried,
       if (failure.httpStatus != null)
         l.readerOnlineFieldHttp + ': HTTP ' + failure.httpStatus.toString(),
       if (failure.actualType != null)

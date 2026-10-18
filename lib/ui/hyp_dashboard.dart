@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import '../core/gallery.dart';
 import '../core/cover_store.dart';
 import '../core/reader_settings.dart';
+import 'windows_dpi_panel.dart';
 import '../core/i18n.dart';
 import '../l10n/app_localizations.dart';
 import '../core/number_extractor.dart';
@@ -671,7 +672,7 @@ class _HypDashboardState extends State<HypDashboard> {
 
   void _selectRemoteFacet(String field, bool chosen) {
     setState(() => _remoteFieldFilter = chosen ? field : '');
-    if (chosen) _loadRemoteFacet(field, epoch: _searchEpoch);
+    if (chosen && field != 'web') _loadRemoteFacet(field, epoch: _searchEpoch);
   }
 
   /// Explicitly search the selected metadata field even when a dense title
@@ -2492,6 +2493,7 @@ class _HypDashboardState extends State<HypDashboard> {
       'tag' => l.searchTag,
       'female' => l.searchFemale,
       'male' => l.searchMale,
+      'web' => l.webSearchSourceLabel,
       'advanced' => l.searchAdvanced,
       _ => field,
     };
@@ -2535,7 +2537,7 @@ class _HypDashboardState extends State<HypDashboard> {
       ..._remoteFieldMatches,
       for (final work in _webSearchResults.values)
         work.workId: <String>{
-          ...?_remoteFieldMatches[work.workId], 'general',
+          ...?_remoteFieldMatches[work.workId], 'web',
         }.toList(),
     };
     final visibleRemote = merged.values.where((work) =>
@@ -2559,7 +2561,7 @@ class _HypDashboardState extends State<HypDashboard> {
              .contains(_remoteFieldFilter))).toList();
     const facetOrder = [
       'general', 'artist', 'group', 'series', 'tag',
-      'female', 'male', 'advanced',
+      'female', 'male', 'web', 'advanced',
     ];
     // Never hide a field merely because it has not yet been queried.
     final visibleFacets = facetOrder.where((field) =>
@@ -2717,7 +2719,8 @@ class _HypDashboardState extends State<HypDashboard> {
             label: const HypText('분야 검색 다시 시도'),
           ),
         ],
-        if (!_remoteBusy && _remoteError == null && _remoteResults.isEmpty)
+        if (!_remoteBusy && _remoteError == null &&
+            _remoteResults.isEmpty && _webSearchResults.isEmpty)
           const Padding(padding: EdgeInsets.all(15),
             child: HypText('온라인 결과가 아직 없어. 제목이나 작가·태그로 검색해 줘.')),
         if (savedOnline.isNotEmpty)
@@ -2749,6 +2752,8 @@ class _HypDashboardState extends State<HypDashboard> {
                       _savedOnlineEditionHint(group),
                   ].join(' · ')
                 : [
+                    if (_webSearchResults.containsKey(group.first.workId))
+                      AppLocalizations.of(context)!.webSearchSourceLabel,
                     if (group.first.artists.isNotEmpty)
                       group.first.artists.join(', '),
                     if (group.first.language.isNotEmpty) group.first.language,
@@ -3285,7 +3290,12 @@ class _HypDashboardState extends State<HypDashboard> {
         ],
       )),
       const SizedBox(height: 10),
-      _settingsPanel('hero', AppLocalizations.of(context)!.settingsHero, Column(
+      if (Platform.isWindows) ...[
+         _settingsPanel('dpi', AppLocalizations.of(context)!.dpiSettingsTitle,
+           const WindowsDpiSettingsPanel()),
+         const SizedBox(height: 10),
+       ],
+       _settingsPanel('hero', AppLocalizations.of(context)!.settingsHero, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HypText('홈 배너 일러스트',
