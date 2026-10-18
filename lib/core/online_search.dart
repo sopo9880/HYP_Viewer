@@ -119,12 +119,9 @@ class OnlineWorkSearch {
     return queries;
   }
 
-  /// Search a plain term across general, creator, circle, and supported
-  /// tag fields. Source count totals can overlap; only fetched unique IDs
-  /// are displayed as a true unique count.
-  /// Expand one plain phrase across every supported metadata field.
-  /// Explicit field:value expressions bypass expansion. Search counts from
-  /// different fields overlap; only fetched gallery IDs are deduplicated.
+  /// Plan a generous fallback field set; searchUnified executes the
+  /// secondary queries only when the primary title round is sparse.
+  /// Explicit field:value expressions bypass expansion.
   static List<(String, String)> planQueries(String raw) {
     final input = raw.trim();
     if (input.isEmpty) {
@@ -173,13 +170,65 @@ class OnlineWorkSearch {
       final term = alternatives[i];
       if (term.length < 2) continue;
       final fields = i == 0
-          ? const ['artist', 'group', 'series', 'tag']
-          : const ['artist', 'group'];
+          ? const ['artist', 'group', 'series', 'tag', 'female', 'male']
+          : const ['artist', 'group', 'series', 'tag'];
       for (final field in fields) {
         add(field, '$field:$term');
       }
     }
-    return planned.take(12).toList();
+    return planned.take(16).toList();
+  }
+
+  /// Infer facets from actual returned metadata, not only which provider
+  /// query found the gallery. A gallery returned for a general query may
+  /// match its artist while having no keyword in the title.
+  static Set<String> metadataFields(OnlineSearchWork work, String raw) {
+    final terms = raw.split('|')
+        .map((part) => part.trim().toLowerCase())
+        .where((part) => part.isNotEmpty)
+        .take(5)
+        .map((part) => RegExp(r'^[a-z_]+:', caseSensitive: false)
+                .hasMatch(part)
+            ? part.substring(part.indexOf(':') + 1).trim() : part)
+        .where((part) => part.length >= 2).toList();
+    bool contains(Iterable<String> items) => terms.any((term) =>
+        items.any((item) => item.toLowerCase().contains(term)));
+    final fields = <String>{};
+    if (contains([work.title, ...work.titleAliases, work.workId])) {
+      fields.add('general');
+    }
+    if (contains(work.artists)) fields.add('artist');
+    if (contains(work.groups)) fields.add('group');
+    if (contains(work.series)) fields.add('series');
+    if (contains(work.tags)) fields.add('tag');
+    if (contains(work.tags.where((t) => t.toLowerCase().startsWith('female:')))) {
+      fields.add('female');
+    }
+    if (contains(work.tags.where((t) => t.toLowerCase().startsWith('male:')))) {
+      fields.add('male');
+    }
+    return fields;
+  }
+
+  /// Unique, already-fetched gallery IDs in each displayed facet.
+  /// Provider "count" is an overlapping, unverified index estimate, not
+  /// the number of works actually visible in a facet.
+  static Map<String, int> facetCounts(Iterable<OnlineSearchWork> works,
+      Map<String, List<String>> matchedFields) {
+    final available = works.map((work) => work.workId).toSet();
+    final byField = <String, Set<String>>{};
+    for (final entry in matchedFields.entries) {
+      if (!available.contains(entry.key)) continue;
+      for (final field in entry.value.toSet()) {
+        byField.putIfAbsent(field, () => <String>{}).add(entry.key);
+      }
+    }
+    const order = ['general', 'artist', 'group', 'series', 'tag',
+                   'female', 'male', 'advanced'];
+    return {
+      for (final field in order)
+        if (byField.containsKey(field)) field: byField[field]!.length,
+    };
   }
 
   /// Prefer a genuinely all-language index for multi-language searches.
@@ -238,7 +287,6 @@ class OnlineWorkSearch {
     }
     final unique = <String, OnlineSearchWork>{};
     final matched = <String, Set<String>>{};
-    final counts = <String, int>{};
     final warnings = <String>{};
     final normalizedTerms = raw.toLowerCase().split('|')
         .map((value) => value.trim())
@@ -279,8 +327,14 @@ class OnlineWorkSearch {
 
     OnlineSearchResult snapshot() {
       final ordered = unique.values.toList();
+      final displayMatches = <String, List<String>>{
+        for (final work in ordered)
+          work.workId: <String>{
+            ...?matched[work.workId], ...metadataFields(work, raw),
+          }.toList(),
+      };
       int score(OnlineSearchWork work) {
-        var result = (matched[work.workId] ?? const <String>{})
+        var result = (displayMatches[work.workId] ?? const <String>[])
             .fold<int>(0, (sum, field) => sum + (weights[field] ?? 1));
         final titles = [work.title, ...work.titleAliases]
             .map((title) => title.toLowerCase()).toList();
@@ -300,9 +354,8 @@ class OnlineWorkSearch {
         return relevance != 0 ? relevance : a.workId.compareTo(b.workId);
       });
       return OnlineSearchResult(ordered, unique.length, page,
-          fieldTotals: Map<String, int>.of(counts),
-          matchedFields: matched.map((id, fields) =>
-              MapEntry(id, fields.toList())),
+          fieldTotals: facetCounts(ordered, displayMatches),
+          matchedFields: displayMatches,
           warnings: warnings.toList(),
           hasNextPage: hasMore);
     }
@@ -324,15 +377,17 @@ class OnlineWorkSearch {
             for (final warning in result.warnings) {
               warnings.add(entry.$1 + ': ' + warning);
             }
-            counts.update(entry.$1, (count) => count + result.total,
-                ifAbsent: () => result.total);
             hasMore = hasMore || result.works.isNotEmpty &&
                 (result.total > page * 25 || result.works.length >= 25);
             for (final work in result.works) {
               final old = unique[work.workId];
               unique[work.workId] = old == null ? work : combine(old, work);
-              matched.putIfAbsent(work.workId, () => <String>{})
-                  .add(entry.$1);
+              // General searches are broad and may match a creator but
+              // not the title. Only explicit field-query evidence is tagged.
+              if (entry.$1 != 'general') {
+                matched.putIfAbsent(work.workId, () => <String>{})
+                    .add(entry.$1);
+              }
             }
           } catch (error) {
             warnings.add(entry.$1 + ': ' + error.toString());
