@@ -183,4 +183,82 @@ void main() {
     expect(WorkGrouping.episodeNumber(c), isNull);
   });
 
+
+  test('fuzzy titles need no creator metadata', () {
+    final a = WorkEntry.create(workId: '800001',
+        title: '내가 생각한 최강의 수학여행');
+    final b = WorkEntry.create(workId: '800002',
+        title: '내가 생각한 최강 수학여행');
+    final proposals = WorkGrouping.suggest([a, b]);
+    expect(proposals, hasLength(1));
+    expect(proposals.single.workIds.toSet(), {'800001', '800002'});
+  });
+
+  test('shortened title plus special edition is suggested for review', () {
+    final a = WorkEntry.create(workId: '800011',
+        title: '내가 생각한 최강의 수학여행');
+    final b = WorkEntry.create(workId: '800012',
+        title: '최강의 수학여행 특별편');
+    final proposals = WorkGrouping.suggest([a, b]);
+    expect(proposals, hasLength(1));
+    expect(proposals.single.workIds.toSet(), {'800011', '800012'});
+    expect(proposals.single.reason, contains('파생'));
+  });
+
+  test('60 to 70 percent title match passes with creator evidence', () {
+    final a = WorkEntry.create(workId: '800021',
+        title: '가상의 세계 모험담', author: 'Maker');
+    final b = WorkEntry.create(workId: '800022',
+        title: '가상의 세계 이야기', author: 'Maker');
+    expect(WorkGrouping.suggest([a, b]), hasLength(1));
+  });
+
+  test('two substantive shared title words create a broad suggestion', () {
+    final a = WorkEntry.create(workId: '800031',
+        title: '별빛공원 조용한 사계절 휴가');
+    final b = WorkEntry.create(workId: '800032',
+        title: '별빛공원 조용한 추억의 이야기');
+    final proposals = WorkGrouping.suggest([a, b]);
+    expect(proposals, hasLength(1));
+    expect(proposals.single.confidence, lessThan(70));
+    expect(proposals.single.reason, contains('폭넓게'));
+  });
+
+  test('unnumbered different language copies do not become series', () {
+    final a = WorkEntry.create(workId: '800041',
+        title: 'Summer Memory').copyWith(sourceLanguage: 'japanese');
+    final b = WorkEntry.create(workId: '800042',
+        title: 'Summer Memory | 여름의 추억')
+        .copyWith(sourceLanguage: 'korean');
+    expect(WorkGrouping.suggest([a, b]), isEmpty);
+  });
+
+  test('different-numbered chapters remain eligible across languages', () {
+    final a = WorkEntry.create(workId: '800051',
+        title: 'Summer Memory 1').copyWith(sourceLanguage: 'japanese');
+    final b = WorkEntry.create(workId: '800052',
+        title: 'Summer Memory 2').copyWith(sourceLanguage: 'korean');
+    expect(WorkGrouping.suggest([a, b]), hasLength(1));
+  });
+
+  test('similarity chains cannot absorb unrelated endpoints', () {
+    final a = WorkEntry.create(workId: '800061',
+        title: '바닷가에서 즐긴 여름방학');
+    final bridge = WorkEntry.create(workId: '800062',
+        title: '바닷가에서 즐긴 겨울방학');
+    final c = WorkEntry.create(workId: '800063',
+        title: '산속에서 즐긴 겨울방학');
+    final proposals = WorkGrouping.suggest([a, bridge, c]);
+    expect(proposals, hasLength(1));
+    expect(proposals.single.workIds.toSet(), {'800061', '800062'});
+  });
+
+  test('same creator with unrelated titles is not suggested', () {
+    final a = WorkEntry.create(workId: '800071',
+        title: '푸른 별과 여름 바다', author: 'Same');
+    final b = WorkEntry.create(workId: '800072',
+        title: '기차를 타고 떠난 우주', author: 'Same');
+    expect(WorkGrouping.suggest([a, b]), isEmpty);
+  });
+
 }

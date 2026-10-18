@@ -154,6 +154,9 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
   Widget _groupTile(int i) {
     final proposal = widget.suggestions[i];
     final isExisting = proposal.existingGroupId.isNotEmpty;
+    final matchTier = proposal.confidence >= 85
+        ? '강한 추천'
+        : proposal.confidence >= 70 ? '유사 제목' : '넓은 범위 추천';
     final members = isExisting
         ? widget.works.where((w) =>
             w.groupId == proposal.existingGroupId).toList()
@@ -176,7 +179,7 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
         subtitle: HypText(
           (isExisting ? '기존 묶음에 추가' : '새 묶음') + ' · ' +
           proposal.workIds.length.toString() + '개 후보 · ' +
-          '규칙 점수 ' + proposal.confidence.toString() + '/100\n' +
+          matchTier + ' · 규칙 점수 ' + proposal.confidence.toString() + '/100\n' +
           proposal.reason,
           maxLines: 3,
         ),

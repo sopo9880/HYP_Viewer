@@ -25,7 +25,11 @@ class WorkGrouping {
     r'(?:번외편|외전|특별편|후일담|에필로그|합본|합권|완전판|확장판|'
     r'개정판|수정판|재편집|총집편|통합본|추가편|보너스편|'
     r'omnibus|compilation|complete\s*edition|revised\s*edition|'
-    r'after\s*story|special\s*edition|bonus|epilogue|外伝|番外編|総集編|完全版|改訂版)',
+    r'after\s*story|special\s*edition|bonus|epilogue|'
+    r'side\s*story|extended\s*edition|deluxe\s*edition|'
+    r'bonus\s*chapter|spin[\s-]*off|uncut\s*version|'
+    r'외전집|신장판|증보판|특별수록|오마케|'
+    r'外伝|番外編|総集編|完全版|改訂版|特別編|増補版|おまけ)',
     caseSensitive: false);
 
   static ({int start, int end})? episodeRange(String title) {
@@ -173,32 +177,96 @@ class WorkGrouping {
     return 1 - previous.last / length;
   }
 
+
+  /// Titles are the primary discovery signal; creator metadata is optional.
+  /// Suggestions remain opt-in and are reviewed before any library changes.
+  static String _compactTitle(String title) =>
+      baseTitle(title).replaceAll(RegExp(r'[\s·・]+'), '');
+
+  static bool _sharedTitleCore(String a, String b) {
+    final first = baseTitle(a);
+    final second = baseTitle(b);
+    final one = _compactTitle(a);
+    final two = _compactTitle(b);
+    if (one.isEmpty || two.isEmpty) return false;
+    final shorter = one.length <= two.length ? one : two;
+    final longer = one.length > two.length ? one : two;
+    if (shorter.length >= 6 && longer.contains(shorter) &&
+        shorter.length / longer.length >= 0.40) return true;
+
+    // More than one substantial common term is needed: "이야기" alone
+    // cannot group unrelated titles.
+    final firstWords = first.split(RegExp(r'\s+'))
+        .where((word) => word.length >= 3).toSet();
+    final secondWords = second.split(RegExp(r'\s+'))
+        .where((word) => word.length >= 3).toSet();
+    final common = firstWords.intersection(secondWords);
+    final commonLength = common.fold<int>(0, (sum, word) => sum + word.length);
+    return common.length >= 2 && commonLength >= 7 &&
+        commonLength / shorter.length >= 0.52;
+  }
+
+  static double _titleMatchScore(WorkEntry a, WorkEntry b) {
+    final first = _compactTitle(a.title);
+    final second = _compactTitle(b.title);
+    if (first.isEmpty || second.isEmpty) return 0;
+    if (first == second) return 1;
+    final edit = _similarity(first, second);
+    final shorter = first.length <= second.length ? first : second;
+    final longer = first.length > second.length ? first : second;
+    if (shorter.length >= 6 && longer.contains(shorter) &&
+        shorter.length / longer.length >= 0.40) {
+      final contained = 0.70 + 0.26 * shorter.length / longer.length;
+      return edit > contained ? edit : contained;
+    }
+    if (_sharedTitleCore(a.title, b.title) && edit < 0.66) return 0.66;
+    return edit;
+  }
+
   static bool _sameSeries(WorkEntry a, WorkEntry b) {
-    if (!_usableTitle(a) || !_usableTitle(b) ||
-        _creatorConflict(a, b)) return false;
-    // Different-language versions of the same unnumbered chapter belong to
-    // edition matching, not an inferred series.
+    if (!_usableTitle(a) || !_usableTitle(b)) return false;
+    final score = _titleMatchScore(a, b);
+    if (score < 0.60) return false;
+
+    // Another-language copy of an unnumbered/same-numbered chapter is
+    // an edition candidate, not an inferred series, even without an author.
     final aLang = a.sourceLanguage.trim().toLowerCase();
     final bLang = b.sourceLanguage.trim().toLowerCase();
     if (aLang.isNotEmpty && bLang.isNotEmpty && aLang != bLang &&
         episodeNumber(a) == episodeNumber(b) &&
         !isDerivative(a.title) && !isDerivative(b.title) &&
-        _sameKnownCreator(a, b) &&
+        score >= 0.91 &&
         (a.totalPages == 0 || b.totalPages == 0 ||
-            (a.totalPages - b.totalPages).abs() <= 5)) return false;
-    final first = baseTitle(a.title);
-    final second = baseTitle(b.title);
-    if (first == second) return true;
-    // Similar titles must have independent creator evidence. A shared
-    // sourceSeries alone can mean a parody/franchise, not a sequel.
-    final creator = _sameKnownCreator(a, b);
+            (a.totalPages - b.totalPages).abs() <= 8)) {
+      return false;
+    }
+
+    // Conflicting artist AND circle is strong negative evidence,
+    // but an almost identical title remains a reviewable suggestion.
+    if (_creatorConflict(a, b) && score < 0.92) return false;
+    if (score >= 0.70) return true;
+
+    // 60-70% needs extra evidence: shared creator or series metadata,
+    // or a substantial shared title core. Matching creator alone is not
+    // enough when titles are genuinely unrelated.
     final exactSourceSeries = a.sourceSeries.trim().isNotEmpty &&
         b.sourceSeries.trim().isNotEmpty &&
         a.sourceSeries.trim().toLowerCase() ==
-        b.sourceSeries.trim().toLowerCase();
-    final score = _similarity(first, second);
-    return creator && (score >= 0.88 ||
-        (exactSourceSeries && score >= 0.66));
+            b.sourceSeries.trim().toLowerCase();
+    return _sameKnownCreator(a, b) || exactSourceSeries ||
+        _sharedTitleCore(a.title, b.title);
+  }
+
+  /// A majority threshold admits descriptive variants without admitting
+  /// transitive A~B~C chains: 2-member clusters must match both members.
+  static bool _fitsCluster(List<WorkEntry> members, WorkEntry candidate) {
+    if (members.isEmpty) return false;
+    final needed = (members.length * 2 + 2) ~/ 3; // ceil(2 * n / 3)
+    var matching = 0;
+    for (final item in members) {
+      if (_sameSeries(item, candidate)) matching++;
+    }
+    return matching >= needed;
   }
 
   /// Original chapter order can still be explicitly overridden by groupOrder.
@@ -254,8 +322,7 @@ class WorkGrouping {
       if (!_usableTitle(work)) continue;
       final matches = <List<WorkEntry>>[];
       for (final group in clusters) {
-        if (_sameSeries(group.first, work) &&
-            group.every((other) => _sameSeries(other, work))) {
+        if (_fitsCluster(group, work)) {
           matches.add(group);
         }
       }
@@ -285,11 +352,18 @@ class WorkGrouping {
       final exactNames = cluster.every((w) =>
           normalizedSeries(w.title) == normalizedSeries(reference.title));
       final hasAfterStory = cluster.any((w) => _isAfterStory(w.title));
+      final scores = cluster.where((w) => w.workId != reference.workId)
+          .map((w) => _titleMatchScore(reference, w)).toList();
+      final weakestScore = scores.isEmpty ? 1.0 :
+          scores.reduce((a, b) => a < b ? a : b);
       final confidence = derivatives.isNotEmpty && matchingCreators
           ? 94 : derivatives.isNotEmpty ? 80
           : exactNames && hasAfterStory && matchingCreators
           ? 95 : exactNames && chapters.length >= 2 && uniqueChapters
-          ? 95 : exactNames && matchingCreators ? 89 : exactNames ? 77 : 70;
+          ? 95 : exactNames && matchingCreators ? 89 : exactNames ? 77
+          : weakestScore >= 0.84 && matchingCreators ? 86
+          : weakestScore >= 0.84 ? 82
+          : weakestScore >= 0.70 ? 74 : 64;
       final title = existing.isNotEmpty && base.groupTitle.isNotEmpty
           ? base.groupTitle : normalizedSeries(base.title);
       final reason = derivatives.isNotEmpty
@@ -305,7 +379,9 @@ class WorkGrouping {
           : exactNames && matchingCreators
           ? '작품 제목과 제작자가 일치'
           : exactNames ? '작품 제목 일치 · 회차 정보 확인 필요'
-          : '유사한 제목과 동일한 제작자 · 확인 필요';
+          : matchingCreators
+          ? '유사한 제목과 제작 정보 · 같은 작품인지 확인 필요'
+          : '유사한 제목을 폭넓게 추천 · 다른 작품인지 직접 확인 필요';
       result.add(WorkGroupSuggestion(
         title, newcomers.map((w) => w.workId).toList(), reason,
         existingGroupId: existing.isEmpty ? '' : existing.first.groupId,
