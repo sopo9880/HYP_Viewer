@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'online_reader_failure.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -47,39 +49,33 @@ class HitomiGallery implements GalleryPageSource {
     final original = pageUrls[index];
     if (dataSaver && index < thumbnailUrls.length) {
       try {
-        return await _loadAllowed(thumbnailUrls[index]);
+        return await _loadAllowed(thumbnailUrls[index], page: index + 1);
       } catch (_) {
         // A missing/blocked thumbnail never makes the book unreadable.
         // Retry the actual image with the same bounded request policy.
       }
     }
-    return _loadAllowed(original);
+    return _loadAllowed(original, page: index + 1);
   }
 
-  Future<Uint8List> _loadAllowed(Uri url) async {
+  Future<Uint8List> _loadAllowed(Uri url, {required int page}) async {
     final origin = RegExp(r'^w[12]\.gold-usergeneratedcontent\.net$')
         .hasMatch(url.host);
     final thumbnail = RegExp(r'^[ab]tn\.gold-usergeneratedcontent\.net$')
         .hasMatch(url.host);
     if (url.scheme != 'https' || !(origin || thumbnail)) {
-      throw const FormatException('허용되지 않은 웹 이미지 서버야.');
+      throw OnlineReaderFailure(code: 'IMAGE_HOST_BLOCKED',
+        stage: OnlineReaderStage.image, workId: workId, page: page,
+        description: '허용되지 않은 웹 이미지 서버야.');
     }
     try {
       return await BoundedWebImages.load(_client, url,
         maxBytes: GalleryArchive.maxSingleImageBytes,
         headers: const {'Referer': 'https://hitomi.la/'});
     } catch (error) {
-      final reason = error.toString();
-      if (reason.contains('Failed host lookup') ||
-          reason.contains('No address associated with hostname') ||
-          reason.contains('Name or service not known')) {
-        throw FormatException(
-          'WebP 이미지 서버 DNS 조회 실패 (${url.host}). '
-          '웹 리더를 시도해 줘. 원본 오류: $reason');
-      }
-      throw FormatException(
-        'WebP 이미지 로딩 실패 (${url.host}). '
-        '웹 리더로 열기를 시도해 줘. 원본 오류: $reason');
+      throw OnlineReaderFailure.classify(error,
+        workId: workId, stage: OnlineReaderStage.image,
+        host: url.host, page: page);
     }
   }
 
@@ -223,32 +219,99 @@ class HitomiGalleryProvider {
 
     final metadataText = await _readScript(
       Uri.https(_host, '/galleries/' + workId + '.js'),
+      workId: workId,
     );
     final start = metadataText.indexOf('{');
     final end = metadataText.lastIndexOf('}');
     if (start < 0 || end <= start) {
-      throw const FormatException('작품 메타데이터 응답이 올바르지 않아.');
+      throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        description: '메타데이터에 JSON 객체가 없어.');
     }
-    final decoded = jsonDecode(metadataText.substring(start, end + 1));
-    if (decoded is! Map || decoded['id'].toString() != workId ||
-        decoded['files'] is! List) {
-      throw const FormatException('작품 번호 또는 이미지 목록이 일치하지 않아.');
+    Object? decoded;
+    try {
+      decoded = jsonDecode(metadataText.substring(start, end + 1));
+    } on FormatException {
+      throw OnlineReaderFailure(code: 'META_JSON_INVALID',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        description: '메타데이터 JSON 해석에 실패했어.');
     }
-
+    if (decoded is! Map) {
+      throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        actualType: OnlineReaderFailure.jsonType(decoded),
+        description: '메타데이터가 JSON 객체가 아니야.');
+    }
+    if (!decoded.containsKey('id') || decoded['id'] == null) {
+      throw OnlineReaderFailure(code: 'META_ID_MISSING',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        description: '메타데이터에 작품 번호가 없어.');
+    }
+    if (decoded['id'].toString() != workId) {
+      throw OnlineReaderFailure(code: 'META_ID_MISMATCH',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        description: '요청 작품 번호와 서버 작품 번호가 달라.');
+    }
+    if (!decoded.containsKey('files')) {
+      throw OnlineReaderFailure(code: 'META_FILES_MISSING',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        description: '메타데이터에 이미지 목록(files)이 없어.');
+    }
+    if (decoded['files'] is! List) {
+      throw OnlineReaderFailure(code: 'META_FILES_TYPE',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        actualType: OnlineReaderFailure.jsonType(decoded['files']),
+        description: '이미지 목록(files)이 배열이 아니야.');
+    }
     final files = decoded['files'] as List;
-    if (files.isEmpty || files.length > GalleryArchive.maxPages) {
-      throw const FormatException('지원하지 않는 이미지 페이지 수야.');
+    if (files.isEmpty) {
+      throw OnlineReaderFailure(code: 'META_FILES_EMPTY',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        description: '이미지 목록(files)이 비어 있어.');
     }
-    final ggScript = await _readScript(Uri.https(_host, '/gg.js'));
-    final gg = _HitomiGg.fromScript(ggScript);
+    if (files.length > GalleryArchive.maxPages) {
+      throw OnlineReaderFailure(code: 'META_PAGE_LIMIT',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        description: '지원하는 최대 페이지 수를 초과했어.');
+    }
+    final ggScript = await _readScript(Uri.https(_host, '/gg.js'),
+      workId: workId, stage: OnlineReaderStage.routing);
+    late final _HitomiGg gg;
+    try {
+      gg = _HitomiGg.fromScript(ggScript);
+    } on FormatException catch (error) {
+      throw OnlineReaderFailure.classify(error,
+        workId: workId, stage: OnlineReaderStage.routing, host: _host);
+    }
     final urls = <Uri>[];
     final thumbnails = <Uri>[];
-    for (final item in files) {
+    for (var index = 0; index < files.length; index++) {
+      final item = files[index];
       if (item is! Map) {
-        throw const FormatException('이미지 파일 정보가 올바르지 않아.');
+        throw OnlineReaderFailure(code: 'META_IMAGE_ENTRY_INVALID',
+          stage: OnlineReaderStage.metadata, workId: workId,
+          httpStatus: 200, host: _host, page: index + 1,
+          actualType: OnlineReaderFailure.jsonType(item),
+          description: '이미지 파일 정보 형식이 올바르지 않아.');
       }
-      urls.add(gg.urlFor(item));
-      thumbnails.add(gg.thumbnailFor(item));
+      try {
+        urls.add(gg.urlFor(item));
+        thumbnails.add(gg.thumbnailFor(item));
+      } on FormatException {
+        throw OnlineReaderFailure(code: 'ROUTING_HASH_INVALID',
+          stage: OnlineReaderStage.routing, workId: workId,
+          host: _host, page: index + 1,
+          description: '이미지 파일의 해시 정보가 잘못됐어.');
+      }
     }
     return HitomiGallery(
       workId: workId,
@@ -260,7 +323,10 @@ class HitomiGalleryProvider {
     );
   }
 
-  Future<String> _readScript(Uri uri) async {
+  Future<String> _readScript(Uri uri, {
+    String workId = '',
+    OnlineReaderStage stage = OnlineReaderStage.metadata,
+  }) async {
     if (uri.scheme != 'https' || uri.host != _host) {
       throw const FormatException('지원하지 않는 소스 서버야.');
     }
@@ -268,26 +334,53 @@ class HitomiGalleryProvider {
       ..followRedirects = false
       ..headers['Accept'] = 'text/javascript,application/javascript,text/plain,*/*'
       ..headers['Referer'] = 'https://hitomi.la/';
-    final response = await client.send(request)
-        .timeout(const Duration(seconds: 18));
+    late final http.StreamedResponse response;
+    try {
+      response = await client.send(request)
+          .timeout(const Duration(seconds: 18));
+    } catch (error) {
+      throw OnlineReaderFailure.classify(error,
+        workId: workId, stage: stage, host: uri.host);
+    }
     if (response.statusCode != 200) {
-      throw FormatException('작품 메타데이터 서버 응답 오류: HTTP ' +
-          response.statusCode.toString());
+      throw OnlineReaderFailure(
+        code: stage == OnlineReaderStage.routing
+            ? 'ROUTING_HTTP_ERROR' : 'META_HTTP_ERROR',
+        stage: stage, workId: workId, host: uri.host,
+        httpStatus: response.statusCode,
+        description: '메타데이터 서버가 오류 응답을 반환했어.');
+
     }
     if (response.contentLength != null &&
         response.contentLength! > _maxScriptBytes) {
-      throw const FormatException('메타데이터가 너무 커.');
+      throw OnlineReaderFailure(code: 'META_SIZE_LIMIT',
+        stage: stage, workId: workId, host: uri.host, httpStatus: 200,
+        description: '메타데이터 크기가 제한을 초과했어.');
     }
     final bytes = BytesBuilder(copy: false);
     var read = 0;
-    await for (final chunk in response.stream.timeout(const Duration(seconds: 25))) {
-      read += chunk.length;
-      if (read > _maxScriptBytes) {
-        throw const FormatException('메타데이터가 허용 크기를 초과했어.');
+    try {
+      await for (final chunk in response.stream.timeout(
+          const Duration(seconds: 25))) {
+        read += chunk.length;
+        if (read > _maxScriptBytes) {
+          throw OnlineReaderFailure(code: 'META_SIZE_LIMIT',
+            stage: stage, workId: workId, host: uri.host, httpStatus: 200,
+            description: '메타데이터가 허용 크기를 초과했어.');
+        }
+        bytes.add(chunk);
       }
-      bytes.add(chunk);
+    } catch (error) {
+      throw OnlineReaderFailure.classify(error,
+        workId: workId, stage: stage, host: uri.host);
     }
-    return utf8.decode(bytes.takeBytes());
+    try {
+      return utf8.decode(bytes.takeBytes());
+    } on FormatException {
+      throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',
+        stage: stage, workId: workId, host: uri.host, httpStatus: 200,
+        description: '메타데이터의 문자 인코딩이 올바르지 않아.');
+    }
   }
 }
 
