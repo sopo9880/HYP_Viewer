@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../core/work.dart';
 import '../core/work_grouping.dart';
 import '../core/i18n.dart';
+import 'hyp_animated_title.dart';
 import '../l10n/app_localizations.dart';
 
 /// Reviewed selection for either a new group or an existing one.
@@ -121,9 +122,10 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
         const SizedBox(width: 8),
         Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start, children: [
-            HypText(work?.title ?? id, maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13)),
+            HypAnimatedTitle(
+              title: work?.title ?? id,
+              style: const TextStyle(fontSize: 13),
+            ),
             HypText('#$id' + (episode == null ? '' : ' · $episode화'),
               maxLines: 1, overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall),
@@ -167,8 +169,7 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
             else { _approved.remove(i); }
           }),
         ),
-        title: HypText(proposal.title, maxLines: 2,
-          overflow: TextOverflow.ellipsis),
+        title: HypAnimatedTitle(title: proposal.title),
         subtitle: HypText(
           (isExisting ? '기존 묶음에 추가' : '새 묶음') + ' · ' +
           proposal.workIds.length.toString() + '개 후보 · ' +
@@ -193,9 +194,10 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
                   style: Theme.of(context).textTheme.bodySmall)),
             for (final work in members.take(6))
               Align(alignment: Alignment.centerLeft,
-                child: HypText('· ' + work.title + ' #' + work.workId,
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall)),
+                child: HypAnimatedTitle(
+                  title: '· ' + work.title + ' #' + work.workId,
+                  style: Theme.of(context).textTheme.bodySmall,
+                )),
             if (members.length > 6)
               Text(AppLocalizations.of(context)!.autoGroupOthers(members.length - 6),
                 style: Theme.of(context).textTheme.bodySmall),

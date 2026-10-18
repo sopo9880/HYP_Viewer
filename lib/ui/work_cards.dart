@@ -6,6 +6,7 @@ import '../l10n/app_localizations_ko.dart';
 
 import '../core/work.dart';
 import 'hyp_theme.dart';
+import 'hyp_animated_title.dart';
 import 'cover_palettes.dart';
 
 class HypWorkGrid extends StatelessWidget {
@@ -163,11 +164,17 @@ class HypWorkCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 9, 5, 8),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                HypText(
-                  work.title.isEmpty
+                HypAnimatedTitle(
+                  key: Key('work-title-' + work.workId),
+                  title: work.title.isEmpty
                       ? labels.workCardUntitled(work.workId) : work.title,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13,
+                      fontWeight: FontWeight.w800),
+                  motion: selectionMode
+                      ? HypTitleMotion.static : HypTitleMotion.onTap,
+                  onTapOverride: selectionMode ? onSelect : null,
+                  // Preserve the existing card long-press selection gesture.
+                  tooltip: onLongPress == null,
                 ),
                 const SizedBox(height: 4),
                 HypText(

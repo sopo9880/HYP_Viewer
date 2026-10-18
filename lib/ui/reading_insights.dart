@@ -14,6 +14,7 @@ import '../core/work.dart';
 import '../core/work_grouping.dart';
 import '../core/work_editions.dart';
 import 'hyp_theme.dart';
+import 'hyp_animated_title.dart';
 
 /// A-L: all-time library facts remain separate from date-stamped sessions.
 /// No historical activity or remote view counts are fabricated.
@@ -109,8 +110,8 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
           Row(children: [
-            Expanded(child: HypText(entry.$1, overflow: TextOverflow.ellipsis,
-              maxLines: 1, style: const TextStyle(fontSize: 12))),
+            Expanded(child: HypAnimatedTitle(
+              title: entry.$1, style: const TextStyle(fontSize: 12))),
             HypText(entry.$2.toString(), style: const TextStyle(fontSize: 12)),
           ]),
           const SizedBox(height: 4),
@@ -132,9 +133,10 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
           contentPadding: EdgeInsets.zero,
           leading: CircleAvatar(radius: 16, child: HypText(
               (entry.key + 1).toString(), style: const TextStyle(fontSize: 12))),
-          title: HypText(entry.value.title.isEmpty
-              ? '#' + entry.value.workId : entry.value.title,
-              maxLines: 2, overflow: TextOverflow.ellipsis),
+          title: HypAnimatedTitle(
+            title: entry.value.title.isEmpty
+                ? '#' + entry.value.workId : entry.value.title,
+          ),
           subtitle: Text(AppLocalizations.of(context)!.insightOpensRow(
               entry.value.openCount,
               entry.value.completed ? AppLocalizations.of(context)!.insightCompletedBadge : '',
@@ -436,7 +438,7 @@ class _HypReadingInsightsState extends State<HypReadingInsights> {
               ? ordered.first.groupTitle : '시리즈';
           return ListTile(
             contentPadding: EdgeInsets.zero,
-            title: HypText(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            title: HypAnimatedTitle(title: title),
             subtitle: Text(language.insightChaptersCount(read, chapters.length)),
             trailing: next == null ? const Icon(Icons.done_all)
                 : const Icon(Icons.play_arrow),

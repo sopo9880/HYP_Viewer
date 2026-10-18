@@ -36,6 +36,7 @@ import 'shorts_finder_panel.dart';
 import 'work_cards.dart';
 import 'auto_group_wizard.dart';
 import 'work_group_card.dart';
+import 'hyp_animated_title.dart';
 
 enum HypPage { home, library, favorites, downloads, history, settings }
 
@@ -1361,8 +1362,7 @@ class _HypDashboardState extends State<HypDashboard> {
                     return CheckboxListTile(
                       dense: true,
                       value: selection.contains(work.workId),
-                      title: Text(work.title, maxLines: 2,
-                          overflow: TextOverflow.ellipsis),
+                      title: HypAnimatedTitle(title: work.title),
                       subtitle: Text(work.workId + ' · ' +
                           work.currentPage.toString() + '/' +
                           work.totalPages.toString()),
@@ -1418,9 +1418,10 @@ class _HypDashboardState extends State<HypDashboard> {
             ]) ListTile(
               key: Key('edition-choice-' + work.workId),
               leading: const Icon(Icons.menu_book),
-              title: HypText(WorkEditions.languageName(work.sourceLanguage) +
-                  ' · ' + work.title, maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
+              title: HypAnimatedTitle(
+                title: WorkEditions.languageName(work.sourceLanguage) +
+                    ' · ' + work.title,
+              ),
               subtitle: HypText('#' + work.workId + ' · ' +
                   HypI18n.t(context, work.completed ? '완독' : '읽는 중')),
               onTap: () => Navigator.pop(sheet, work),
@@ -1555,11 +1556,11 @@ class _HypDashboardState extends State<HypDashboard> {
                 tooltip: AppLocalizations.of(context)!.tooltipBackLibrary,
                 onPressed: () => setState(() => _openedGroupId = null),
                 icon: const Icon(Icons.arrow_back)),
-              Expanded(child: HypText(
-                ordered.first.groupTitle.isEmpty
+              Expanded(child: HypAnimatedTitle(
+                title: ordered.first.groupTitle.isEmpty
                     ? '작품 묶음' : ordered.first.groupTitle,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium)),
+                style: Theme.of(context).textTheme.titleMedium,
+              )),
               PopupMenuButton<String>(
                 key: Key('work-group-menu-' + _openedGroupId!),
                 tooltip: AppLocalizations.of(context)!.tooltipManageGroup,
@@ -1870,8 +1871,10 @@ class _HypDashboardState extends State<HypDashboard> {
               child: ListView.builder(
                 itemCount: ordered.length,
                 itemBuilder: (_, index) => ListTile(
-                  title: HypText((index + 1).toString() + '. ' +
-                      ordered[index].title),
+                  title: HypAnimatedTitle(
+                    title: (index + 1).toString() + '. ' +
+                        ordered[index].title,
+                  ),
                   subtitle: HypText('#' + ordered[index].workId),
                   trailing: Row(mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1938,7 +1941,8 @@ class _HypDashboardState extends State<HypDashboard> {
         title: const HypText('회차 선택'),
         content: SizedBox(width: 460, height: 350, child: ListView(
           children: [for (final w in options) CheckboxListTile(
-            title: HypText(w.title), subtitle: HypText('#' + w.workId),
+            title: HypAnimatedTitle(title: w.title),
+            subtitle: HypText('#' + w.workId),
             value: picked.contains(w.workId),
             onChanged: (v) => update(() { if (v == true) { picked.add(w.workId); } else { picked.remove(w.workId); } }),
           )])),
@@ -2352,8 +2356,7 @@ class _HypDashboardState extends State<HypDashboard> {
           child: ListTile(
             leading: Icon(group.length > 1
                 ? Icons.layers_outlined : Icons.menu_book_outlined),
-            title: HypText(group.first.title,
-                maxLines: 2, overflow: TextOverflow.ellipsis),
+            title: HypAnimatedTitle(title: group.first.title),
             subtitle: Text(group.length > 1
                 ? [
                     AppLocalizations.of(context)!.editionCount(group.length),
@@ -2419,8 +2422,7 @@ class _HypDashboardState extends State<HypDashboard> {
               final work = candidates[index];
               return ListTile(
                 key: Key('online-edition-choice-' + work.workId),
-                title: Text(work.title, maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
+                title: HypAnimatedTitle(title: work.title),
                 subtitle: Text(WorkEditions.languageName(work.language) +
                     ' · #' + work.workId),
                 onTap: () {
@@ -2577,7 +2579,7 @@ class _HypDashboardState extends State<HypDashboard> {
                   Expanded(child: ListView.builder(
                     itemCount: works.length,
                     itemBuilder: (_, i) => ListTile(
-                      title: HypText(works[i].title),
+                      title: HypAnimatedTitle(title: works[i].title),
                       subtitle: HypText('#' + works[i].workId),
                       onTap: () => Navigator.pop(dialog, works[i]),
                     ),
@@ -2735,7 +2737,10 @@ class _HypDashboardState extends State<HypDashboard> {
                   itemBuilder: (ctx, index) {
                     final work = filtered[index];
                     return ListTile(
-                      title: HypText(work.title.isEmpty ? '작품 ' + work.workId : work.title),
+                      title: HypAnimatedTitle(
+                        title: work.title.isEmpty
+                            ? '작품 ' + work.workId : work.title,
+                      ),
                       subtitle: HypText('번호 ' + work.workId),
                       onTap: () => Navigator.pop(ctx, work),
                     );

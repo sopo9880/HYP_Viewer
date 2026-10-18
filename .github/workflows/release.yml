@@ -166,6 +166,22 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
+          Changes in v0.4.12:
+          - Fix Windows system-tray right click: explicitly pop up the
+            prepared native context menu; report plugin errors to diagnostics.
+          - Add reusable measured overflow-title animation across shelf
+            cards, search, reading history, language stacks, series stacks,
+            dialogs, visual candidate results and reader toolbar.
+          - Long work titles scroll once when tapped; cover taps still read
+            or open the group; title taps do not unexpectedly open a viewer.
+          - Verified-number candidate titles scroll automatically while
+            present if too long; short titles remain still. Honor reduced
+            motion and avoid animating whole lists by default.
+          - Preserve explicit language selection and selection/reordering
+            actions. No changes to Android reading data or persisted settings.
+          - Windows tray shell behavior still requires Windows EXE
+            verification even if GitHub Actions compilation succeeds.
+
           Changes in v0.4.11:
           - Reduce Windows X-to-quit latency: idle complete-exit uses native
             window closing, while active transfers still require confirmation.
