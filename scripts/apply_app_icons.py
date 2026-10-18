@@ -47,8 +47,8 @@ def apply(platform: str, *, root: Path = ROOT) -> list[Path]:
             raise ValueError("The approved HYP icon failed SHA-256 integrity")
     with Image.open(BytesIO(image_source)) as image:
         image = image.convert("RGB")
-        if image.width < 192 or image.height < 192:
-            raise ValueError("Branding image must be at least 192px square")
+        if image.width < 128 or image.height < 128:
+            raise ValueError("Branding image must be at least 128px square")
         if image.width != image.height:
             raise ValueError("App launcher icon must be square")
         created: list[Path] = []
@@ -67,10 +67,11 @@ def apply(platform: str, *, root: Path = ROOT) -> list[Path]:
             if not target.parent.is_dir():
                 raise FileNotFoundError(
                     f"Flutter Windows project is not generated: {target}")
-            image.save(target, format="ICO", sizes=ICON_SIZES)
+            icon = image.resize((512, 512), Image.Resampling.LANCZOS)
+            icon.save(target, format="ICO", sizes=ICON_SIZES)
             created.append(target)
             tray = root / "assets" / "icons" / "hyp_tray.ico"
-            image.save(tray, format="ICO", sizes=ICON_SIZES)
+            icon.save(tray, format="ICO", sizes=ICON_SIZES)
             created.append(tray)
         else:
             raise ValueError(f"Unknown platform: {platform}")
