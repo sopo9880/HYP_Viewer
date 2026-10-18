@@ -96,6 +96,7 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
     final selected = _included[group]!.contains(id);
     final cover = work == null ? null : widget.coverImages[work.key];
     final episode = work == null ? null : WorkGrouping.episodeNumber(work);
+    final relation = work == null ? '' : WorkGrouping.relationLabel(work);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(children: [
@@ -126,7 +127,9 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
               title: work?.title ?? id,
               style: const TextStyle(fontSize: 13),
             ),
-            HypText('#$id' + (episode == null ? '' : ' · $episode화'),
+            HypText('#$id' + (WorkGrouping.isDerivative(work?.title ?? '')
+                ? ' · ' + relation
+                : episode == null ? '' : ' · $episode화'),
               maxLines: 1, overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall),
           ],
