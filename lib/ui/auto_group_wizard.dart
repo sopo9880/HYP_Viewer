@@ -229,10 +229,13 @@ class _AutoGroupWizardState extends State<AutoGroupWizard> {
         width: 610,
         height: MediaQuery.sizeOf(context).height * 0.58,
         child: Column(children: [
-          const HypText('추천 묶음을 펼쳐 표지·제목·번호를 확인해 줘. '
-              '개별 작품을 제외하거나 이름과 순서를 바꿀 수 있어. '
-              '확인 전에는 서재가 바뀌지 않아.',
-              style: TextStyle(fontSize: 12)),
+          HypText('총 ' + widget.works.length.toString() +
+              '개 작품 중 ' + widget.suggestions.length.toString() +
+              '개 추천 묶음 · 제목 정보 부족 ' +
+              widget.works.where((w) =>
+                  WorkGrouping.normalizedSeries(w.title).length < 4)
+                  .length.toString() + '개 · 검토 후에만 변경돼.',
+              style: const TextStyle(fontSize: 12)),
           const SizedBox(height: 8),
           Expanded(child: ListView.builder(
             key: const Key('auto-group-suggestions'),

@@ -176,6 +176,16 @@ class WorkGrouping {
   static bool _sameSeries(WorkEntry a, WorkEntry b) {
     if (!_usableTitle(a) || !_usableTitle(b) ||
         _creatorConflict(a, b)) return false;
+    // Different-language versions of the same unnumbered chapter belong to
+    // edition matching, not an inferred series.
+    final aLang = a.sourceLanguage.trim().toLowerCase();
+    final bLang = b.sourceLanguage.trim().toLowerCase();
+    if (aLang.isNotEmpty && bLang.isNotEmpty && aLang != bLang &&
+        episodeNumber(a) == episodeNumber(b) &&
+        !isDerivative(a.title) && !isDerivative(b.title) &&
+        _sameKnownCreator(a, b) &&
+        (a.totalPages == 0 || b.totalPages == 0 ||
+            (a.totalPages - b.totalPages).abs() <= 5)) return false;
     final first = baseTitle(a.title);
     final second = baseTitle(b.title);
     if (first == second) return true;

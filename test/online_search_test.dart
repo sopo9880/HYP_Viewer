@@ -108,6 +108,28 @@ void main() {
     client.close();
   });
 
+  test('artist exact miss can recover only metadata-confirmed broad work', () async {
+    final seen = <String>[];
+    final client = MockClient((request) async {
+      final query = (jsonDecode(request.body)['query'] as List).first as String;
+      seen.add(query);
+      return http.Response(jsonEncode({
+        'results': query == 'pochi' ? [
+          {'id': 111111, 'title': 'Ane Naru Mono', 'artists': ['pochi']},
+          {'id': 222222, 'title': 'pochi by other artist',
+           'artists': ['someone_else']},
+        ] : [],
+        'count': 2,
+      }), 200);
+    });
+    final result = await OnlineWorkSearch(client)
+        .searchUnified('artist:pochi');
+    expect(seen, contains('pochi'));
+    expect(result.works.map((w) => w.workId), ['111111']);
+    expect(result.fieldTotals['artist'], 1);
+    client.close();
+  });
+
   test('advanced query only searches its specified field', () async {
     final seen = <String>[];
     final client = MockClient((request) async {
@@ -127,7 +149,7 @@ void main() {
     expect(OnlineWorkSearch.planQueries('Pochi').map((e) => e.$1).toList(),
       ['general','artist','group','series','tag','female','male']);
     expect(OnlineWorkSearch.planQueries('artist:Pochi'),
-      [('advanced','artist:Pochi')]);
+      [('artist','artist:Pochi')]);
     expect(OnlineWorkSearch.planQueries('Original | Translated')
       .map((entry) => entry.$2).toList().take(2),
       ['Original','Translated']);
@@ -157,7 +179,7 @@ void main() {
     client.close();
   });
 
-  test('rich title results skip unrelated metadata queries', () async {
+  test('rich title results also search creator and other facets', () async {
     final seen = <String>[];
     final client = MockClient((request) async {
       final query = (jsonDecode(request.body)['query'] as List).first as String;
@@ -170,7 +192,11 @@ void main() {
       }), 200);
     });
     await OnlineWorkSearch(client).searchUnified('Direct story');
-    expect(seen, ['Direct story']);
+    expect(seen, containsAll([
+      'Direct story', 'artist:Direct story', 'group:Direct story',
+      'series:Direct story', 'tag:Direct story',
+      'female:Direct story', 'male:Direct story',
+    ]));
     client.close();
   });
 
@@ -186,20 +212,24 @@ void main() {
       final query = (jsonDecode(request.body)['query'] as List).first as String;
       queried.add(query);
       return http.Response(jsonEncode({
-        'results': [
+        'results': query == 'pochi' ? [
           {'id': 1012074, 'title': 'Ane Naru Mono 4',
            'artists': ['pochi'], 'language': 'korean'},
           for (var i = 0; i < 8; i++)
             {'id': 1002000 + i, 'title': 'Pochi book ' + i.toString()},
-        ],
+        ] : query == 'artist:pochi' ? [
+          {'id': 1012074, 'title': 'Ane Naru Mono 4',
+           'artists': ['pochi'], 'language': 'korean'},
+        ] : [],
         // Provider count may include overlaps and must not be the facet count.
         'count': 39,
       }), 200);
     });
     final found = await OnlineWorkSearch(client)
         .searchUnified('pochi', language: 'korean');
-    expect(queried, ['pochi']);
+    expect(queried, contains('artist:pochi'));
     expect(found.total, 9);
+    expect(found.searchedFields, contains('artist'));
     expect(found.fieldTotals['artist'], 1);
     expect(found.fieldTotals['general'], 8);
     expect(found.matchedFields['1012074'], contains('artist'));

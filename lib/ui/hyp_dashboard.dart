@@ -23,6 +23,8 @@ import '../core/reading_history.dart';
 import 'reading_insights.dart';
 import 'candidate_editor.dart';
 import '../core/work.dart';
+import '../core/blacklist.dart';
+import 'blacklist_manager.dart';
 import '../core/work_grouping.dart';
 import '../core/work_editions.dart';
 import '../core/title_alias_index.dart';
@@ -64,6 +66,11 @@ extension HypPageInfo on HypPage {
 /// YouTube, CBZ and updater services instead of imitating them with mock data.
 class HypDashboard extends StatefulWidget {
   final LibraryBackup library;
+  final BlacklistRules blacklist;
+  final Future<void> Function(BlacklistRules) onSaveBlacklist;
+  final Future<void> Function(BlacklistRule) onBlacklistAdd;
+  final Future<void> Function() onBlacklistExport;
+  final Future<BlacklistRules?> Function() onBlacklistImport;
   final String? editionLookupId;
   final int editionLookupEpoch;
   final List<ReadingSession> readingSessions;
@@ -109,6 +116,8 @@ class HypDashboard extends StatefulWidget {
       List<OnlineSearchWork> remoteWorks)? onLinkEditions;
   final Future<void> Function(WorkEntry) onUnlinkEdition;
   final Future<void> Function(OnlineSearchWork) onReadOnlineSearchWork;
+  final Future<void> Function(OnlineSearchWork) onPreviewOnlineSearchWork;
+  final Future<void> Function(String) onPreviewCandidate;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
   final CandidateBatchVerify onVerifyCandidateCodes;
   final List<NumberCandidate> Function()? onCrossLineFallback;
@@ -161,6 +170,11 @@ class HypDashboard extends StatefulWidget {
   const HypDashboard({
     super.key,
     required this.library,
+    required this.blacklist,
+    required this.onSaveBlacklist,
+    required this.onBlacklistAdd,
+    required this.onBlacklistExport,
+    required this.onBlacklistImport,
     this.editionLookupId,
     this.editionLookupEpoch = 0,
     required this.readingSessions,
@@ -205,6 +219,8 @@ class HypDashboard extends StatefulWidget {
     this.onLinkEditions,
     required this.onUnlinkEdition,
     required this.onReadOnlineSearchWork,
+    required this.onPreviewOnlineSearchWork,
+    required this.onPreviewCandidate,
     required this.onSaveSelectedWorks,
     required this.onVerifyCandidateCodes,
     this.onCrossLineFallback,
@@ -277,7 +293,7 @@ class _HypDashboardState extends State<HypDashboard> {
   Map<String, int> _remoteFieldTotals = const {};
   Map<String, List<String>> _remoteFieldMatches = const {};
   String _remoteFieldFilter = '';
-  bool _showEmptyRemoteFields = false;
+  final Set<String> _searchedRemoteFields = <String>{};
   final Set<String> _loadedRemoteFacets = {};
   final Set<String> _loadingRemoteFacets = {};
   final Map<String, int> _remoteFacetPages = {};
@@ -301,6 +317,7 @@ class _HypDashboardState extends State<HypDashboard> {
   Timer? _notificationExitTimer;
   String? _openedGroupId;
   final Set<String> _selectedWorkIds = <String>{};
+  final Set<String> _selectedGroupIds = <String>{};
   bool get _canSelectWorks => _page == HypPage.library ||
       _page == HypPage.downloads || _search.text.trim().isNotEmpty;
 
@@ -521,7 +538,7 @@ class _HypDashboardState extends State<HypDashboard> {
     _remoteFieldTotals = const {};
     _remoteFieldMatches = const {};
     _remoteFieldFilter = '';
-    _showEmptyRemoteFields = false;
+    _searchedRemoteFields.clear();
     _loadedRemoteFacets.clear();
     _loadingRemoteFacets.clear();
     _remoteFacetPages.clear();
@@ -620,6 +637,8 @@ class _HypDashboardState extends State<HypDashboard> {
     final previousCount = _remoteResults.length;
     setState(() {
       _remotePage = result.page;
+      if (!next) _searchedRemoteFields.clear();
+      _searchedRemoteFields.addAll(result.searchedFields);
       _remoteFieldMatches = <String, List<String>>{
         if (next) ..._remoteFieldMatches,
         for (final entry in result.matchedFields.entries)
@@ -701,7 +720,7 @@ class _HypDashboardState extends State<HypDashboard> {
         var hasMore = false;
         for (final response in valid) {
           hasMore = hasMore || (response.works.isNotEmpty &&
-              (response.total > page * 25 || response.works.length >= 25));
+              (response.total > page * 15 || response.works.length >= 15));
           for (final work in response.works) {
             final previous = known[work.workId];
             if (previous == null) added++;
@@ -716,6 +735,7 @@ class _HypDashboardState extends State<HypDashboard> {
           }
         }
         _remoteResults = known.values.toList();
+        _searchedRemoteFields.add(field);
         _remoteFieldMatches = {
           for (final entry in fields.entries)
             entry.key: entry.value.toList(),
@@ -756,6 +776,7 @@ class _HypDashboardState extends State<HypDashboard> {
       if (page != HypPage.library) {
         _selectingWorks = false;
         _selectedWorkIds.clear();
+        _selectedGroupIds.clear();
       }
     });
   }
@@ -817,13 +838,25 @@ class _HypDashboardState extends State<HypDashboard> {
 
   void _toggleSelectionMode() => setState(() {
     _selectingWorks = !_selectingWorks;
-    if (!_selectingWorks) _selectedWorkIds.clear();
+    if (!_selectingWorks) {
+      _selectedWorkIds.clear();
+      _selectedGroupIds.clear();
+    }
   });
 
   void _toggleSelectedWork(WorkEntry work) => setState(() {
     if (!_selectedWorkIds.add(work.workId)) {
       _selectedWorkIds.remove(work.workId);
     }
+  });
+
+  void _toggleSelectedGroup(String id) => setState(() {
+    if (!_selectedGroupIds.add(id)) _selectedGroupIds.remove(id);
+  });
+
+  void _startSelectingGroup(String id) => setState(() {
+    _selectingWorks = true;
+    _selectedGroupIds.add(id);
   });
 
   void _startSelection(WorkEntry work) => setState(() {
@@ -839,6 +872,7 @@ class _HypDashboardState extends State<HypDashboard> {
     if (completed) {
       setState(() {
         _selectedWorkIds.clear();
+        _selectedGroupIds.clear();
         _selectingWorks = false;
       });
       await _refreshOffline();
@@ -846,7 +880,7 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   Future<void> _editSelectedWork() async {
-    if (_selectedWorkIds.length != 1) return;
+    if (_selectedGroupIds.isNotEmpty || _selectedWorkIds.length != 1) return;
     final matching = widget.library.works.where(
         (w) => w.workId == _selectedWorkIds.first).toList();
     if (matching.isEmpty) return;
@@ -958,7 +992,10 @@ class _HypDashboardState extends State<HypDashboard> {
 
   List<WorkEntry> get _results => LocalWorkSearch.rankResults(
       LocalWorkSearch.queryLibrary(_works, _search.text,
-          language: _searchLanguage), _search.text);
+          language: _searchLanguage).where((work) => !widget.blacklist.blocks(
+            id: work.workId, title: work.title,
+            artists: [work.author], groups: [work.sourceGroup],
+            tags: work.tags)), _search.text);
 
   KeyEventResult _onKeyboardShortcut(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent ||
@@ -1394,6 +1431,9 @@ class _HypDashboardState extends State<HypDashboard> {
         onSaveSelectedWorks: widget.onSaveSelectedWorks,
         onVerifyCandidateCodes: widget.onVerifyCandidateCodes,
         onCrossLineFallback: widget.onCrossLineFallback,
+        blacklist: widget.blacklist,
+        onBlacklistAdd: widget.onBlacklistAdd,
+        onPreview: widget.onPreviewCandidate,
       ),
       const SizedBox(height: 24),
       Row(children: [
@@ -1739,6 +1779,10 @@ class _HypDashboardState extends State<HypDashboard> {
             coverImages: _coverImages,
             onOpen: () => setState(() => _openedGroupId = entry),
             onAction: (action) => _groupAction(action, entry, members),
+            selectionMode: _selectingWorks,
+            selected: _selectedGroupIds.contains(entry),
+            onSelect: () => _toggleSelectedGroup(entry),
+            onLongPress: () => _startSelectingGroup(entry),
           );
         }
         return _editionTile(entry as List<WorkEntry>);
@@ -1766,48 +1810,104 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   Future<void> _groupSelectedWorks() async {
-    final selected = _works.where((w) =>
-        _selectedWorkIds.contains(w.workId) && w.groupId.isEmpty).toList();
-    if (selected.length < 2) return;
-    selected.sort(WorkGrouping.compareChapters);
-    final input = TextEditingController(
-        text: WorkGrouping.normalizedSeries(selected.first.title));
-    String? title;
+    final ordered = <WorkEntry>[];
+    final included = <String>{};
+    for (final groupId in _selectedGroupIds) {
+      final members = widget.library.works.where((w) =>
+          w.groupId == groupId).toList()
+        ..sort((a, b) => a.groupOrder.compareTo(b.groupOrder));
+      for (final work in members) {
+        if (included.add(work.workId)) ordered.add(work);
+      }
+    }
+    final singles = _works.where((w) =>
+        _selectedWorkIds.contains(w.workId)).toList()
+      ..sort(WorkGrouping.compareChapters);
+    for (final work in singles) {
+      if (included.add(work.workId)) ordered.add(work);
+    }
+    if (ordered.map(WorkEditions.groupKey).toSet().length < 2 ||
+        _selectedGroupIds.length + _selectedWorkIds.length < 2) return;
+    final input = TextEditingController(text: _selectedGroupIds.length == 1
+        ? widget.library.works.firstWhere((w) =>
+            w.groupId == _selectedGroupIds.first).groupTitle
+        : WorkGrouping.normalizedSeries(ordered.first.title));
+    (String, List<String>)? result;
     try {
-      title = await showDialog<String>(
+      result = await showDialog<(String, List<String>)>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const HypText('선택한 작품 묶기'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            HypText(selected.length.toString() + '개 작품을 하나의 세트로 묶어.'),
-            const SizedBox(height: 10),
-            TextField(
-              key: const Key('group-name-input'),
-              controller: input,
-              decoration: InputDecoration(
-                labelText: HypI18n.t(context, '묶음 이름'))),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx),
+        builder: (ctx) => StatefulBuilder(builder: (dialog, update) =>
+          AlertDialog(
+            title: HypText(HypI18n.t(dialog, '선택한 작품과 묶음 통합')),
+            content: SizedBox(
+              width: 460, height: MediaQuery.sizeOf(dialog).height * 0.48,
+              child: Column(children: [
+                HypText('묶음 ' + _selectedGroupIds.length.toString() +
+                    '개 포함 · 총 ' + ordered.length.toString() + '개 작품'),
+                const SizedBox(height: 8),
+                TextField(key: const Key('group-name-input'),
+                  controller: input, onChanged: (_) => update(() {}),
+                  decoration: InputDecoration(
+                      labelText: HypI18n.t(dialog, '묶음 이름'))),
+                const SizedBox(height: 10),
+                Expanded(child: ListView.builder(
+                  itemCount: ordered.length,
+                  itemBuilder: (context, index) {
+                    final work = ordered[index];
+                    return ListTile(
+                      dense: true, title: HypAnimatedTitle(title: work.title),
+                      subtitle: Text('#' + work.workId),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          tooltip: HypI18n.t(dialog, '한 칸 위로'),
+                          onPressed: index == 0 ? null : () => update(() {
+                            final value = ordered.removeAt(index);
+                            ordered.insert(index - 1, value);
+                          }),
+                          icon: const Icon(Icons.arrow_upward)),
+                        IconButton(
+                          tooltip: HypI18n.t(dialog, '한 칸 아래로'),
+                          onPressed: index == ordered.length - 1 ? null :
+                              () => update(() {
+                                final value = ordered.removeAt(index);
+                                ordered.insert(index + 1, value);
+                              }),
+                          icon: const Icon(Icons.arrow_downward)),
+                      ]),
+                    );
+                  },
+                )),
+              ]),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog),
                 child: const HypText('취소')),
-            FilledButton(
-              key: const Key('group-confirm'),
-              onPressed: () => Navigator.pop(ctx, input.text.trim()),
-              child: const HypText('묶음 만들기')),
-          ],
+              FilledButton(
+                key: const Key('group-confirm'),
+                onPressed: input.text.trim().isEmpty ? null : () =>
+                    Navigator.pop(dialog, (input.text.trim(),
+                        ordered.map((w) => w.workId).toList())),
+                child: HypText(HypI18n.t(dialog, '한 묶음으로 통합'))),
+            ],
+          ),
         ),
       );
     } finally {
       input.dispose();
     }
-    if (title == null || title.isEmpty || !mounted) return;
-    await widget.onGroupWorks(
-        selected.map((w) => w.workId).toList(), title);
-    if (!mounted) return;
-    setState(() {
-      _selectedWorkIds.clear();
-      _selectingWorks = false;
-    });
+    if (result == null || !mounted) return;
+    try {
+      await widget.onGroupWorks(result.$2, result.$1);
+      if (!mounted) return;
+      setState(() {
+        _selectedWorkIds.clear();
+        _selectedGroupIds.clear();
+        _selectingWorks = false;
+      });
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: HypText('묶음 통합 실패: $error')));
+    }
   }
 
   Future<void> _enrichAndGroup() async {
@@ -2101,7 +2201,8 @@ class _HypDashboardState extends State<HypDashboard> {
         child: Wrap(spacing: 8, runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            HypText('선택됨: ' + _selectedWorkIds.length.toString() + '개'),
+            HypText('선택됨: ' + _selectedWorkIds.length.toString() +
+                '개 작품 · ' + _selectedGroupIds.length.toString() + '개 묶음'),
             OutlinedButton(
               key: const Key('library-select-visible'),
               onPressed: visible.isEmpty ? null : () => setState(() {
@@ -2110,31 +2211,41 @@ class _HypDashboardState extends State<HypDashboard> {
                 if (_search.text.trim().isNotEmpty) {
                   _selectedWorkIds.clear();
                 }
-                _selectedWorkIds.addAll(visible.map((w) => w.workId));
+                if (_page == HypPage.library && _search.text.isEmpty) {
+                  for (final work in visible) {
+                    if (work.groupId.isNotEmpty) {
+                      _selectedGroupIds.add(work.groupId);
+                    } else {
+                      _selectedWorkIds.add(work.workId);
+                    }
+                  }
+                } else {
+                  _selectedWorkIds.addAll(visible.map((w) => w.workId));
+                }
               }),
               child: const HypText('전체 선택'),
             ),
             OutlinedButton(
               key: const Key('library-clear-selection'),
-              onPressed: _selectedWorkIds.isEmpty ? null
-                  : () => setState(() => _selectedWorkIds.clear()),
+              onPressed: _selectedWorkIds.isEmpty && _selectedGroupIds.isEmpty
+                  ? null : () => setState(() {
+                    _selectedWorkIds.clear();
+                    _selectedGroupIds.clear();
+                  }),
               child: const HypText('선택 해제'),
             ),
             if (_page == HypPage.library)
               OutlinedButton.icon(
                 key: const Key('library-group-selected'),
-                onPressed: _selectedWorkIds.length < 2 ||
-                    widget.library.works.any((work) =>
-                      _selectedWorkIds.contains(work.workId) &&
-                      work.groupId.isNotEmpty)
+                onPressed: _selectedWorkIds.length + _selectedGroupIds.length < 2
                     ? null : _groupSelectedWorks,
                 icon: const Icon(Icons.bookmarks_outlined),
                 label: const HypText('선택 묶기'),
               ),
             OutlinedButton.icon(
               key: const Key('library-edit-selected'),
-              onPressed: _selectedWorkIds.length == 1
-                  ? _editSelectedWork : null,
+              onPressed: _selectedGroupIds.isEmpty &&
+                    _selectedWorkIds.length == 1 ? _editSelectedWork : null,
               icon: const Icon(Icons.edit_outlined),
               label: const HypText('정보 수정'),
             ),
@@ -2164,8 +2275,8 @@ class _HypDashboardState extends State<HypDashboard> {
             else
               FilledButton.icon(
                 key: const Key('library-delete-selected'),
-                onPressed: _selectedWorkIds.isNotEmpty
-                    ? _removeSelectedWorks : null,
+                onPressed: _selectedGroupIds.isEmpty &&
+                    _selectedWorkIds.isNotEmpty ? _removeSelectedWorks : null,
                 icon: const Icon(Icons.delete_outline_rounded),
                 label: const HypText('선택 삭제'),
               ),
@@ -2355,15 +2466,34 @@ class _HypDashboardState extends State<HypDashboard> {
     return '';
   }
 
+  bool _isBlockedOnline(OnlineSearchWork work) => widget.blacklist.blocks(
+    id: work.workId, title: work.title, artists: work.artists,
+    groups: work.groups, tags: work.tags);
+
+  Future<void> _showBlacklistManager() => showDialog<void>(
+    context: context,
+    builder: (_) => BlacklistManagerDialog(
+      rules: widget.blacklist,
+      onSave: widget.onSaveBlacklist,
+      onExport: widget.onBlacklistExport,
+      onImport: widget.onBlacklistImport,
+    ),
+  );
+
   Widget _searchContent() {
+    final visibleRemote = _remoteResults.where((work) =>
+        !_isBlockedOnline(work)).toList();
+    final hiddenCount = _remoteResults.length - visibleRemote.length;
+    final visibleFieldTotals = hiddenCount == 0 ? _remoteFieldTotals :
+        OnlineWorkSearch.facetCounts(visibleRemote, _remoteFieldMatches);
     final existingIds = widget.library.works.map((w) => w.workId).toSet();
-    final remoteFiltered = _remoteResults.where((w) =>
+    final remoteFiltered = visibleRemote.where((w) =>
         (_remoteFieldFilter.isEmpty ||
          (_remoteFieldMatches[w.workId] ?? const <String>[])
              .contains(_remoteFieldFilter))).toList();
     final savedOnline = remoteFiltered.where((w) =>
         existingIds.contains(w.workId)).toList();
-    final online = _remoteResults.where((w) =>
+    final online = visibleRemote.where((w) =>
         !existingIds.contains(w.workId) &&
         (_remoteFieldFilter.isEmpty ||
          (_remoteFieldMatches[w.workId] ?? const <String>[])
@@ -2372,13 +2502,10 @@ class _HypDashboardState extends State<HypDashboard> {
       'general', 'artist', 'group', 'series', 'tag',
       'female', 'male', 'advanced',
     ];
+    // Never hide a field merely because it has not yet been queried.
     final visibleFacets = facetOrder.where((field) =>
-        (field != 'advanced' ||
-            _remoteFieldTotals.containsKey('advanced') ||
-            _remoteFieldFilter == 'advanced') &&
-        (_showEmptyRemoteFields ||
-         (_remoteFieldTotals[field] ?? 0) > 0 ||
-         _remoteFieldFilter == field)).toList();
+        field != 'advanced' || _searchedRemoteFields.contains('advanced') ||
+        _remoteFieldFilter == 'advanced').toList();
     final showLocal = _searchScope != 'online';
     final showOnline = _searchScope != 'local';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -2443,8 +2570,10 @@ class _HypDashboardState extends State<HypDashboard> {
       ],
       if (showOnline) ...[
         const SizedBox(height: 18),
-        Text(AppLocalizations.of(context)!.searchFetchedUnique(_remoteTotal),
+        Text(AppLocalizations.of(context)!.searchFetchedUnique(visibleRemote.length),
             style: Theme.of(context).textTheme.titleMedium),
+        if (hiddenCount > 0)
+          HypText('블랙리스트로 $hiddenCount개 숨김'),
         if (_search.text.trim().isNotEmpty)
           Row(children: [
             Expanded(child: SingleChildScrollView(
@@ -2461,10 +2590,16 @@ class _HypDashboardState extends State<HypDashboard> {
                 for (final field in visibleFacets) ...[
                   FilterChip(
                     key: Key('search-facet-' + field),
-                    label: Text(AppLocalizations.of(context)!.searchFieldCount(
-                      _searchFieldLabel(context, field),
-                      _remoteFieldTotals[field] ?? 0,
-                    )),
+                    label: Text(!_searchedRemoteFields.contains(field) &&
+                        !_loadingRemoteFacets.contains(field)
+                        ? _searchFieldLabel(context, field) + ' · ' +
+                            HypI18n.t(context, '미검색')
+                        : _loadingRemoteFacets.contains(field)
+                            ? _searchFieldLabel(context, field) + ' · ' +
+                                HypI18n.t(context, '검색 중')
+                            : AppLocalizations.of(context)!.searchFieldCount(
+                                _searchFieldLabel(context, field),
+                                visibleFieldTotals[field] ?? 0)),
                     selected: _remoteFieldFilter == field,
                     onSelected: (chosen) => _selectRemoteFacet(field, chosen),
                   ),
@@ -2473,14 +2608,10 @@ class _HypDashboardState extends State<HypDashboard> {
               ]),
             )),
             IconButton(
-              key: const Key('search-facet-show-zeros'),
-              tooltip: HypI18n.t(context, _showEmptyRemoteFields
-                  ? '0건 분야 숨기기' : '0건 분야 보기'),
-              onPressed: () => setState(() =>
-                  _showEmptyRemoteFields = !_showEmptyRemoteFields),
-              icon: Icon(_showEmptyRemoteFields
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined),
+              key: const Key('search-blacklist-manage'),
+              tooltip: HypI18n.t(context, '블랙리스트 관리'),
+              onPressed: _showBlacklistManager,
+              icon: const Icon(Icons.shield_outlined),
             ),
           ]),
         if (_remoteResults.isNotEmpty)
@@ -2569,7 +2700,15 @@ class _HypDashboardState extends State<HypDashboard> {
                           .map((field) => _searchFieldLabel(context, field))
                           .join(', ')),
                   ].join(' · '), maxLines: 3),
-            trailing: IconButton(
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(
+                key: Key('blacklist-online-' + group.first.workId),
+                tooltip: HypI18n.t(context, '블랙리스트에 추가'),
+                onPressed: () => widget.onBlacklistAdd(BlacklistRule(
+                    kind: 'id', value: group.first.workId)),
+                icon: const Icon(Icons.block_outlined),
+              ),
+              IconButton(
               tooltip: group.length > 1
                   ? AppLocalizations.of(context)!.editionChoose
                   : AppLocalizations.of(context)!.tooltipAddLibrary,
@@ -2579,6 +2718,7 @@ class _HypDashboardState extends State<HypDashboard> {
               icon: Icon(group.length > 1 ? Icons.language
                   : Icons.bookmark_add_outlined),
             ),
+            ]),
             onTap: group.length > 1
                 ? () => _showOnlineEditionCandidates(group)
                 : () => _showOnlineWork(group.first),
@@ -2664,13 +2804,31 @@ class _HypDashboardState extends State<HypDashboard> {
               icon: const Icon(Icons.bookmark_add_outlined),
               label: const HypText('서재 추가'),
             ),
-            FilledButton.icon(
+            OutlinedButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
                 _openReaderWith(() => widget.onReadOnlineSearchWork(work));
               },
               icon: const Icon(Icons.menu_book),
               label: const HypText('서재 추가하고 읽기'),
+            ),
+            FilledButton.icon(
+              key: const Key('online-preview-without-save'),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _openReaderWith(() => widget.onPreviewOnlineSearchWork(work));
+              },
+              icon: const Icon(Icons.visibility_outlined),
+              label: HypText(HypI18n.t(context, '저장하지 않고 미리보기')),
+            ),
+            IconButton(
+              tooltip: HypI18n.t(context, '블랙리스트에 추가'),
+              onPressed: () {
+                Navigator.pop(ctx);
+                widget.onBlacklistAdd(BlacklistRule(kind: 'id',
+                    value: work.workId));
+              },
+              icon: const Icon(Icons.block_outlined),
             ),
           ]),
         ]),
@@ -3149,6 +3307,18 @@ class _HypDashboardState extends State<HypDashboard> {
               style: const TextStyle(fontSize: 12, color: HypColors.muted)),
         ],
       )),
+      const SizedBox(height: 10),
+      _settingsPanel('blacklist', HypI18n.t(context, '블랙리스트'),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          HypText(HypI18n.t(context, '차단된 작품은 검색과 번호 검증에서 제외돼.')),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const Key('settings-blacklist-open'),
+            onPressed: _showBlacklistManager,
+            icon: const Icon(Icons.shield_outlined),
+            label: HypText(HypI18n.t(context, '블랙리스트 관리')),
+          ),
+        ])),
       const SizedBox(height: 10),
       _settingsPanel('viewer', AppLocalizations.of(context)!.settingsViewer, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

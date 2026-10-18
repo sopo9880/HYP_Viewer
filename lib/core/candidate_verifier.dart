@@ -8,8 +8,12 @@ class CandidateVerification {
   final CandidateCheck status;
   final String title;
   final String reason;
+  final List<String> artists;
+  final List<String> groups;
+  final List<String> tags;
 
-  const CandidateVerification(this.status, {this.title = '', this.reason = ''});
+  const CandidateVerification(this.status, {this.title = '', this.reason = '',
+      this.artists = const [], this.groups = const [], this.tags = const []});
 
   bool get exists => status == CandidateCheck.verified;
 }
@@ -29,9 +33,14 @@ class GalleryCandidateVerifier {
     final cached = cache[code];
     if (cached != null) return cached;
     try {
-      final title = await HitomiGalleryProvider(client).fetchTitle(code);
-      final result = CandidateVerification(
-          CandidateCheck.verified, title: title);
+      final info = await HitomiGalleryProvider(client).fetchInfo(code);
+      final result = CandidateVerification(CandidateCheck.verified,
+          title: info.title,
+          artists: info.author.split(',').map((e) => e.trim())
+              .where((e) => e.isNotEmpty).toList(),
+          groups: info.group.split(',').map((e) => e.trim())
+              .where((e) => e.isNotEmpty).toList(),
+          tags: info.tags);
       cache[code] = result;
       return result;
     } on FormatException catch (e) {

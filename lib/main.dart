@@ -46,6 +46,7 @@ import 'core/social_share_text.dart';
 import 'core/storage.dart';
 import 'core/updates.dart';
 import 'core/work.dart';
+import 'core/blacklist.dart';
 import 'core/reading_history.dart';
 import 'core/youtube.dart';
 import 'core/youtube_public.dart';
@@ -146,6 +147,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   final authorInput = TextEditingController();
   final apiKeyInput = TextEditingController();
   LibraryBackup library = const LibraryBackup(works: [], collections: []);
+  BlacklistRules blacklist = const BlacklistRules();
+  final BlacklistStore _blacklistStore = const BlacklistStore();
+  final Completer<void> _initialBlacklistRead = Completer<void>();
+  bool _blacklistLoadFailed = false;
+  Future<void> _blacklistWrites = Future<void>.value();
   List<NumberCandidate> candidates = [];
   final Map<String, CandidateVerification> _candidateCache = {};
   final Map<String, String> _candidateSourceUrls = {};
@@ -267,6 +273,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadReadingHistory();
+    _loadBlacklist();
     _load();
     _loadOnlineSource();
     _settingsLoad = _loadReaderSettings();
@@ -305,6 +312,82 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       }
     } else {
       _activeReading?.pause();
+    }
+  }
+
+  Future<void> _loadBlacklist() async {
+    try {
+      final loaded = await _blacklistStore.load();
+      // Publish initial state before queued writes are unblocked.
+      // Waiting for _blacklistWrites here would deadlock a startup mutation.
+      if (mounted) setState(() => blacklist = loaded);
+    } catch (error) {
+      _blacklistLoadFailed = true;
+      _status('블랙리스트 불러오기 실패: $error');
+    } finally {
+      _initialBlacklistRead.complete();
+    }
+  }
+
+  Future<void> _setBlacklist(BlacklistRules next) {
+    final task = _blacklistWrites.then((_) async {
+      await _initialBlacklistRead.future;
+      if (_blacklistLoadFailed) {
+        throw StateError('블랙리스트 파일을 먼저 복구해 줘.');
+      }
+      await _blacklistStore.save(next);
+      if (mounted) setState(() => blacklist = next);
+    });
+    _blacklistWrites = task.then<void>((_) {},
+        onError: (Object _, StackTrace __) {});
+    return task;
+  }
+
+  Future<void> _addBlacklist(BlacklistRule entry) async {
+    try {
+      await _initialBlacklistRead.future;
+      await _setBlacklist(blacklist.add(entry));
+      _status('블랙리스트에 추가했어: ' + entry.value);
+    } catch (error) {
+      _status('블랙리스트 등록 실패: $error');
+    }
+  }
+
+  Future<void> _exportBlacklist() async {
+    try {
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: '블랙리스트 JSON 내보내기',
+        fileName: 'HYP_Viewer_blacklist.json',
+        type: FileType.custom, allowedExtensions: ['json'],
+        bytes: Uint8List.fromList(utf8.encode(blacklist.encode())),
+      );
+      if (result != null) _status('블랙리스트 JSON 내보내기 완료');
+    } catch (error) {
+      _status('블랙리스트 내보내기 실패: $error');
+    }
+  }
+
+  Future<BlacklistRules?> _importBlacklist() async {
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom, allowedExtensions: ['json'], withData: true);
+      if (picked == null || picked.files.isEmpty) return null;
+      final file = picked.files.single;
+      if (file.size > 5 * 1024 * 1024) {
+        throw const FormatException('블랙리스트 JSON 최대 크기는 5MB야.');
+      }
+      final bytes = file.bytes ?? (file.path == null
+          ? null : await File(file.path!).readAsBytes());
+      if (bytes == null) throw StateError('JSON을 읽지 못했어.');
+      final incoming = BlacklistRules.decode(utf8.decode(bytes));
+      final combined = blacklist.merge(incoming);
+      await _setBlacklist(combined);
+      _status('블랙리스트 ' + incoming.rules.length.toString() +
+          '개 항목을 병합했어.');
+      return combined;
+    } catch (error) {
+      _status('블랙리스트 가져오기 실패: $error');
+      return null;
     }
   }
 
@@ -1126,6 +1209,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _saveSelectedWorks([numberInput.text.trim()]);
 
   Future<void> _saveOnlineSearchWork(OnlineSearchWork result) async {
+    if (blacklist.blocks(id: result.workId, title: result.title,
+        artists: result.artists, groups: result.groups, tags: result.tags)) {
+      _status('블랙리스트에 등록된 작품이므로 저장하지 않았어.');
+      return;
+    }
     await _commitLibrary((latest) {
       if (latest.works.any((w) => w.workId == result.workId)) {
         // A repeat search can teach us a confirmed original/translated
@@ -1185,6 +1273,68 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     _status('선택한 언어판만 묶음에서 분리했어.');
   }
 
+  Future<void> _previewOnlineSearchWork(OnlineSearchWork work) async =>
+      _previewById(work.workId, online: work);
+
+  Future<void> _previewCandidate(String code) async =>
+      _previewById(code);
+
+  /// Preview uses the shared reader but does not enter the saved library or
+  /// touch reading history, download jobs, completion or chosen covers.
+  Future<void> _previewById(String id, {OnlineSearchWork? online}) async {
+    if (!RegExp(r'^\d{6,12}$').hasMatch(id)) {
+      _status('미리보기 작품 번호를 확인해 줘.');
+      return;
+    }
+    if (blacklist.blocks(id: id, title: online?.title ?? '',
+        artists: online?.artists ?? const [],
+        groups: online?.groups ?? const [], tags: online?.tags ?? const [])) {
+      _status('블랙리스트에 있는 작품은 미리보기가 차단돼.');
+      return;
+    }
+    final client = http.Client();
+    try {
+      final archive = await HitomiGalleryProvider(client).load(id,
+          dataSaver: readerSettings.dataSaverMode);
+      if (!mounted) return;
+      final transient = WorkEntry.create(workId: id,
+        title: online?.title ?? archive.title,
+        author: online?.artists.join(', ') ?? '',
+      ).copyWith(sourceGroup: online?.groups.join(', ') ?? '',
+          sourceSeries: online?.series.join(', ') ?? '',
+          sourceLanguage: online?.language ?? '',
+          totalPages: archive.pageCount, coverMode: 'preset');
+      await Navigator.push<void>(context, MaterialPageRoute(
+        builder: (readerContext) => GalleryReader(
+          work: transient,
+          archive: archive,
+          previewMode: true,
+          diskCacheEnabled: false,
+          settings: readerSettings.copyWith(preloadPages: 2),
+          onPageChanged: (_) {},
+          onSavePreview: () async {
+            if (online != null) {
+              await _saveOnlineSearchWork(online);
+            } else {
+              await _saveSelectedWorks([id], openReaderAfterSave: false);
+            }
+            return library.works.any((w) => w.workId == id);
+          },
+          onBlockPreview: () async {
+            await _addBlacklist(BlacklistRule(kind: 'id', value: id));
+            if (readerContext.mounted) Navigator.of(readerContext).pop();
+          },
+          onOpenInBrowser: (page) =>
+              _openWebReader(transient, page: page),
+        ),
+      ));
+    } catch (error) {
+      _status('미리보기 실패: $error');
+    } finally {
+      client.close();
+    }
+  }
+
   Future<void> _readOnlineSearchWork(OnlineSearchWork result) async {
     try {
       await _saveOnlineSearchWork(result);
@@ -1207,7 +1357,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     await _saveSelectedWorks([code]);
   }
 
-  Future<void> _saveSelectedWorks(List<String> selectedCodes) async {
+  Future<void> _saveSelectedWorks(List<String> selectedCodes,
+      {bool openReaderAfterSave = true}) async {
     if (busy) return;
     final codes = selectedCodes.map((code) => code.trim()).toSet().toList();
     if (codes.isEmpty ||
@@ -1223,7 +1374,12 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       final links = SourceLink.extract(urlInput.text);
       final works = <WorkEntry>[];
       var unknownTitles = 0;
+      var deniedCount = 0;
       for (final code in codes) {
+        if (blacklist.blocks(id: code)) {
+          deniedCount++;
+          continue;
+        }
         var title = codes.length == 1 ? titleInput.text.trim() : '';
         // Reuse titles from the existence check: don't refetch the same
         // metadata for each selected work while saving a batch.
@@ -1245,6 +1401,13 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         if (title.isEmpty) {
           title = '작품 $code';
           unknownTitles += 1;
+        }
+        if (blacklist.blocks(id: code, title: title,
+            artists: [if (info != null) info.author],
+            groups: [if (info != null) info.group],
+            tags: info?.tags ?? const [])) {
+          deniedCount++;
+          continue;
         }
         final mappedLink = SourceLink.parse(_candidateSourceUrls[code] ?? '') ??
             (links.length == 1 ? links.single : null);
@@ -1275,6 +1438,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           tags: info?.tags ?? const [],
         ));
       }
+      if (works.isEmpty) {
+        _status('선택한 작품이 모두 블랙리스트에 있어 저장하지 않았어.');
+        return;
+      }
       await _commitLibrary((latest) => WorkEditionService.autoLink(
           LibraryBackup.merge(latest,
             LibraryBackup(works: works, collections: const [])), codes));
@@ -1282,7 +1449,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       // Clear only when a successful save is followed by leaving Home.
       // Preserve unsaved/new input and the persistent API key.
       _finderResetPolicy.recordSuccessfulSave(savedFinderInput);
-      if (readerSettings.openAfterSave && works.length == 1) {
+      if (openReaderAfterSave && readerSettings.openAfterSave &&
+          works.length == 1) {
         openAfterSave = works.single;
       }
       if (readerSettings.autoCoverEnabled) {
@@ -1294,6 +1462,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         unawaited(_enqueueDownloads(works));
       }
       _status('작품 ${works.length}개를 서재에 저장했어.' +
+          (deniedCount > 0 ? ' 차단된 $deniedCount개는 건너뛰었어.' : '') +
           (unknownTitles > 0
               ? ' 제목을 찾지 못한 $unknownTitles개는 임시 이름으로 저장했어.'
               : ''));
@@ -1459,17 +1628,16 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       await _commitLibrary((latest) {
         final members = latest.works
             .where((work) => selected.contains(work.workId)).toList();
-        if (members.length != selected.length ||
-            members.any((work) => work.groupId.isNotEmpty)) {
-          throw StateError('이미 묶인 작품은 Auto/수동 묶기로 바꿀 수 없어. '
-              '먼저 기존 묶음을 해제해줘.');
+        if (members.length != selected.length) {
+          throw StateError('선택한 작품을 서재에서 찾을 수 없어.');
         }
-        return WorkEditionService.createSeries(latest,
+        return WorkEditionService.mergeSeries(latest,
             workIds, id, name);
       });
       _status('작품 ' + selected.length.toString() + '개를 묶었어.');
     } catch (error) {
       _status('묶음 만들기 실패: ' + error.toString());
+      rethrow;
     }
   }
 
@@ -3242,6 +3410,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) => HypDashboard(
     library: library,
+    blacklist: blacklist,
+    onSaveBlacklist: _setBlacklist,
+    onBlacklistAdd: _addBlacklist,
+    onBlacklistExport: _exportBlacklist,
+    onBlacklistImport: _importBlacklist,
     readingSessions: readingSessions,
     onClearReadingHistory: _clearReadingHistory,
     galleryStore: galleryStore,
@@ -3286,6 +3459,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     onLinkEditions: _linkEditionBatch,
     onUnlinkEdition: _unlinkEdition,
     onReadOnlineSearchWork: _readOnlineSearchWork,
+    onPreviewOnlineSearchWork: _previewOnlineSearchWork,
+    onPreviewCandidate: _previewCandidate,
     onSaveSelectedWorks: _saveSelectedWorks,
     onVerifyCandidateCodes: _verifyCandidateCodes,
     onCrossLineFallback: _crossLineFallback,

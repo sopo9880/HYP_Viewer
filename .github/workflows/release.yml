@@ -166,6 +166,27 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
+          Changes in v0.4.14:
+          - Merge complete existing series groups and standalone library works
+            into a single flat group after reviewing its members and order.
+            Preserve existing read progress, offline downloads, covers and
+            language-edition relationships; reject partial group merges.
+          - Improve reviewed Auto grouping diagnostics and avoid turning
+            different-language versions of the same unnumbered chapter into
+            an unrelated series.
+          - Preview public galleries from online search, candidate validation
+            and manual IDs without saving, writing reading history, marking
+            completion or modifying offline downloads. Save explicitly.
+          - Add a separate local blacklist by work ID, artist, circle, tag
+            or title, with management and JSON import/export. Skip blocked
+            candidates during verification and saving, and filter search.
+          - Always display category search tabs. Execute artist, group,
+            series and tag lookups, keep query failures distinct from empty
+            results, and fix server page-size pagination with metadata fallback.
+          - Maintain the existing 0.x library backup format and app data.
+          - Remote search source availability and device behavior still
+            require real-world verification after release.
+
           Changes in v0.4.13:
           - Improve unified online search reliability: validate translated
             aliases independently, retry alternate metadata mirrors when

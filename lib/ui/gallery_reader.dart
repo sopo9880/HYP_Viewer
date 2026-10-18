@@ -32,6 +32,9 @@ class GalleryReader extends StatefulWidget {
   final ValueChanged<bool>? onVerticalScrollingChanged;
   final ValueChanged<bool>? onTwoPageSpreadChanged;
   final ValueChanged<int>? onFinishedReading;
+  final bool previewMode;
+  final Future<bool> Function()? onSavePreview;
+  final Future<void> Function()? onBlockPreview;
 
   const GalleryReader({
     super.key,
@@ -48,6 +51,9 @@ class GalleryReader extends StatefulWidget {
     this.onVerticalScrollingChanged,
     this.onTwoPageSpreadChanged,
     this.onFinishedReading,
+    this.previewMode = false,
+    this.onSavePreview,
+    this.onBlockPreview,
   });
 
   @override
@@ -60,6 +66,8 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   bool _vertical = false;
   bool get _verticalReading => _vertical || widget.settings.webtoonMode;
   bool _controlsVisible = true;
+  bool _previewSaving = false;
+  bool _previewSaved = false;
   bool _twoPageSpread = false;
   bool _completionReported = false;
   bool _completionPromptOpen = false;
@@ -91,7 +99,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   }
 
   void _completeWhenVisible() {
-    if (widget.settings.confirmCompleteOnNext) return;
+    if (widget.previewMode || widget.settings.confirmCompleteOnNext) return;
     if (_completionReported || !_lastPageRendered ||
         _currentUnit != _units - 1) return;
     _completionReported = true;
@@ -108,6 +116,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   /// Arrival at the final image, preloading or a held volume key never
   /// silently marks a work as completed.
   Future<void> _askToFinish() async {
+    if (widget.previewMode) return;
     if (_completionPromptOpen || _completionReported || !_lastPageRendered ||
         !mounted) return;
     _completionPromptOpen = true;
@@ -179,7 +188,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     super.initState();
     _twoPageSpread = widget.settings.twoPageSpread;
     _vertical = _twoPageSpread ? false : widget.settings.verticalScrolling;
-    _controlsVisible = !widget.settings.hideReaderUiOnOpen;
+    _controlsVisible = widget.previewMode || !widget.settings.hideReaderUiOnOpen;
     // ALL visible and background requests share this same bounded queue.
     // Data saver uses one request at a time, regardless of preload setting.
     _diskCache = GalleryDiskCache(widget.archive,
@@ -700,10 +709,39 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
           foregroundColor: Colors.white,
           title: HypAnimatedTitle(
             key: const Key('reader-title'),
-            title: widget.work.title.isEmpty
-                ? widget.work.workId : widget.work.title,
+            title: (widget.previewMode ? '[미리보기] ' : '') +
+                (widget.work.title.isEmpty
+                    ? widget.work.workId : widget.work.title),
           ),
           actions: [
+            if (widget.previewMode && widget.onSavePreview != null)
+              IconButton(
+                key: const Key('preview-save-to-library'),
+                tooltip: HypI18n.t(context, _previewSaved
+                    ? '서재에 저장됨' : '서재에 저장'),
+                onPressed: _previewSaving || _previewSaved ? null : () async {
+                  setState(() => _previewSaving = true);
+                  try {
+                    final saved = await widget.onSavePreview!();
+                    if (mounted) setState(() => _previewSaved = saved);
+                  } catch (error) {
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(error.toString())));
+                  } finally {
+                    if (mounted) setState(() => _previewSaving = false);
+                  }
+                },
+                icon: Icon(_previewSaved ? Icons.bookmark_added :
+                    Icons.bookmark_add_outlined),
+              ),
+            if (widget.previewMode && widget.onBlockPreview != null)
+              IconButton(
+                key: const Key('preview-blacklist'),
+                tooltip: HypI18n.t(context, '블랙리스트에 추가'),
+                onPressed: _previewSaving ? null :
+                    () => widget.onBlockPreview?.call(),
+                icon: const Icon(Icons.block_outlined),
+              ),
             if (widget.settings.showDownloadAction &&
                 widget.onDownloadOffline != null)
               IconButton(
