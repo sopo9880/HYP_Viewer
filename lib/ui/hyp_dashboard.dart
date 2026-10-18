@@ -720,7 +720,7 @@ class _HypDashboardState extends State<HypDashboard> {
         var hasMore = false;
         for (final response in valid) {
           hasMore = hasMore || (response.works.isNotEmpty &&
-              (response.total > page * 25 || response.works.length >= 25));
+              (response.total > page * 15 || response.works.length >= 15));
           for (final work in response.works) {
             final previous = known[work.workId];
             if (previous == null) added++;

@@ -432,6 +432,36 @@ class OnlineWorkSearch {
       }
     }
     await runRound(primary);
+    // Community metadata tags may use a different canonical spelling from
+    // the entered creator phrase. Fall back to public broad results and
+    // keep ONLY works whose returned metadata actually matches the field.
+    // Never relabel unrelated title matches as artist results.
+    if (explicit && unique.isEmpty && queries.length == 1 &&
+        const {'artist', 'group', 'series', 'tag'}.contains(queries.first.$1)) {
+      final field = queries.first.$1;
+      final term = raw.substring(raw.indexOf(':') + 1).trim();
+      if (term.length >= 2 && term.length <= 140) {
+        plannedTotal++;
+        try {
+          final secondaryLookup = await search(term,
+              page: page, language: language);
+          for (final work in secondaryLookup.works) {
+            if (!metadataFields(work, term).contains(field)) continue;
+            final old = unique[work.workId];
+            unique[work.workId] = old == null ? work : combineWorks(old, work);
+            matched.putIfAbsent(work.workId, () => <String>{}).add(field);
+          }
+          hasMore = hasMore || secondaryLookup.works.isNotEmpty &&
+              secondaryLookup.total > page * 15;
+        } catch (error) {
+          warnings.add(field + ' (metadata fallback): ' + error.toString());
+        } finally {
+          completed++;
+          onProgress?.call(completed, plannedTotal);
+          onPartial?.call(snapshot());
+        }
+      }
+    }
     // Facet tabs must not silently disappear merely because the broad
     // search found eight title matches. Run every promised field query.
     if (secondary.isNotEmpty) {

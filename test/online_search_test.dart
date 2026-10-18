@@ -108,6 +108,28 @@ void main() {
     client.close();
   });
 
+  test('artist exact miss can recover only metadata-confirmed broad work', () async {
+    final seen = <String>[];
+    final client = MockClient((request) async {
+      final query = (jsonDecode(request.body)['query'] as List).first as String;
+      seen.add(query);
+      return http.Response(jsonEncode({
+        'results': query == 'pochi' ? [
+          {'id': 111111, 'title': 'Ane Naru Mono', 'artists': ['pochi']},
+          {'id': 222222, 'title': 'pochi by other artist',
+           'artists': ['someone_else']},
+        ] : [],
+        'count': 2,
+      }), 200);
+    });
+    final result = await OnlineWorkSearch(client)
+        .searchUnified('artist:pochi');
+    expect(seen, contains('pochi'));
+    expect(result.works.map((w) => w.workId), ['111111']);
+    expect(result.fieldTotals['artist'], 1);
+    client.close();
+  });
+
   test('advanced query only searches its specified field', () async {
     final seen = <String>[];
     final client = MockClient((request) async {
