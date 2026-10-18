@@ -104,9 +104,13 @@ class OnlineSearchResult {
   final Map<String, List<String>> matchedFields;
   final List<String> warnings;
   final bool hasNextPage;
+  /// A zero count is trustworthy only for fields whose query completed.
+  final Set<String> searchedFields;
+  final Set<String> failedFields;
   const OnlineSearchResult(this.works, this.total, this.page,
       {this.fieldTotals = const {}, this.matchedFields = const {},
-       this.warnings = const [], this.hasNextPage = false});
+       this.warnings = const [], this.hasNextPage = false,
+       this.searchedFields = const {}, this.failedFields = const {}});
 }
 
 class OnlineWorkSearch {
@@ -134,8 +138,8 @@ class OnlineWorkSearch {
     return queries;
   }
 
-  /// Plan a generous fallback field set; searchUnified executes the
-  /// secondary queries only when the primary title round is sparse.
+  /// Plan dedicated creator/series/tag queries as well as title terms.
+  /// Never skip a category just because the title search was populated.
   /// Explicit field:value expressions bypass expansion.
   static List<(String, String)> planQueries(String raw) {
     final input = raw.trim();
@@ -147,7 +151,9 @@ class OnlineWorkSearch {
       if (input.length > 150) {
         throw const FormatException('검색어는 1~150자로 입력해줘.');
       }
-      return [('advanced', input)];
+      final field = input.substring(0, input.indexOf(':')).toLowerCase();
+      const supported = {'artist', 'group', 'series', 'tag', 'female', 'male'};
+      return [(supported.contains(field) ? field : 'advanced', input)];
     }
     // A library can provide several verified translations. The 150-character
     // cap belongs to EACH term, not the combined "name | name" string.
@@ -180,7 +186,7 @@ class OnlineWorkSearch {
     // An exact gallery number has no reason to spawn creator/tag queries.
     if (RegExp(r'^\d{6,9}$').hasMatch(alternatives.first) &&
         alternatives.length == 1) return planned;
-    // Search title phrases first, then broaden only if results are sparse.
+    // Search title phrases first, then run field queries for all categories.
     for (var i = 0; i < alternatives.length && i < 2; i++) {
       final term = alternatives[i];
       if (term.length < 2) continue;
@@ -317,6 +323,7 @@ class OnlineWorkSearch {
         onProgress?.call(1, 1);
         final result = OnlineSearchResult(works, works.length, page,
             fieldTotals: {'general': works.length},
+            searchedFields: {'general'},
             matchedFields: {if (matchesLanguage) work.workId: ['general']});
         onPartial?.call(result);
         return result;
@@ -328,6 +335,8 @@ class OnlineWorkSearch {
     final unique = <String, OnlineSearchWork>{};
     final matched = <String, Set<String>>{};
     final warnings = <String>{};
+    final searchedFields = <String>{};
+    final failedFields = <String>{};
     final normalizedTerms = raw.toLowerCase().split('|')
         .map((value) => value.trim())
         .where((value) => value.length >= 2 && !value.contains(':'))
@@ -373,14 +382,18 @@ class OnlineWorkSearch {
           fieldTotals: facetCounts(ordered, displayMatches),
           matchedFields: displayMatches,
           warnings: warnings.toList(),
+          searchedFields: {...searchedFields},
+          failedFields: {...failedFields},
           hasNextPage: hasMore);
     }
 
     // Publish the title / translation round immediately, then expand fields
     // only for sparse searches. Each round keeps at most 3 in-flight queries.
-    final primary = queries.where((q) =>
+    final explicit = RegExp(r'^[a-z][a-z_]*:', caseSensitive: false)
+        .hasMatch(raw.trim());
+    final primary = queries.where((q) => explicit ||
         q.$1 == 'general' || q.$1 == 'advanced').toList();
-    final secondary = queries.where((q) =>
+    final secondary = queries.where((q) => !explicit &&
         q.$1 != 'general' && q.$1 != 'advanced').toList();
     var plannedTotal = primary.length;
     Future<void> runRound(List<(String, String)> entries) async {
@@ -390,11 +403,13 @@ class OnlineWorkSearch {
             final result = await search(entry.$2,
                 page: page, language: language);
             successes++;
+            searchedFields.add(entry.$1);
+            failedFields.remove(entry.$1);
             for (final warning in result.warnings) {
               warnings.add(entry.$1 + ': ' + warning);
             }
             hasMore = hasMore || result.works.isNotEmpty &&
-                (result.total > page * 25 || result.works.length >= 25);
+                (result.total > page * 15 || result.works.length >= 15);
             for (final work in result.works) {
               final old = unique[work.workId];
               unique[work.workId] = old == null ? work : combineWorks(old, work);
@@ -406,6 +421,7 @@ class OnlineWorkSearch {
               }
             }
           } catch (error) {
+            failedFields.add(entry.$1);
             warnings.add(entry.$1 + ': ' + error.toString());
           } finally {
             completed++;
@@ -416,9 +432,9 @@ class OnlineWorkSearch {
       }
     }
     await runRound(primary);
-    // Always finish previously selected fields on later pages. On page 1,
-    // a sufficiently populated title search skips unrelated field traffic.
-    if (secondary.isNotEmpty && (page > 1 || unique.length < 8)) {
+    // Facet tabs must not silently disappear merely because the broad
+    // search found eight title matches. Run every promised field query.
+    if (secondary.isNotEmpty) {
       plannedTotal += secondary.length;
       await runRound(secondary);
     }

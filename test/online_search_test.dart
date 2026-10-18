@@ -127,7 +127,7 @@ void main() {
     expect(OnlineWorkSearch.planQueries('Pochi').map((e) => e.$1).toList(),
       ['general','artist','group','series','tag','female','male']);
     expect(OnlineWorkSearch.planQueries('artist:Pochi'),
-      [('advanced','artist:Pochi')]);
+      [('artist','artist:Pochi')]);
     expect(OnlineWorkSearch.planQueries('Original | Translated')
       .map((entry) => entry.$2).toList().take(2),
       ['Original','Translated']);
@@ -157,7 +157,7 @@ void main() {
     client.close();
   });
 
-  test('rich title results skip unrelated metadata queries', () async {
+  test('rich title results also search creator and other facets', () async {
     final seen = <String>[];
     final client = MockClient((request) async {
       final query = (jsonDecode(request.body)['query'] as List).first as String;
@@ -170,7 +170,11 @@ void main() {
       }), 200);
     });
     await OnlineWorkSearch(client).searchUnified('Direct story');
-    expect(seen, ['Direct story']);
+    expect(seen, containsAll([
+      'Direct story', 'artist:Direct story', 'group:Direct story',
+      'series:Direct story', 'tag:Direct story',
+      'female:Direct story', 'male:Direct story',
+    ]));
     client.close();
   });
 
@@ -198,8 +202,9 @@ void main() {
     });
     final found = await OnlineWorkSearch(client)
         .searchUnified('pochi', language: 'korean');
-    expect(queried, ['pochi']);
+    expect(queried, contains('artist:pochi'));
     expect(found.total, 9);
+    expect(found.searchedFields, contains('artist'));
     expect(found.fieldTotals['artist'], 1);
     expect(found.fieldTotals['general'], 8);
     expect(found.matchedFields['1012074'], contains('artist'));
