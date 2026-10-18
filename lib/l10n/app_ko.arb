@@ -646,6 +646,7 @@
   "webSearchNoLinks": "이 화면에서 작품 링크를 찾지 못했습니다. 로딩 후 다시 시도하거나 스크롤해 주세요.",
   "webSearchCaptureFailed": "이 화면의 작품 링크를 수집하지 못했습니다.",
   "webSearchLoadFailed": "웹 검색 페이지를 불러오지 못했습니다.",
+  "webSearchSourceLabel": "웹에서 수집",
   "webSearchUnsupported": "이 플랫폼에서는 앱 내부 웹 검색을 지원하지 않습니다.",
   "webSearchImported": "웹 검색에서 가져온 작품 {count}개 포함",
   "@webSearchImported": {"placeholders":{"count":{"type":"int"}}},

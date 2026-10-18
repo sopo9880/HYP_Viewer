@@ -646,6 +646,7 @@
   "webSearchNoLinks": "No gallery links found on this page. Wait for loading or scroll and try again.",
   "webSearchCaptureFailed": "Could not collect gallery links from this page.",
   "webSearchLoadFailed": "Could not load the web search page.",
+  "webSearchSourceLabel": "Collected from web",
   "webSearchUnsupported": "In-app web search is unavailable on this platform.",
   "webSearchImported": "Including {count} works imported from website",
   "@webSearchImported": {"placeholders":{"count":{"type":"int"}}},

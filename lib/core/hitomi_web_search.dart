@@ -71,11 +71,13 @@ class HitomiWebSearch {
       final title = rawTitle is String
           ? rawTitle.replaceAll(RegExp(r'\s+'), ' ').trim()
           : '';
-      works.putIfAbsent(id, () => HitomiWebGallery(
-        workId: id,
-        title: title.length >= 2 && title.length <= 220
-            ? title : '작품 $id',
-      ));
+      final cleanTitle = title.length >= 2 && title.length <= 220
+          ? title : '작품 $id';
+      final previous = works[id];
+      if (previous == null ||
+          (previous.title == '작품 $id' && cleanTitle != '작품 $id')) {
+        works[id] = HitomiWebGallery(workId: id, title: cleanTitle);
+      }
       if (works.length >= 120) break;
     }
     return works.values.toList(growable: false);
@@ -86,7 +88,7 @@ class HitomiWebSearch {
   /// never clicks, submits, fetches, or accesses cookies/localStorage.
   static const String captureJavaScript = r'''(function () {
     var results = [];
-    var seen = {};
+    var byId = {};
     function goodLink(anchor) {
       if (!anchor || !anchor.href) return null;
       try {
@@ -94,26 +96,52 @@ class HitomiWebSearch {
         if (link.protocol !== 'https:' ||
             !['hitomi.la', 'www.hitomi.la'].includes(link.hostname) ||
             link.username || link.password || link.port) return null;
-        var match = link.pathname.match(
-          /^\/(?:galleries|reader)\/(\d{5,12})\.html$/);
+        var match = link.pathname.match(/^\/(?:galleries|reader)\/(\d{5,12})\.html$/);
         if (!match) match = link.pathname.match(
           /^\/(?:doujinshi|manga|artistcg|gamecg|imageset|western|non-h|anime|cosplay|cg)\/[^/]+-(\d{5,12})\.html$/);
         return match ? {id: match[1], url: link.href} : null;
       } catch (_) { return null; }
     }
+    function clean(value) {
+      return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+    }
+    function titleFor(anchor, id) {
+      var direct = anchor.querySelector('.gallery-title, .title, h3');
+      var img = anchor.querySelector('img');
+      var title = clean(direct && direct.textContent ||
+        anchor.getAttribute('title') || anchor.textContent ||
+        (img && img.getAttribute('alt')));
+      if (title.length > 1) return title;
+      // Do NOT ascend to .gallery-content: it can contain ALL result cards.
+      var parent = anchor.parentElement;
+      for (var depth = 0; parent && depth < 5; depth++, parent = parent.parentElement) {
+        if (parent.classList.contains('gallery-content')) break;
+        var links = parent.querySelectorAll('a[href]');
+        var unique = {};
+        for (var i = 0; i < links.length; i++) {
+          var item = goodLink(links[i]);
+          if (item) unique[item.id] = true;
+          if (Object.keys(unique).length > 1) break;
+        }
+        if (Object.keys(unique).length !== 1 || !unique[id]) break;
+        var heading = parent.querySelector('.gallery-title, .title, h1, h2, h3');
+        var candidate = clean(heading && heading.textContent);
+        if (candidate.length > 1) return candidate;
+      }
+      return '';
+    }
     Array.prototype.forEach.call(document.querySelectorAll('a[href]'),
       function (anchor) {
         if (results.length >= 120) return;
         var item = goodLink(anchor);
-        if (!item || seen[item.id]) return;
-        var container = anchor.closest(
-          '.gallery-content, .gallery, .gallery-item, article, li');
-        var header = container && container.querySelector(
-          '.gallery-title, .title, h1, h2, h3');
-        var title = String(header && header.textContent ||
-          anchor.getAttribute('title') || anchor.textContent || '')
-          .replace(/\s+/g, ' ').trim().slice(0, 220);
-        seen[item.id] = true;
+        if (!item) return;
+        var title = titleFor(anchor, item.id);
+        var index = byId[item.id];
+        if (index !== undefined) {
+          if (!results[index].title && title) results[index].title = title;
+          return;
+        }
+        byId[item.id] = results.length;
         results.push({url: item.url, title: title});
       });
     return JSON.stringify({url: location.href, items: results});

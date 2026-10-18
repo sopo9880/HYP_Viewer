@@ -35,6 +35,24 @@ void main() {
     expect(items.last.title, '작품 9999999');
   });
 
+  test('same ID updates cover-only title but never copies across IDs', () {
+    final items = HitomiWebSearch.parseCapture({
+      'url': 'https://hitomi.la/search.html?hanpatsu',
+      'items': [
+        {'url': '/galleries/3538281.html', 'title': ''},
+        {'url': '/galleries/3538281.html', 'title': 'Real work title'},
+        {'url': '/galleries/3603632.html', 'title': ''},
+      ],
+    });
+    expect(items.map((e) => e.workId).toList(), ['3538281', '3603632']);
+    expect(items[0].title, 'Real work title');
+    expect(items[1].title, '작품 3603632');
+    expect(HitomiWebSearch.captureJavaScript,
+        contains("parent.classList.contains('gallery-content')"));
+    expect(HitomiWebSearch.captureJavaScript,
+        contains('Object.keys(unique).length > 1'));
+  });
+
   test('does not trust forged origins, credentials or non-default ports', () {
     final items = [
       {'url': 'https://hitomi.la/galleries/1234567.html',

@@ -646,6 +646,7 @@
   "webSearchNoLinks": "この画面に作品リンクがありません。読み込み後またはスクロール後に再試行してください。",
   "webSearchCaptureFailed": "このページの作品リンクを収集できませんでした。",
   "webSearchLoadFailed": "ウェブ検索ページを読み込めませんでした。",
+  "webSearchSourceLabel": "ウェブから収集",
   "webSearchUnsupported": "この端末ではアプリ内ウェブ検索を利用できません。",
   "webSearchImported": "ウェブ検索から取り込んだ{count}作品を含む",
   "@webSearchImported": {"placeholders":{"count":{"type":"int"}}},
