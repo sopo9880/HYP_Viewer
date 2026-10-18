@@ -143,6 +143,33 @@ void main() {
     expect(suggestions.single.title, '수학여행 모음');
   });
 
+  test('compilation range is not mistaken for a single episode', () {
+    final combined = WorkEntry.create(workId: '600003',
+        title: '모험 이야기 (1~3화 합본 + 번외편)');
+    final first = WorkEntry.create(workId: '600001',
+        title: '모험 이야기 1화');
+    expect(WorkGrouping.episodeNumber(combined), isNull);
+    expect(WorkGrouping.episodeRange(combined.title)?.start, 1);
+    expect(WorkGrouping.episodeRange(combined.title)?.end, 3);
+    expect(WorkGrouping.baseTitle(combined.title),
+        WorkGrouping.baseTitle(first.title));
+    final suggestions = WorkGrouping.suggest([first, combined]);
+    expect(suggestions, hasLength(1));
+    expect(suggestions.single.workIds.toSet(), {'600001', '600003'});
+    expect(suggestions.single.reason, contains('파생'));
+  });
+
+  test('same creator does not cause unrelated title chain grouping', () {
+    final a = WorkEntry.create(workId: '700001',
+        title: '첫번째 세계 이야기 1화', author: 'Maker');
+    final b = WorkEntry.create(workId: '700002',
+        title: '첫번째 세계 이야기 2화', author: 'Maker');
+    final c = WorkEntry.create(workId: '700003',
+        title: '완전히 다른 만화', author: 'Maker');
+    final groups = WorkGrouping.suggest([a, b, c]);
+    expect(groups.single.workIds.toSet(), {'700001', '700002'});
+  });
+
   test('comment episode is used only on its own work-id line', () {
     const comments = '1편 - 2900년 7월 56일\n2편 - 317시간 28분 01초';
     final a = WorkEntry.create(workId: '2900756',
