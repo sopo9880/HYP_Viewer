@@ -164,6 +164,69 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     if (mounted) setState(() => downloadNavigationEpoch++);
   }
 
+  void _syncTrayRecent() {
+    if (!Platform.isWindows) return;
+    final recent = library.works
+        .where((work) => work.lastOpenedAt?.isNotEmpty == true).toList()
+      ..sort((a, b) =>
+          (b.lastOpenedAt ?? '').compareTo(a.lastOpenedAt ?? ''));
+    _backgroundDownloads.updateTrayRecentTitle(
+      recent.isEmpty ? '' : (recent.first.title.isNotEmpty
+          ? recent.first.title : '#' + recent.first.workId));
+  }
+
+  Future<void> _openRecentFromTray() async {
+    if (!mounted || _activeReading != null) return;
+    final recent = library.works
+        .where((work) => work.lastOpenedAt?.isNotEmpty == true).toList()
+      ..sort((a, b) =>
+          (b.lastOpenedAt ?? '').compareTo(a.lastOpenedAt ?? ''));
+    if (recent.isEmpty) return;
+    final work = recent.first;
+    try {
+      if (await galleryStore.exists(work.workId)) {
+        await _openGallery(work);
+      } else {
+        await _readOnline(work);
+      }
+    } catch (error) {
+      _status('최근 작품 열기 실패: ' + error.toString());
+    }
+  }
+
+  Future<void> _cancelDownloadsFromTray() async {
+    if (!mounted || (galleryDownloadToken == null &&
+        _downloadQueue.isEmpty)) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const HypText('모든 다운로드 취소'),
+        content: const HypText(
+          '현재 진행 중인 작품과 대기 중인 다운로드를 모두 취소할까? '
+          '이미 저장한 작품은 그대로 유지돼.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const HypText('돌아가기')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const HypText('전체 취소')),
+        ],
+      ),
+    ) == true;
+    if (approved && mounted) _cancelAllDownloads();
+  }
+
+  Future<void> _warnPreviousUpdaterCrash() async {
+    if (!Platform.isWindows) return;
+    final unfinished = await UpdateDiagnostics.readUnfinished();
+    if (unfinished == null || !mounted) return;
+    _status('이전 Windows 업데이트 다운로드가 예상치 못하게 종료됐어 '
+        '(' + unfinished + '). 설정에서 GitHub 릴리스 다운로드를 '
+        '선택하거나 다시 시도해줘.');
+    await UpdateDiagnostics.record('interrupted-detected');
+  }
+
   Future<bool> _confirmExitWhileDownloading() async {
     if (!mounted) return false;
     return await showDialog<bool>(
@@ -213,11 +276,18 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     if (Platform.isWindows) {
       _backgroundDownloads.setWindowExitConfirmationHandler(
         _confirmExitWhileDownloading);
+      _backgroundDownloads.configureTrayActions(
+        openRecent: () => unawaited(_openRecentFromTray()),
+        checkUpdates: () => unawaited(_checkRelease()),
+        togglePause: _pauseOrResumeReaderDownload,
+        cancelDownloads: () => unawaited(_cancelDownloadsFromTray()),
+      );
     }
     unawaited(_backgroundDownloads.consumePendingDownloadsNavigation().then((open) {
       if (open && mounted) _openDownloadsFromNotification();
     }));
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (Platform.isWindows) unawaited(_warnPreviousUpdaterCrash());
       _automaticUpdateCheck();
       if (Platform.isAndroid) _showSecurityNoticeOnce();
     });
@@ -445,7 +515,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       }
       final updated = change(library);
       await storage.save(updated);
-      if (mounted) setState(() => library = updated);
+      if (mounted) {
+        setState(() => library = updated);
+        _syncTrayRecent();
+      }
     });
     _libraryWrites = task.then<void>((_) {},
         onError: (Object _, StackTrace __) {});
@@ -739,7 +812,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       // Shorts. Consolidate by work ID while retaining favorites and progress.
       final normalized = LibraryBackup.merge(
         const LibraryBackup(works: [], collections: []), data);
-      if (mounted) setState(() => library = normalized);
+      if (mounted) {
+        setState(() => library = normalized);
+        _syncTrayRecent();
+      }
     } catch (e) {
       _libraryReadFailed = true;
       _status('기존 서재 읽기 실패: ' + e.toString() +
@@ -2272,6 +2348,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _downloadSourceById.putIfAbsent(work.workId, () => 'hitomi');
       if (_queuedDownloadIds.add(work.workId)) _downloadQueue.add(work);
     }
+    _backgroundDownloads.updateTrayQueueCount(_downloadQueue.length);
     if (mounted) {
       setState(() {});
       _status('다운로드 대기: ${_downloadQueue.length}개 작품. '
@@ -2297,6 +2374,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           if (galleryDownloadToken != null) break;
           final work = _downloadQueue.removeFirst();
           _queuedDownloadIds.remove(work.workId);
+          _backgroundDownloads.updateTrayQueueCount(_downloadQueue.length);
           if (mounted) setState(() {});
           // Indeterminate progress is shown during network/metadata loading.
           await _backgroundDownloads.setProgress(0, 0,
@@ -2329,12 +2407,14 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           '작업은 저장되어 있으니 앱으로 돌아와 다시 시도해줘.');
     } finally {
       _downloadQueueRunning = false;
+      _backgroundDownloads.updateTrayQueueCount(_downloadQueue.length);
     }
   }
 
   void _cancelAllDownloads() {
     _downloadQueueCancelled = true;
     _downloadQueue.clear();
+    _backgroundDownloads.updateTrayQueueCount(0);
     _queuedDownloadIds.clear();
     galleryDownloadToken?.cancel();
     unawaited(_downloadJobs.clear());
@@ -2423,6 +2503,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         isReaderTransferPaused = false;
         activeDownloadWorkId = work.workId;
       });
+      _backgroundDownloads.updateTrayTransferControls(
+          canPause: true, paused: false);
       unawaited(_backgroundDownloads.setProgress(0, remote.pageCount,
           workId: work.workId, queuedCount: _downloadQueue.length,
           language: readerSettings.languageCode));
@@ -2444,6 +2526,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       );
       await _downloadJobs.remove(work.workId);
       completedSuccessfully = true;
+      _backgroundDownloads.markDownloadCompleted(work.workId);
       if (mounted) setState(() => coverEpoch++);
       _status('오프라인 저장 완료! ' +
           downloaded.pageCount.toString() + '페이지를 인터넷 없이 읽을 수 있어.');
@@ -2457,9 +2540,6 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _status('오프라인 저장 실패: ' + e.toString());
       return false;
     } finally {
-      if (Platform.isWindows) {
-        _backgroundDownloads.setInstallerDownloadActive(false);
-      }
       client.close();
       if (holdsBackground) {
         await _backgroundDownloads.clearProgress();
@@ -2476,6 +2556,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           downloadingGalleryKey = null;
           isReaderTransferPaused = false;
         });
+        _backgroundDownloads.updateTrayTransferControls(
+            canPause: false, paused: false);
         if (!_downloadQueueRunning && _downloadQueue.isNotEmpty &&
             !_downloadQueueCancelled) {
           unawaited(_runDownloadQueue());
@@ -2493,6 +2575,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       active.pause();
     }
     if (mounted) setState(() => isReaderTransferPaused = active.isPaused);
+    _backgroundDownloads.updateTrayTransferControls(
+        canPause: true, paused: active.isPaused);
     unawaited(_backgroundDownloads.setProgress(
       downloadedGalleryPages, totalGalleryPages,
       workId: activeDownloadWorkId,
@@ -2770,6 +2854,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         isReaderTransferPaused = false;
         activeDownloadWorkId = work.workId;
       });
+      _backgroundDownloads.updateTrayTransferControls(
+          canPause: true, paused: false);
       unawaited(_backgroundDownloads.setProgress(0, remote.pageCount,
           workId: work.workId, queuedCount: _downloadQueue.length,
           language: readerSettings.languageCode));
@@ -2791,6 +2877,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       );
       await _downloadJobs.remove(work.workId);
       completedSuccessfully = true;
+      _backgroundDownloads.markDownloadCompleted(work.workId);
       if (mounted) setState(() => coverEpoch++);
       _status('다운로드 완료: ' + archive.pageCount.toString() +
           '장. 이제 인터넷 없이도 읽을 수 있어.');
@@ -2820,6 +2907,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           downloadingGalleryKey = null;
           isReaderTransferPaused = false;
         });
+        _backgroundDownloads.updateTrayTransferControls(
+            canPause: false, paused: false);
         if (_downloadQueue.isNotEmpty && !_downloadQueueRunning &&
             !_downloadQueueCancelled) {
           unawaited(_runDownloadQueue());
@@ -2909,11 +2998,14 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       message = '설치 파일을 내려받는 중이야.';
     });
     try {
-      if (Platform.isWindows) {
-        _backgroundDownloads.setInstallerDownloadActive(true);
-      }
       await UpdateDiagnostics.record('begin');
-      // Windows updates must NOT start native tray/taskbar progress plugins;
+      if (Platform.isWindows) {
+        phase = 'close-guard';
+        await _backgroundDownloads.setInstallerDownloadActive(true);
+        await UpdateDiagnostics.record('close-guard-ready');
+      }
+      // Windows installer downloads must not make native plugin calls for
+      // each network chunk; coarse menu updates are throttled separately.
       // those can fault the host process and are unrelated to the HTTP stream.
       // Android still holds its required foreground-service lease.
       if (Platform.isAndroid) {
@@ -2925,9 +3017,16 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       final installer = await UpdateService(client).download(
         release,
         asset,
+        onPhase: (stage) async {
+          phase = 'download-' + stage;
+          await UpdateDiagnostics.record(phase);
+        },
         onProgress: (value) {
           if (mounted && progressLimiter.shouldEmit(value, DateTime.now())) {
             setState(() => updateProgress = value.clamp(0.0, 1.0));
+            if (Platform.isWindows) {
+              _backgroundDownloads.updateTrayInstallerProgress(value);
+            }
             if (Platform.isAndroid) {
               unawaited(_backgroundDownloads.setProgress(
                 (value * 100).round(), 100,
@@ -2936,7 +3035,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           }
         },
         onStatus: (status) {
-          if (mounted) setState(() => updateStatus = status);
+          if (mounted && status != updateStatus) {
+            setState(() => updateStatus = status);
+          }
         },
       );
       phase = 'verified';
@@ -3013,9 +3114,18 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       }
     } catch (e, stack) {
       await UpdateDiagnostics.record(phase, error: e, stack: stack);
+      await UpdateDiagnostics.record('failed');
       _status('업데이트 실패: ' + e.toString());
     } finally {
       client.close();
+      if (Platform.isWindows) {
+        try {
+          await _backgroundDownloads.setInstallerDownloadActive(false);
+        } catch (error, stack) {
+          await UpdateDiagnostics.record(
+              'close-guard-cleanup', error: error, stack: stack);
+        }
+      }
       if (holdsBackground) {
         try {
           await _backgroundDownloads.clearProgress();
@@ -3026,6 +3136,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         }
       }
       if (mounted) setState(() => downloadingUpdate = false);
+      await UpdateDiagnostics.record('end');
     }
   }
 
@@ -3070,10 +3181,17 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                 child: const HypText('7일간 보지 않기')),
             TextButton(onPressed: () => Navigator.pop(ctx, 'web'),
                 child: const HypText('릴리스 보기')),
-            if (asset != null) FilledButton(
+            if (Platform.isWindows && asset != null) TextButton(
               onPressed: () => Navigator.pop(ctx, 'download'),
-              child: HypText(Platform.isAndroid
-                  ? '다운로드 → 보안 설정 확인' : '다운로드 및 검증'),
+              child: const HypText('앱 내 다운로드·검증 (진단)'),
+            ),
+            if (Platform.isWindows && asset != null) FilledButton(
+              onPressed: () => Navigator.pop(ctx, 'browser-download'),
+              child: const HypText('브라우저로 EXE 받기 (안정)'),
+            ),
+            if (Platform.isAndroid && asset != null) FilledButton(
+              onPressed: () => Navigator.pop(ctx, 'download'),
+              child: const HypText('다운로드 → 보안 설정 확인'),
             ),
           ],
         ),
@@ -3088,6 +3206,12 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         if (silent) _updateDismissedThisLaunch = true;
       } else if (choice == 'web') {
         await launchUrl(Uri.parse(next.url), mode: LaunchMode.externalApplication);
+      } else if (choice == 'browser-download' && asset != null) {
+        // Stable fallback for Windows clients with native download crashes.
+        // Windows/SmartScreen still asks for installer approval.
+        final launched = await launchUrl(
+            asset.downloadUrl, mode: LaunchMode.externalApplication);
+        if (!launched) _status('브라우저 다운로드를 열지 못했어.');
       } else if (choice == 'download' && asset != null) {
         await _downloadInstaller(next, asset);
       }
@@ -3107,6 +3231,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
     _backgroundDownloads.setDownloadsNavigationHandler(null);
     _backgroundDownloads.setWindowExitConfirmationHandler(null);
+    _backgroundDownloads.configureTrayActions();
     super.dispose();
   }
 

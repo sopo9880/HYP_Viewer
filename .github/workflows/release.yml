@@ -166,6 +166,26 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
+          Changes in v0.4.11:
+          - Reduce Windows X-to-quit latency: idle complete-exit uses native
+            window closing, while active transfers still require confirmation.
+          - Make the Windows tray useful: left-click show/hide, double-click
+            restore, right-click download status, pause/resume, cancel with
+            confirmation, recent reading, update checks and complete exit.
+          - Add best-effort Windows notifications for successful hidden
+            download batches and Korean/English/Japanese tray labels.
+          - Repair Windows installer download lifecycle flags, add phase
+            diagnostics for unexpected process exits, and offer the official
+            GitHub EXE browser download as the recommended Windows fallback.
+          - Preserve existing Android background transfers and library data.
+            Windows shell timing and actual crash reproduction still require
+            manual installation tests.
+
+          Changes in v0.4.10:
+          - Parse user-visible desktop and Android Instagram comment DOM with
+            a shared safe parser. Exclude timestamps, like counters and
+            image-only placeholders from work-number candidates.
+
           Changes in v0.4.6:
           - Inspect visible public Instagram/YouTube captions, comments,
             images and user-accessible video frames using in-app WebView.
