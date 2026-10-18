@@ -296,7 +296,6 @@ class _HypDashboardState extends State<HypDashboard> {
   bool _remoteHasMore = false;
   int _remoteProgressDone = 0;
   int _remoteProgressTotal = 0;
-  Map<String, int> _remoteFieldTotals = const {};
   Map<String, List<String>> _remoteFieldMatches = const {};
   String _remoteFieldFilter = '';
   final Set<String> _searchedRemoteFields = <String>{};
@@ -546,7 +545,6 @@ class _HypDashboardState extends State<HypDashboard> {
     _remoteHasMore = false;
     _remoteProgressDone = 0;
     _remoteProgressTotal = 0;
-    _remoteFieldTotals = const {};
     _remoteFieldMatches = const {};
     _remoteFieldFilter = '';
     _searchedRemoteFields.clear();
@@ -664,8 +662,6 @@ class _HypDashboardState extends State<HypDashboard> {
       _remoteResults = [...next ? _remoteResults : <OnlineSearchWork>[],
         ...result.works].where((work) => seen.add(work.workId)).toList();
       _remoteTotal = _remoteResults.length;
-      _remoteFieldTotals = OnlineWorkSearch.facetCounts(
-          _remoteResults, _remoteFieldMatches);
       // Avoid an endless Load More button when a mirror repeats the same
       // result page or a page contains only already collected IDs.
       _remoteHasMore = result.hasNextPage &&
@@ -751,8 +747,6 @@ class _HypDashboardState extends State<HypDashboard> {
           for (final entry in fields.entries)
             entry.key: entry.value.toList(),
         };
-        _remoteFieldTotals = OnlineWorkSearch.facetCounts(
-            _remoteResults, _remoteFieldMatches);
         _remoteTotal = _remoteResults.length;
         _loadedRemoteFacets.add(field);
         _remoteFacetPages[field] = page;
