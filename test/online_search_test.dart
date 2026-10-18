@@ -230,6 +230,26 @@ void main() {
     client.close();
   });
 
+  test('community mirror object metadata yields creator and gender facets', () {
+    final work = OnlineSearchWork.fromJson({
+      'id': 876543,
+      'title': 'An unrelated title',
+      'artists': [{'artist': 'pochi'}],
+      'groups': [{'group': 'Circle'}],
+      'tags': [
+        {'tag': 'pochi', 'female': true},
+        {'tag': 'other', 'male': true},
+      ],
+    });
+    expect(work.artists, ['pochi']);
+    expect(work.groups, ['Circle']);
+    expect(work.tags, contains('female:pochi'));
+    expect(OnlineWorkSearch.metadataFields(work, 'pochi'),
+        containsAll(['artist', 'tag', 'female']));
+    expect(OnlineWorkSearch.metadataFields(work, 'pochi'),
+        isNot(contains('male')));
+  });
+
   test('direct field lookup keeps source evidence if mirror omits artist',
       () {
     const remote = OnlineSearchWork(workId: '1012074',
