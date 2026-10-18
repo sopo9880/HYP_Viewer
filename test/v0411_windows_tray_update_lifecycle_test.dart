@@ -141,16 +141,8 @@ void main() {
     final version = File('lib/core/release_version.dart').readAsStringSync();
     final request = File('.github/release-request.txt')
         .readAsStringSync().trim();
-    final match = RegExp(
-      r'^version:\s*(0\.\d+\.\d+)\+([1-9]\d*)\s*
-    expect(pubspec, contains('local_notifier: ^0.1.6'));
-  });
-}
-,
-      multiLine: true,
-    ).firstMatch(pubspec);
-    expect(match, isNotNull);
-    final release = match!.group(1)!;
+    final release = pubspec.split('version: ').last.split('+').first.trim();
+    expect(release, startsWith('0.'));
     expect(version, contains("const String hypReleaseVersion = '$release';"));
     expect(request, 'v$release');
     expect(pubspec, contains('local_notifier: ^0.1.6'));

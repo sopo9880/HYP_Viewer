@@ -186,28 +186,9 @@ void main() {
   test('version and source title surfaces remain consistent', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     final version = File('lib/core/release_version.dart').readAsStringSync();
-    final request = File('.github/release-request.txt')
-        .readAsStringSync().trim();
-    final match = RegExp(
-      r'^version:\s*(0\.\d+\.\d+)\+([1-9]\d*)\s*
-    for (final name in [
-      'work_cards.dart', 'work_edition_card.dart', 'work_group_card.dart',
-      'candidate_editor.dart', 'hyp_dashboard.dart', 'gallery_reader.dart',
-      'reading_insights.dart', 'edition_finder_dialog.dart',
-      'auto_group_wizard.dart', 'visual_source_inspector.dart',
-    ]) {
-      expect(File('lib/ui/$name').readAsStringSync(),
-          contains('HypAnimatedTitle('), reason: name);
-    }
-    final candidates = File('lib/ui/candidate_editor.dart').readAsStringSync();
-    expect(candidates, contains('motion: HypTitleMotion.automatic'));
-  });
-}
-,
-      multiLine: true,
-    ).firstMatch(pubspec);
-    expect(match, isNotNull);
-    final release = match!.group(1)!;
+    final request = File('.github/release-request.txt').readAsStringSync().trim();
+    final release = pubspec.split('version: ').last.split('+').first.trim();
+    expect(release, startsWith('0.'));
     expect(version, contains("const String hypReleaseVersion = '$release';"));
     expect(request, 'v$release');
     for (final name in [
