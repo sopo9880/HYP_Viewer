@@ -229,8 +229,7 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
   Widget _results({ScrollController? controller, bool mobile = false}) {
     final ids = NumberExtractor.extract(_text, source: widget.source.url)
         .map((candidate) => candidate.code).toSet().toList();
-    final strings = _collected.comments;
-    final pinned = _collected.pinnedComments.toSet();
+    final records = _collected.commentRecords;
     return ListView(
       controller: controller,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
@@ -268,20 +267,23 @@ class _InstagramSourceInspectorState extends State<InstagramSourceInspector> {
         if (_diagnostics.isNotEmpty) Text(
           HypI18n.t(context, '댓글 수집 진단') + ': ' + _diagnostics,
           style: Theme.of(context).textTheme.bodySmall),
-        if (strings.isEmpty) const HypText(
+        if (records.isEmpty) const HypText(
           '인스타그램 화면에서 댓글을 직접 펼치고 스크롤한 뒤 다시 읽어줘.'),
-        for (final comment in strings)
+        for (final comment in records)
           ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            leading: pinned.contains(comment)
+            leading: comment.pinned
               ? const Icon(Icons.push_pin_outlined, size: 18)
               : const Icon(Icons.chat_bubble_outline, size: 18),
-            title: SelectableText(comment),
+            title: SelectableText(comment.text),
+            subtitle: comment.author.isEmpty
+                ? null : Text('@${comment.author}'),
           ),
         const SizedBox(height: 8),
         Text(HypI18n.t(context, '번호 후보') + ': ' +
-            (ids.isEmpty ? '-' : ids.join(', '))),
+            ids.length.toString() +
+            (ids.isEmpty ? '' : ' · ' + ids.join(', '))),
         const SizedBox(height: 10),
         TextField(
           controller: _manual,
