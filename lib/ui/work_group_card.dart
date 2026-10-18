@@ -15,6 +15,10 @@ class HypWorkGroupCard extends StatelessWidget {
   final Map<String, Uint8List> coverImages;
   final VoidCallback onOpen;
   final ValueChanged<String> onAction;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onSelect;
+  final VoidCallback? onLongPress;
   const HypWorkGroupCard({
     super.key,
     required this.title,
@@ -22,6 +26,10 @@ class HypWorkGroupCard extends StatelessWidget {
     required this.coverImages,
     required this.onOpen,
     required this.onAction,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onSelect,
+    this.onLongPress,
   });
 
   @override
@@ -33,10 +41,13 @@ class HypWorkGroupCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         key: const Key('open-library-group'),
-        onTap: onOpen,
+        onTap: selectionMode ? (onSelect ?? onOpen) : onOpen,
+        onLongPress: onLongPress,
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all(color: HypColors.border.withValues(alpha: 0.65)),
+            border: Border.all(color: selected ? HypColors.lightPurple :
+              HypColors.border.withValues(alpha: 0.65),
+              width: selected ? 2 : 1),
             borderRadius: BorderRadius.circular(15)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Expanded(child: Padding(
@@ -64,6 +75,14 @@ class HypWorkGroupCard extends StatelessWidget {
                                 errorBuilder: (_, __, ___) =>
                                     const Center(child: Icon(Icons.collections_bookmark))),
                       ),
+                    ),
+                  ),
+                if (selectionMode)
+                  Positioned(left: 5, top: 5,
+                    child: Checkbox(
+                      key: const Key('group-selection-checkbox'),
+                      value: selected,
+                      onChanged: (_) => onSelect?.call(),
                     ),
                   ),
                 Positioned(right: 5, top: 5,

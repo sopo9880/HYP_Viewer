@@ -126,6 +126,42 @@ abstract final class WorkEditionService {
     return positions;
   }
 
+  /// Flatten complete existing groups and independent works in one library
+  /// transaction. Never modify files, reading progress or edition identity.
+  static LibraryBackup mergeSeries(LibraryBackup original,
+      List<String> orderedIds, String seriesId, String title) {
+    if (seriesId.isEmpty || title.trim().isEmpty ||
+        title.trim().length > 200 || orderedIds.isEmpty ||
+        orderedIds.toSet().length != orderedIds.length ||
+        original.works.any((w) => w.groupId == seriesId)) {
+      throw StateError('통합 묶음 이름 또는 작품 선택을 확인해 줘.');
+    }
+    final byId = {for (final work in original.works) work.workId: work};
+    if (orderedIds.any((id) => !byId.containsKey(id))) {
+      throw StateError('현재 서재에 없는 작품을 선택했어.');
+    }
+    final positions = _chapterPositions(original.works, orderedIds);
+    if (positions.values.toSet().length < 2) {
+      throw StateError('서로 다른 작품 또는 회차 2개 이상을 선택해 줘.');
+    }
+    final oldGroups = positions.keys.map((id) =>
+        byId[id]!.groupId).where((id) => id.isNotEmpty).toSet();
+    for (final oldGroup in oldGroups) {
+      if (original.works.any((work) => work.groupId == oldGroup &&
+          !positions.containsKey(work.workId))) {
+        throw StateError('기존 묶음은 일부만 합칠 수 없어. 묶음 전체를 선택해 줘.');
+      }
+    }
+    return LibraryBackup(
+      works: original.works.map((work) {
+        final pos = positions[work.workId];
+        return pos == null ? work : work.copyWith(
+          groupId: seriesId, groupTitle: title.trim(), groupOrder: pos);
+      }).toList(),
+      collections: original.collections,
+    );
+  }
+
   static LibraryBackup createSeries(
       LibraryBackup original, List<String> orderedIds,
       String seriesId, String title) {
