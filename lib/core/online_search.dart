@@ -205,7 +205,38 @@ class OnlineWorkSearch {
   }) async {
     final queries = planQueries(raw);
     final exactId = raw.trim();
-    if (page == 1 && RegExp(r'^\d{6,9}
+    if (page == 1 && RegExp(r'^\d{6,9}$').hasMatch(exactId)) {
+      try {
+        final info = await HitomiGalleryProvider(client).fetchInfo(exactId);
+        final requested = WorkEditions.canonicalLanguage(language);
+        final actual = WorkEditions.canonicalLanguage(info.language);
+        final matchesLanguage = requested.isEmpty || actual.isEmpty ||
+            requested == actual;
+        final work = OnlineSearchWork(
+          workId: info.workId, title: info.title,
+          titleAliases: info.titleAliases,
+          artists: info.author.split(',').map((e) => e.trim())
+              .where((e) => e.isNotEmpty).toList(),
+          groups: info.group.split(',').map((e) => e.trim())
+              .where((e) => e.isNotEmpty).toList(),
+          series: info.series.split(',').map((e) => e.trim())
+              .where((e) => e.isNotEmpty).toList(),
+          tags: info.tags, language: info.language, type: info.type,
+          date: info.date, pageCount: info.pageCount,
+        );
+        final works = matchesLanguage ? [work] : <OnlineSearchWork>[];
+        onProgress?.call(1, 1);
+        final result = OnlineSearchResult(works, works.length, page,
+            fieldTotals: {'general': works.length},
+            matchedFields: {if (matchesLanguage) work.workId: ['general']});
+        onPartial?.call(result);
+        return result;
+      } catch (_) {
+        // Missing/unreachable metadata is not proof the gallery is absent.
+        // Fall back to the community search with its normal error handling.
+      }
+    }
+    final unique = <String, OnlineSearchWork>{};
     final matched = <String, Set<String>>{};
     final counts = <String, int>{};
     final warnings = <String>{};
