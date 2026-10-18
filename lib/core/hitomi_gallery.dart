@@ -191,7 +191,10 @@ class HitomiGalleryProvider {
             .microsecondsSinceEpoch.toString()} : null);
       final raw = await _readScript(uri, workId: workId, noCache: noCache);
       final match = RegExp(r'\bgalleryinfo\s*=').firstMatch(raw);
-      final start = match == null ? -1 : raw.indexOf('{', match.end);
+      // Some mirrors return a bare JSON object instead of JS assignment.
+      // Never parse an unrelated script object.
+      final start = match != null ? raw.indexOf('{', match.end)
+          : raw.trimLeft().startsWith('{') ? raw.indexOf('{') : -1;
       final end = raw.lastIndexOf('}');
       if (start < 0 || end <= start) {
         throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',

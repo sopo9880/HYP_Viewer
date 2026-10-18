@@ -175,7 +175,9 @@ class WindowsDpiManager extends ChangeNotifier {
   }
 
   Future<void> updatePreferences(WindowsDpiPreferences updated) async {
-    updated.arguments; // Validate user options before saving or starting.
+    if (updated.arguments.isEmpty) {
+      throw const FormatException('GoodbyeDPI arguments must not be empty');
+    }
     final previous = preferences;
     preferences = updated;
     notifyListeners();
@@ -228,7 +230,9 @@ class WindowsDpiManager extends ChangeNotifier {
     if (phase == WindowsDpiPhase.running ||
         phase == WindowsDpiPhase.starting) return;
     try {
-      preferences.arguments; // Reject unsupported custom arguments.
+      if (preferences.arguments.isEmpty) {
+        throw const FormatException('GoodbyeDPI arguments must not be empty');
+      }
       final toolsDir = Directory(File(Platform.resolvedExecutable).parent.path +
           Platform.pathSeparator + 'tools');
       final supervisor = File(toolsDir.path + Platform.pathSeparator +
