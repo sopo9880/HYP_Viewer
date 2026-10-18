@@ -63,6 +63,12 @@ abstract final class WorkEditions {
             b.sourceSeries.trim().toLowerCase()) {
       return const EditionMatch(0, '서로 다른 원본 시리즈');
     }
+    if (WorkGrouping.episodeRange(a.title) != null ||
+        WorkGrouping.episodeRange(b.title) != null ||
+        WorkGrouping.isDerivative(a.title) !=
+            WorkGrouping.isDerivative(b.title)) {
+      return const EditionMatch(0, '합본·파생본은 단일 회차의 언어판이 아님');
+    }
     final ca = WorkGrouping.episodeNumber(a);
     final cb = WorkGrouping.episodeNumber(b);
     if (ca != null && cb != null && ca != cb) {
