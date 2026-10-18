@@ -12,6 +12,41 @@ abstract final class LocalWorkSearch {
   static String normalize(String s) => s.trim().toLowerCase()
       .replaceAll(RegExp(r'\s+'), ' ');
 
+  /// Search relevance affects result presentation, never the user's
+  /// configured library order or stored work metadata.
+  static List<WorkEntry> rankResults(Iterable<WorkEntry> works, String raw) {
+    final terms = raw.split('|').map(normalize)
+        .where((value) => value.isNotEmpty && !value.contains(':')).toList();
+    final result = works.toList();
+    if (terms.isEmpty) return result;
+    int relevance(WorkEntry work) {
+      final names = [work.title, ...work.titleAliases].map(normalize).toList();
+      var score = 0;
+      for (final term in terms) {
+        if (normalize(work.workId) == term) score += 110;
+        if (names.any((name) => name == term)) {
+          score += 80;
+        } else if (names.any((name) => name.contains(term))) {
+          score += 45;
+        }
+        if (normalize(work.author) == term) score += 35;
+        if (normalize(work.sourceSeries) == term) score += 20;
+        if (normalize(work.sourceGroup) == term) score += 20;
+      }
+      return score;
+    }
+    final order = <String, int>{};
+    for (var i = 0; i < result.length; i++) {
+      order[result[i].key] = i;
+    }
+    result.sort((a, b) {
+      final diff = relevance(b).compareTo(relevance(a));
+      return diff != 0 ? diff :
+          (order[a.key] ?? 0).compareTo(order[b.key] ?? 0);
+    });
+    return result;
+  }
+
   static bool matchesLanguage(WorkEntry work, String selected) {
     if (selected.trim().isEmpty) return true;
     final actual = WorkEditions.canonicalLanguage(work.sourceLanguage);
