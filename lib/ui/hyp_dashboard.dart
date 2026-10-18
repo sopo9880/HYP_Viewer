@@ -2446,41 +2446,43 @@ class _HypDashboardState extends State<HypDashboard> {
         Text(AppLocalizations.of(context)!.searchFetchedUnique(_remoteTotal),
             style: Theme.of(context).textTheme.titleMedium),
         if (_search.text.trim().isNotEmpty)
-          SingleChildScrollView(
-            key: const Key('search-facet-scroll'),
-            scrollDirection: Axis.horizontal,
-            child: Row(children: [
-              FilterChip(
-                key: const Key('search-facet-all'),
-                label: Text(AppLocalizations.of(context)!.searchAllFields),
-                selected: _remoteFieldFilter.isEmpty,
-                onSelected: (_) => _selectRemoteFacet('', true),
-              ),
-              const SizedBox(width: 6),
-              for (final field in visibleFacets) ...[
+          Row(children: [
+            Expanded(child: SingleChildScrollView(
+              key: const Key('search-facet-scroll'),
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
                 FilterChip(
-                  key: Key('search-facet-' + field),
-                  label: Text(AppLocalizations.of(context)!.searchFieldCount(
-                    _searchFieldLabel(context, field),
-                    _remoteFieldTotals[field] ?? 0,
-                  )),
-                  selected: _remoteFieldFilter == field,
-                  onSelected: (chosen) => _selectRemoteFacet(field, chosen),
+                  key: const Key('search-facet-all'),
+                  label: Text(AppLocalizations.of(context)!.searchAllFields),
+                  selected: _remoteFieldFilter.isEmpty,
+                  onSelected: (_) => _selectRemoteFacet('', true),
                 ),
                 const SizedBox(width: 6),
-              ],
-              TextButton.icon(
-                key: const Key('search-facet-show-zeros'),
-                onPressed: () => setState(() =>
-                    _showEmptyRemoteFields = !_showEmptyRemoteFields),
-                icon: Icon(_showEmptyRemoteFields
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined, size: 18),
-                label: HypText(_showEmptyRemoteFields
-                    ? '0건 분야 숨기기' : '0건 분야 보기'),
-              ),
-            ]),
-          ),
+                for (final field in visibleFacets) ...[
+                  FilterChip(
+                    key: Key('search-facet-' + field),
+                    label: Text(AppLocalizations.of(context)!.searchFieldCount(
+                      _searchFieldLabel(context, field),
+                      _remoteFieldTotals[field] ?? 0,
+                    )),
+                    selected: _remoteFieldFilter == field,
+                    onSelected: (chosen) => _selectRemoteFacet(field, chosen),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+              ]),
+            )),
+            IconButton(
+              key: const Key('search-facet-show-zeros'),
+              tooltip: _showEmptyRemoteFields
+                  ? '0건 분야 숨기기' : '0건 분야 보기',
+              onPressed: () => setState(() =>
+                  _showEmptyRemoteFields = !_showEmptyRemoteFields),
+              icon: Icon(_showEmptyRemoteFields
+                  ? Icons.filter_list_off_outlined
+                  : Icons.filter_list_outlined),
+            ),
+          ]),
         if (_remoteWarnings.isNotEmpty)
           ExpansionTile(
             title: Text(AppLocalizations.of(context)!.searchPartialSources),
