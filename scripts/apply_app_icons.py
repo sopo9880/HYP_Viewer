@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from io import BytesIO
+import hashlib
 
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "assets" / "icons" / "hyp_app_icon.jpg"
+BRANDING_PARTS = ROOT / "assets" / "icons" / "hyp_brand"
+BRANDING_SHA256 = "08679c28e4b8bda686577196f05f0903bbcf1bc86b7be6a06e5f5837adf2e03a"
+
 TRAY = ROOT / "assets" / "icons" / "hyp_tray.ico"
 ANDROID = {
     "mdpi": 48,
@@ -28,9 +32,20 @@ ICON_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48),
 
 def apply(platform: str, *, root: Path = ROOT) -> list[Path]:
     source = root / "assets" / "icons" / "hyp_app_icon.jpg"
-    if not source.is_file():
-        raise FileNotFoundError(f"Approved icon is missing: {source}")
-    with Image.open(source) as image:
+    parts = root / "assets" / "icons" / "hyp_brand"
+    if source.is_file():
+        # For downstream maintainers who want to replace the brand icon,
+        # a direct replacement source takes precedence.
+        image_source = source.read_bytes()
+    else:
+        files = [parts / f"part_{i:02d}.bin" for i in range(8)]
+        if not all(p.is_file() for p in files):
+            raise FileNotFoundError(
+                f"Approved icon parts are missing from {parts}")
+        image_source = b"".join(p.read_bytes() for p in files)
+        if hashlib.sha256(image_source).hexdigest() != BRANDING_SHA256:
+            raise ValueError("The approved HYP icon failed SHA-256 integrity")
+    with Image.open(BytesIO(image_source)) as image:
         image = image.convert("RGB")
         if image.width < 192 or image.height < 192:
             raise ValueError("Branding image must be at least 192px square")
