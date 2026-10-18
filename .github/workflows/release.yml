@@ -166,6 +166,20 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
+          Changes in v0.4.15:
+          - Broaden reviewed Auto grouping using title similarity even when
+            author and circle metadata are unavailable.
+          - Recognize abbreviated names, special editions and extended works.
+            Include borderline pairs supported by shared creator, series or
+            multiple meaningful shared title words.
+          - Distinguish strong, similar and broad candidates in the wizard;
+            do not automatically merge or alter existing library records.
+          - Add a localized "Back to Start" option above "Keep Reading" in
+            the final-page dialog. Jump to page 1 in single, spread, and webtoon
+            modes without marking completed or closing the viewer.
+          - Preserve independent language editions and block simple
+            transitive chains between unrelated works.
+
           Changes in v0.4.14:
           - Merge complete existing series groups and standalone library works
             into a single flat group after reviewing its members and order.

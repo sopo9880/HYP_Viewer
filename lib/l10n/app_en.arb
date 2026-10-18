@@ -640,6 +640,7 @@
   "readerFinishBody": "You've read the last page. Mark this work complete and exit the reader?",
   "readerFinishAndExit": "Complete and Exit",
   "readerExitWithoutFinishing": "Exit Without Completing",
+  "readerBackToStart": "Back to Start",
   "readerContinueReading": "Keep Reading",
   "settingsCompleteConfirmTitle": "Confirm finishing on the last page",
   "settingsCompleteConfirmHint": "Press Next on the last page to choose whether to mark complete and exit. Turn off for automatic completion when the last page displays.",

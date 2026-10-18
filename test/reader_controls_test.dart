@@ -335,4 +335,94 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('1 / 5'), findsOneWidget);
   });
+  testWidgets('restart action appears above continue and rewinds all viewer modes',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final mode in ['normal', 'spread', 'webtoon']) {
+      final completed = <int>[];
+      final readPages = <int>[];
+      final settings = ReaderSettings(
+        hideReaderUiOnOpen: false,
+        preloadPages: 0,
+        twoPageSpread: mode == 'spread',
+        webtoonMode: mode == 'webtoon',
+      );
+      await tester.pumpWidget(_localizedApp(
+        key: ValueKey('restart-$mode'),
+        home: GalleryReader(
+          key: ValueKey('reader-$mode'),
+          work: WorkEntry.create(workId: '2711759')
+              .copyWith(currentPage: 5),
+          archive: _Pages(),
+          diskCacheEnabled: false,
+          settings: settings,
+          onPageChanged: readPages.add,
+          onFinishedReading: completed.add,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      // Match the image decoder's asynchronous end-frame timing.
+      await tester.runAsync(() async =>
+          Future<void>.delayed(const Duration(milliseconds: 90)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('5 / 5'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('reader-next')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('reader-finish-dialog')), findsOneWidget,
+          reason: '$mode did not open the completion dialog');
+      final restart = find.byKey(const Key('reader-restart-from-first'));
+      final keepReading = find.byKey(const Key('reader-keep-reading'));
+      expect(find.text('처음으로'), findsOneWidget);
+      expect(tester.getTopLeft(restart).dy,
+          lessThan(tester.getTopLeft(keepReading).dy));
+
+      await tester.tap(restart);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('reader-finish-dialog')), findsNothing);
+      expect(find.text('1 / 5'), findsOneWidget,
+          reason: '$mode must rewind to the first page');
+      expect(readPages.last, 1);
+      expect(completed, isEmpty,
+          reason: 'Restarting must never flag the work completed');
+    }
+  });
+
+  testWidgets('restart can revisit the end without silently completing',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final completed = <int>[];
+    await tester.pumpWidget(_localizedApp(
+      home: GalleryReader(
+        work: WorkEntry.create(workId: '2711759')
+            .copyWith(currentPage: 5),
+        archive: _Pages(), diskCacheEnabled: false,
+        settings: const ReaderSettings(
+          hideReaderUiOnOpen: false, preloadPages: 0,
+        ),
+        onPageChanged: (_) {},
+        onFinishedReading: completed.add,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async =>
+        Future<void>.delayed(const Duration(milliseconds: 90)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('reader-next')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reader-restart-from-first')));
+    await tester.pumpAndSettle();
+    expect(completed, isEmpty);
+    await tester.sendKeyEvent(LogicalKeyboardKey.end);
+    await tester.pumpAndSettle();
+    expect(find.text('5 / 5'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('reader-next')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reader-finish-dialog')), findsOneWidget);
+    expect(completed, isEmpty);
+  });
+
 }

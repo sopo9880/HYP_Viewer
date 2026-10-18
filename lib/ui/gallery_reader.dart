@@ -127,32 +127,50 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
         context: context,
         builder: (dialogContext) => AlertDialog(
           key: const Key('reader-finish-dialog'),
+          scrollable: true,
           title: Text(labels.readerFinishTitle),
-          content: Text(labels.readerFinishBody),
-          actions: [
-            TextButton(
-              key: const Key('reader-keep-reading'),
-              onPressed: () => Navigator.of(dialogContext).pop('stay'),
-              child: Text(labels.readerContinueReading),
-            ),
-            TextButton(
-              key: const Key('reader-exit-incomplete'),
-              onPressed: () => Navigator.of(dialogContext).pop('exit'),
-              child: Text(labels.readerExitWithoutFinishing),
-            ),
-            FilledButton(
-              key: const Key('reader-finish-and-exit'),
-              onPressed: () => Navigator.of(dialogContext).pop('complete'),
-              child: Text(labels.readerFinishAndExit),
-            ),
-          ],
+          // Keep actions vertically ordered even on wide desktop windows.
+          // Restart is intentionally first, above "Keep Reading".
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(labels.readerFinishBody),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                key: const Key('reader-restart-from-first'),
+                onPressed: () => Navigator.of(dialogContext).pop('restart'),
+                icon: const Icon(Icons.first_page),
+                label: Text(labels.readerBackToStart),
+              ),
+              TextButton(
+                key: const Key('reader-keep-reading'),
+                onPressed: () => Navigator.of(dialogContext).pop('stay'),
+                child: Text(labels.readerContinueReading),
+              ),
+              TextButton(
+                key: const Key('reader-exit-incomplete'),
+                onPressed: () => Navigator.of(dialogContext).pop('exit'),
+                child: Text(labels.readerExitWithoutFinishing),
+              ),
+              FilledButton(
+                key: const Key('reader-finish-and-exit'),
+                onPressed: () => Navigator.of(dialogContext).pop('complete'),
+                child: Text(labels.readerFinishAndExit),
+              ),
+            ],
+          ),
         ),
       );
     } finally {
       _completionPromptOpen = false;
     }
     if (!mounted) return;
-    if (answer == 'complete') {
+    if (answer == 'restart') {
+      // Rewind without marking complete or dismissing the reader. _jumpTo
+      // updates the resume position and handles spreads and webtoon scroll.
+      _jumpTo(0);
+    } else if (answer == 'complete') {
       _completionReported = true;
       widget.onFinishedReading?.call(widget.archive.pageCount);
       if (Navigator.of(context).canPop()) Navigator.of(context).pop();
