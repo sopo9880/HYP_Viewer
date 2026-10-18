@@ -35,7 +35,7 @@ void main() {
     expect(items.last.title, '작품 9999999');
   });
 
-  test('does not trust forged page origin or userinfo/port URLs', () {
+  test('does not trust forged origins, credentials or non-default ports', () {
     final items = [
       {'url': 'https://hitomi.la/galleries/1234567.html',
         'title': 'Hidden'},
@@ -49,8 +49,13 @@ void main() {
       Uri.parse('https://user@hitomi.la/galleries/1234567.html')), isNull);
     expect(HitomiWebSearch.galleryId(
       Uri.parse('http://hitomi.la/galleries/1234567.html')), isNull);
+    // Dart Uri canonicalizes an explicit default HTTPS port (443) into
+    // the normal same-origin URL. A non-default port must still be rejected.
     expect(HitomiWebSearch.galleryId(
-      Uri.parse('https://hitomi.la:443/galleries/1234567.html')), isNull);
+      Uri.parse('https://hitomi.la:443/galleries/1234567.html')),
+      '1234567');
+    expect(HitomiWebSearch.galleryId(
+      Uri.parse('https://hitomi.la:444/galleries/1234567.html')), isNull);
   });
 
   test('rejects numeric noise and malformed snapshots', () {

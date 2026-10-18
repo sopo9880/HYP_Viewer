@@ -96,9 +96,13 @@ void main() {
     final gallery = await HitomiGalleryProvider(client).load(id);
     await expectLater(
       gallery.loadPage(0),
-      throwsA(isA<FormatException>().having(
-          (e) => e.message, 'message',
-          allOf(contains('DNS 조회 실패'), contains('w2.gold-usergeneratedcontent.net')))),
+      throwsA(isA<OnlineReaderFailure>()
+          .having((e) => e.code, 'code', 'IMAGE_DNS_FAILURE')
+          .having((e) => e.stage, 'stage', OnlineReaderStage.image)
+          .having((e) => e.host, 'diagnostic host',
+              'w2.gold-usergeneratedcontent.net')
+          .having((e) => e.message, 'safe message',
+              contains('DNS 조회 실패'))),
     );
     client.close();
   });
