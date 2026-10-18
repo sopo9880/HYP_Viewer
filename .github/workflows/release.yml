@@ -166,6 +166,27 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
+          Changes in v0.4.13:
+          - Improve unified online search reliability: validate translated
+            aliases independently, retry alternate metadata mirrors when
+            usable results are empty, and look up exact gallery IDs directly.
+          - Reduce unnecessary field searches while preserving scoped
+            artist, group, series and tag discovery for sparse results.
+          - Derive online search field chips from fetched unique work metadata
+            instead of overlapping provider totals; allow a selected facet
+            to fetch additional results without discarding previous results.
+          - Use compact horizontally scrollable filters on Android with an
+            option to reveal zero-result categories. Distinguish saved works,
+            newly discovered works and visible language-edition cards.
+          - Extend reviewed Auto grouping suggestions to recognize collected
+            episode ranges, extras, revised and expanded versions; prevent
+            transitive grouping of unrelated titles and preserve chapter/
+            language-edition boundaries. Do not automatically merge progress.
+          - Keep existing library backups, work IDs, downloaded CBZ files,
+            edition links and independent reading progress unchanged.
+          - Public metadata mirrors may return incomplete results; verify
+            uncertain candidates before confirming grouped editions.
+
           Changes in v0.4.12:
           - Fix Windows system-tray right click: explicitly pop up the
             prepared native context menu; report plugin errors to diagnostics.
