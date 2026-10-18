@@ -318,7 +318,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   Future<void> _loadBlacklist() async {
     try {
       final loaded = await _blacklistStore.load();
-      await _blacklistWrites;
+      // Publish initial state before queued writes are unblocked.
+      // Waiting for _blacklistWrites here would deadlock a startup mutation.
       if (mounted) setState(() => blacklist = loaded);
     } catch (error) {
       _blacklistLoadFailed = true;
