@@ -135,6 +135,7 @@ class WindowsDpiManager extends ChangeNotifier {
   Future<void>? _initialization;
   Directory? _session;
   Timer? _monitor;
+  DateTime? _launchAt;
 
   Future<File> get _settingsFile async {
     final home = await getApplicationSupportDirectory();
@@ -255,6 +256,7 @@ class WindowsDpiManager extends ChangeNotifier {
           }), flush: true);
       await File(folder.path + Platform.pathSeparator + 'status.txt')
           .writeAsString('starting', flush: true);
+      _launchAt = DateTime.now();
       _setPhase(WindowsDpiPhase.starting);
       await Process.start('powershell.exe', [
         '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
@@ -280,6 +282,15 @@ class WindowsDpiManager extends ChangeNotifier {
     try {
       if (!await status.exists()) return;
       final value = (await status.readAsString()).trim();
+      if (phase == WindowsDpiPhase.starting && value == 'starting' &&
+          _launchAt != null &&
+          DateTime.now().difference(_launchAt!) > const Duration(seconds: 50)) {
+        await File(dir.path + Platform.pathSeparator + 'stop.signal')
+            .writeAsString('stop', flush: true);
+        _setPhase(WindowsDpiPhase.failed, 'elevation-timeout');
+        _monitor?.cancel();
+        return;
+      }
       if (value.startsWith('running:')) {
         _setPhase(WindowsDpiPhase.running);
       } else if (value == 'stopped') {

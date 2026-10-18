@@ -270,7 +270,7 @@ class OnlineWorkSearch {
       }
     }
     const order = ['general', 'artist', 'group', 'series', 'tag',
-                   'female', 'male', 'advanced'];
+                   'female', 'male', 'web', 'advanced'];
     return {
       for (final field in order)
         if (byField.containsKey(field)) field: byField[field]!.length,
