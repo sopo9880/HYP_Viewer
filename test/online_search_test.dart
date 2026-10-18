@@ -190,12 +190,15 @@ void main() {
       final query = (jsonDecode(request.body)['query'] as List).first as String;
       queried.add(query);
       return http.Response(jsonEncode({
-        'results': [
+        'results': query == 'pochi' ? [
           {'id': 1012074, 'title': 'Ane Naru Mono 4',
            'artists': ['pochi'], 'language': 'korean'},
           for (var i = 0; i < 8; i++)
             {'id': 1002000 + i, 'title': 'Pochi book ' + i.toString()},
-        ],
+        ] : query == 'artist:pochi' ? [
+          {'id': 1012074, 'title': 'Ane Naru Mono 4',
+           'artists': ['pochi'], 'language': 'korean'},
+        ] : [],
         // Provider count may include overlaps and must not be the facet count.
         'count': 39,
       }), 200);
