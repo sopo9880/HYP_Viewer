@@ -277,6 +277,12 @@ class _HypDashboardState extends State<HypDashboard> {
   Map<String, int> _remoteFieldTotals = const {};
   Map<String, List<String>> _remoteFieldMatches = const {};
   String _remoteFieldFilter = '';
+  bool _showEmptyRemoteFields = false;
+  final Set<String> _loadedRemoteFacets = {};
+  final Set<String> _loadingRemoteFacets = {};
+  final Map<String, int> _remoteFacetPages = {};
+  final Set<String> _moreRemoteFacets = {};
+  String? _remoteFacetError;
   List<String> _remoteWarnings = const [];
   final Map<String, (DateTime, OnlineSearchResult)> _remoteCache = {};
   final FocusNode _searchFocus = FocusNode();
@@ -515,6 +521,12 @@ class _HypDashboardState extends State<HypDashboard> {
     _remoteFieldTotals = const {};
     _remoteFieldMatches = const {};
     _remoteFieldFilter = '';
+    _showEmptyRemoteFields = false;
+    _loadedRemoteFacets.clear();
+    _loadingRemoteFacets.clear();
+    _remoteFacetPages.clear();
+    _moreRemoteFacets.clear();
+    _remoteFacetError = null;
     _remoteWarnings = const [];
     _remoteBusy = false;
     if (mounted) setState(() {});
@@ -593,7 +605,12 @@ class _HypDashboardState extends State<HypDashboard> {
         _activeRemoteSearchClient = null;
       }
       client.close();
-      if (mounted && epoch == _searchEpoch) setState(() => _remoteBusy = false);
+      if (mounted && epoch == _searchEpoch) {
+        setState(() => _remoteBusy = false);
+        if (_remoteFieldFilter.isNotEmpty) {
+          _loadRemoteFacet(_remoteFieldFilter, epoch: epoch);
+        }
+      }
     }
   }
 
@@ -603,7 +620,6 @@ class _HypDashboardState extends State<HypDashboard> {
     final previousCount = _remoteResults.length;
     setState(() {
       _remotePage = result.page;
-      _remoteFieldTotals = result.fieldTotals;
       _remoteFieldMatches = <String, List<String>>{
         if (next) ..._remoteFieldMatches,
         for (final entry in result.matchedFields.entries)
@@ -618,11 +634,113 @@ class _HypDashboardState extends State<HypDashboard> {
       _remoteResults = [...next ? _remoteResults : <OnlineSearchWork>[],
         ...result.works].where((work) => seen.add(work.workId)).toList();
       _remoteTotal = _remoteResults.length;
+      _remoteFieldTotals = OnlineWorkSearch.facetCounts(
+          _remoteResults, _remoteFieldMatches);
       // Avoid an endless Load More button when a mirror repeats the same
       // result page or a page contains only already collected IDs.
       _remoteHasMore = result.hasNextPage &&
           (!next || _remoteTotal > previousCount) && result.page < 100;
     });
+  }
+
+  void _selectRemoteFacet(String field, bool chosen) {
+    setState(() => _remoteFieldFilter = chosen ? field : '');
+    if (chosen) _loadRemoteFacet(field, epoch: _searchEpoch);
+  }
+
+  /// Explicitly search the selected metadata field even when a dense title
+  /// result skipped broad field expansion. Never replace the previous
+  /// result set or alter library records; merge only new public gallery IDs.
+  Future<void> _loadRemoteFacet(String field, {
+    required int epoch, bool next = false,
+  }) async {
+    if (!mounted || _searchScope == 'local' || _remoteBusy ||
+        field == 'general' || field == 'advanced' ||
+        _loadingRemoteFacets.contains(field) ||
+        !const {'artist', 'group', 'series', 'tag', 'female', 'male'}
+            .contains(field) ||
+        (!next && _loadedRemoteFacets.contains(field)) ||
+        (next && !_moreRemoteFacets.contains(field))) return;
+    final raw = _search.text.trim();
+    if (raw.isEmpty || RegExp(r'^[a-z_]+:', caseSensitive: false)
+        .hasMatch(raw)) return;
+    final terms = raw.split('|').map((part) => part.trim())
+        .where((part) => part.length >= 2 &&
+            part.length + field.length + 1 <= 150).take(2).toList();
+    if (terms.isEmpty) return;
+    final page = next ? (_remoteFacetPages[field] ?? 1) + 1 : 1;
+    setState(() {
+      _loadingRemoteFacets.add(field);
+      _remoteFacetError = null;
+    });
+    final client = http.Client();
+    try {
+      final service = OnlineWorkSearch(client);
+      final responses = await Future.wait(terms.map((term) async {
+        try {
+          return await service.search(field + ':' + term,
+              page: page, language: _searchLanguage);
+        } catch (_) {
+          return null;
+        }
+      }));
+      if (!mounted || epoch != _searchEpoch) return;
+      final valid = responses.whereType<OnlineSearchResult>().toList();
+      if (valid.isEmpty) {
+        throw StateError('분야별 검색 서버에 연결하지 못했어.');
+      }
+      setState(() {
+        final known = <String, OnlineSearchWork>{
+          for (final work in _remoteResults) work.workId: work,
+        };
+        final fields = <String, Set<String>>{
+          for (final entry in _remoteFieldMatches.entries)
+            entry.key: {...entry.value},
+        };
+        var added = 0;
+        var hasMore = false;
+        for (final response in valid) {
+          hasMore = hasMore || (response.works.isNotEmpty &&
+              (response.total > page * 25 || response.works.length >= 25));
+          for (final work in response.works) {
+            final previous = known[work.workId];
+            if (previous == null) added++;
+            // Preserve the original record when the focused mirror returns
+            // fewer metadata fields; add only verified public evidence.
+            final enriched = previous == null ? work :
+                OnlineWorkSearch.combineWorks(previous, work);
+            known[work.workId] = enriched;
+            fields.putIfAbsent(work.workId, () => <String>{})
+              ..add(field)
+              ..addAll(OnlineWorkSearch.metadataFields(enriched, raw));
+          }
+        }
+        _remoteResults = known.values.toList();
+        _remoteFieldMatches = {
+          for (final entry in fields.entries)
+            entry.key: entry.value.toList(),
+        };
+        _remoteFieldTotals = OnlineWorkSearch.facetCounts(
+            _remoteResults, _remoteFieldMatches);
+        _remoteTotal = _remoteResults.length;
+        _loadedRemoteFacets.add(field);
+        _remoteFacetPages[field] = page;
+        if (hasMore && added > 0 && page < 100) {
+          _moreRemoteFacets.add(field);
+        } else {
+          _moreRemoteFacets.remove(field);
+        }
+      });
+    } catch (error) {
+      if (mounted && epoch == _searchEpoch) {
+        setState(() => _remoteFacetError = error.toString());
+      }
+    } finally {
+      client.close();
+      if (mounted && epoch == _searchEpoch) {
+        setState(() => _loadingRemoteFacets.remove(field));
+      }
+    }
   }
 
   void _navigate(HypPage page) {
