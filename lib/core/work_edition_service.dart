@@ -126,6 +126,84 @@ abstract final class WorkEditionService {
     return positions;
   }
 
+  /// Flatten selected full series together with standalone works into exactly
+  /// one series. This is a single library transaction and never changes work
+  /// IDs, edition links, read progress, metadata, or offline file references.
+  ///
+  /// A caller cannot silently take a partial member from another series:
+  /// a member already grouped must have its entire source series selected.
+  static LibraryBackup mergeSelectedSeries(
+    LibraryBackup original, {
+    required Iterable<String> selectedGroupIds,
+    required Iterable<String> selectedWorkIds,
+    required String destinationGroupId,
+    required String title,
+  }) {
+    final groupIds = selectedGroupIds.where((s) => s.isNotEmpty).toSet();
+    final chosenIds = selectedWorkIds.toSet();
+    final name = title.trim();
+    if (destinationGroupId.isEmpty || destinationGroupId.length > 120 ||
+        name.isEmpty || name.length > 200) {
+      throw StateError('통합 묶음 ID와 이름이 올바르지 않아.');
+    }
+    final all = original.works;
+    final allGroups = all.where((w) => w.groupId.isNotEmpty)
+        .map((w) => w.groupId).toSet();
+    if (!allGroups.containsAll(groupIds)) {
+      throw StateError('선택한 기존 묶음을 찾을 수 없어.');
+    }
+    final existingIds = all.map((w) => w.workId).toSet();
+    if (!existingIds.containsAll(chosenIds)) {
+      throw StateError('선택한 작품이 서재에 없어.');
+    }
+    final selected = <String>{
+      ...chosenIds,
+      for (final work in all)
+        if (groupIds.contains(work.groupId)) work.workId,
+    };
+    // All linked language editions of the same chapter travel together.
+    final editionIds = all.where((w) => selected.contains(w.workId) &&
+        w.editionGroupId.isNotEmpty).map((w) => w.editionGroupId).toSet();
+    for (final work in all) {
+      if (editionIds.contains(work.editionGroupId) &&
+          work.editionGroupId.isNotEmpty) selected.add(work.workId);
+    }
+    for (final work in all.where((w) => selected.contains(w.workId))) {
+      if (work.groupId.isNotEmpty && !groupIds.contains(work.groupId)) {
+        throw StateError('선택하지 않은 묶음의 일부 작품을 이동할 수 없어.');
+      }
+    }
+    final selectedWorks = all.where((w) => selected.contains(w.workId)).toList();
+    final logicalCount = selectedWorks.map(WorkEditions.groupKey).toSet().length;
+    if (logicalCount < 2) {
+      throw StateError('서로 다른 회차 2개 이상이 필요해.');
+    }
+    // Keep existing chapter order inside each source group; selected groups
+    // come first, standalone works after. Ties have stable work identifiers.
+    final groupRanks = <String, int>{};
+    var i = 0;
+    for (final id in groupIds) { groupRanks[id] = i++; }
+    selectedWorks.sort((a,b) {
+      final ag = groupRanks[a.groupId] ?? groupRanks.length;
+      final bg = groupRanks[b.groupId] ?? groupRanks.length;
+      if (ag != bg) return ag.compareTo(bg);
+      if (a.groupId.isNotEmpty && b.groupId == a.groupId) {
+        final n = a.groupOrder.compareTo(b.groupOrder);
+        if (n != 0) return n;
+      }
+      return WorkGrouping.compareChapters(a, b);
+    });
+    final positions = _chapterPositions(all,
+        selectedWorks.map((w) => w.workId).toList());
+    return LibraryBackup(
+      works: all.map((w) => selected.contains(w.workId)
+          ? w.copyWith(groupId: destinationGroupId,
+              groupTitle: name, groupOrder: positions[w.workId] ?? 0)
+          : w).toList(),
+      collections: original.collections,
+    );
+  }
+
   static LibraryBackup createSeries(
       LibraryBackup original, List<String> orderedIds,
       String seriesId, String title) {
