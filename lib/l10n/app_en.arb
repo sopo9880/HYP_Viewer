@@ -650,6 +650,8 @@
   "webSearchUnsupported": "In-app web search is unavailable on this platform.",
   "webSearchImported": "Including {count} works imported from website",
   "@webSearchImported": {"placeholders":{"count":{"type":"int"}}},
+  "readerOnlineReturnedId": "Returned gallery ID",
+  "readerOnlineRetried": "Gallery ID still mismatched after bypassing cache.",
   "readerOnlineFailureTitle": "In-app online reading failed",
   "readerOnlineFailureIntro": "The failing stage and error code are shown below.",
   "readerOnlineFailureHelp": "Copy the diagnostic when reporting a problem. Raw server responses and sign-in data are not included.",

@@ -650,6 +650,8 @@
   "webSearchUnsupported": "이 플랫폼에서는 앱 내부 웹 검색을 지원하지 않습니다.",
   "webSearchImported": "웹 검색에서 가져온 작품 {count}개 포함",
   "@webSearchImported": {"placeholders":{"count":{"type":"int"}}},
+  "readerOnlineReturnedId": "서버 반환 작품 번호",
+  "readerOnlineRetried": "캐시 우회 재요청 후에도 번호가 일치하지 않습니다.",
   "readerOnlineFailureTitle": "앱 내 온라인 읽기 실패",
   "readerOnlineFailureIntro": "어느 단계에서 실패했는지 확인할 수 있어.",
   "readerOnlineFailureHelp": "진단 복사로 오류 코드를 전달할 수 있어. 서버 응답 원문이나 로그인 정보는 포함하지 않아.",

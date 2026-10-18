@@ -650,6 +650,8 @@
   "webSearchUnsupported": "この端末ではアプリ内ウェブ検索を利用できません。",
   "webSearchImported": "ウェブ検索から取り込んだ{count}作品を含む",
   "@webSearchImported": {"placeholders":{"count":{"type":"int"}}},
+  "readerOnlineReturnedId": "サーバー返却作品番号",
+  "readerOnlineRetried": "キャッシュを回避して再取得しても作品番号が一致しません。",
   "readerOnlineFailureTitle": "アプリ内オンライン閲覧に失敗しました",
   "readerOnlineFailureIntro": "エラーが発生した段階とコードを確認できます。",
   "readerOnlineFailureHelp": "診断情報をコピーして報告できます。サーバーの応答本文やログイン情報は含まれません。",
