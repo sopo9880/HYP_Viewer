@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'work_blacklist.dart';
 
 /// When set to 'left', swipe/turn to the left to advance the book.
 /// 'right' reverses the swipe direction for right-to-left reading.
@@ -47,6 +48,8 @@ class ReaderSettings {
   /// Windows: close window instead of keeping the application in the tray.
   final bool closeWindowExitsApp;
   final String preferredEditionLanguage; // auto, recent, korean, japanese, english, chinese
+  final bool blacklistEnabled;
+  final List<WorkBlacklistRule> blacklistRules;
 
   const ReaderSettings({
     this.nextDirection = 'left',
@@ -85,6 +88,8 @@ class ReaderSettings {
     this.preferredEditionLanguage = 'auto',
     this.deleteLocalFilesByDefault = true,
     this.closeWindowExitsApp = false,
+    this.blacklistEnabled = true,
+    this.blacklistRules = const [],
   });
 
   bool get reverse => nextDirection == 'right';
@@ -126,6 +131,8 @@ class ReaderSettings {
     String? preferredEditionLanguage,
     bool? deleteLocalFilesByDefault,
     bool? closeWindowExitsApp,
+    bool? blacklistEnabled,
+    List<WorkBlacklistRule>? blacklistRules,
   }) => ReaderSettings(
     nextDirection: nextDirection ?? this.nextDirection,
     twoPageSpread: twoPageSpread ?? this.twoPageSpread,
@@ -163,6 +170,8 @@ class ReaderSettings {
     preferredEditionLanguage: preferredEditionLanguage ?? this.preferredEditionLanguage,
     deleteLocalFilesByDefault: deleteLocalFilesByDefault ?? this.deleteLocalFilesByDefault,
     closeWindowExitsApp: closeWindowExitsApp ?? this.closeWindowExitsApp,
+    blacklistEnabled: blacklistEnabled ?? this.blacklistEnabled,
+    blacklistRules: blacklistRules ?? this.blacklistRules,
   );
 
   Map<String, Object> toJson() => {
@@ -202,6 +211,8 @@ class ReaderSettings {
     'preferredEditionLanguage': preferredEditionLanguage,
     'deleteLocalFilesByDefault': deleteLocalFilesByDefault,
     'closeWindowExitsApp': closeWindowExitsApp,
+    'blacklistEnabled': blacklistEnabled,
+    'blacklistRules': blacklistRules.map((rule) => rule.toJson()).toList(),
   };
 
   factory ReaderSettings.fromJson(Map<String, dynamic> data) =>
@@ -209,6 +220,8 @@ class ReaderSettings {
         nextDirection: data['nextDirection'] == 'right' ? 'right' : 'left',
         deleteLocalFilesByDefault: data['deleteLocalFilesByDefault'] != false,
         closeWindowExitsApp: data['closeWindowExitsApp'] == true,
+        blacklistEnabled: data['blacklistEnabled'] != false,
+        blacklistRules: WorkBlacklist.decodeRules(data['blacklistRules']),
         twoPageSpread: data['twoPageSpread'] == true,
         hideReaderUiOnOpen: data['hideReaderUiOnOpen'] != false,
         confirmCompleteOnNext: data['confirmCompleteOnNext'] != false,
