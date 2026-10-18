@@ -2238,6 +2238,12 @@ class _HypDashboardState extends State<HypDashboard> {
 
   Widget _searchContent() {
     final existingIds = widget.library.works.map((w) => w.workId).toSet();
+    final remoteFiltered = _remoteResults.where((w) =>
+        (_remoteFieldFilter.isEmpty ||
+         (_remoteFieldMatches[w.workId] ?? const <String>[])
+             .contains(_remoteFieldFilter))).toList();
+    final savedOnline = remoteFiltered.where((w) =>
+        existingIds.contains(w.workId)).toList();
     final online = _remoteResults.where((w) =>
         !existingIds.contains(w.workId) &&
         (_remoteFieldFilter.isEmpty ||
@@ -2349,6 +2355,18 @@ class _HypDashboardState extends State<HypDashboard> {
         if (!_remoteBusy && _remoteError == null && _remoteResults.isEmpty)
           const Padding(padding: EdgeInsets.all(15),
             child: HypText('온라인 결과가 아직 없어. 제목이나 작가·태그로 검색해 줘.')),
+        if (savedOnline.isNotEmpty)
+          ExpansionTile(
+            key: const Key('search-saved-online'),
+            title: HypText('이미 서재에 있는 온라인 결과 ' +
+                savedOnline.length.toString() + '개'),
+            children: [for (final work in savedOnline.take(60))
+              ListTile(title: HypAnimatedTitle(title: work.title),
+                subtitle: Text('#' + work.workId + ' · 저장됨'))],
+          ),
+        HypText('새 작품 ' + online.length.toString() +
+            '개 · 표시 카드 ' +
+            OnlineEditionGroups.cluster(online).length.toString() + '개'),
         for (final group in OnlineEditionGroups.cluster(online)) Card(
           key: group.length > 1
               ? Key('online-edition-stack-' + group.first.workId)
