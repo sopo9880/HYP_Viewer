@@ -2479,10 +2479,16 @@ class _HypDashboardState extends State<HypDashboard> {
               onPressed: () => setState(() =>
                   _showEmptyRemoteFields = !_showEmptyRemoteFields),
               icon: Icon(_showEmptyRemoteFields
-                  ? Icons.filter_list_off_outlined
-                  : Icons.filter_list_outlined),
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined),
             ),
           ]),
+        if (_remoteResults.isNotEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: HypText('분야별 수치는 현재 수집된 고유 작품 기준이야.',
+                style: TextStyle(fontSize: 11)),
+          ),
         if (_remoteWarnings.isNotEmpty)
           ExpansionTile(
             title: Text(AppLocalizations.of(context)!.searchPartialSources),
