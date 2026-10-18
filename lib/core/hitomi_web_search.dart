@@ -32,7 +32,11 @@ class HitomiWebSearch {
     final path = uri!.path;
     final explicit = RegExp(r'^/(?:galleries|reader)/([0-9]{5,12})\.html$')
         .firstMatch(path);
-    final slug = RegExp(r'^/[^/]+/[^/]+-([0-9]{5,12})\.html$')
+    // Index/filter pages can also end in numbers. Restrict slug URLs
+    // to known gallery categories to avoid importing category-page numbers.
+    final slug = RegExp(
+      r'^/(?:doujinshi|manga|artistcg|gamecg|imageset|'
+      r'western|non-h|anime|cosplay|cg)/[^/]+-([0-9]{5,12})\.html$')
         .firstMatch(path);
     return explicit?.group(1) ?? slug?.group(1);
   }
@@ -93,7 +97,7 @@ class HitomiWebSearch {
         var match = link.pathname.match(
           /^\/(?:galleries|reader)\/(\d{5,12})\.html$/);
         if (!match) match = link.pathname.match(
-          /^\/[^/]+\/[^/]+-(\d{5,12})\.html$/);
+          /^\/(?:doujinshi|manga|artistcg|gamecg|imageset|western|non-h|anime|cosplay|cg)\/[^/]+-(\d{5,12})\.html$/);
         return match ? {id: match[1], url: link.href} : null;
       } catch (_) { return null; }
     }

@@ -56,6 +56,11 @@ void main() {
   test('rejects numeric noise and malformed snapshots', () {
     expect(HitomiWebSearch.galleryId(
       Uri.parse('https://hitomi.la/tag/cat-all-1234567.html')), isNull);
+    expect(HitomiWebSearch.galleryId(
+      Uri.parse('https://hitomi.la/artist/pochi-all-1234567.html')), isNull);
+    expect(HitomiWebSearch.galleryId(
+      Uri.parse('https://hitomi.la/manga/a-gallery-1234567.html')),
+      '1234567');
     expect(HitomiWebSearch.parseCapture('{bad JSON'), isEmpty);
     expect(HitomiWebSearch.parseCapture({'url': 'https://hitomi.la'}), isEmpty);
     expect(HitomiWebSearch.parseCapture({

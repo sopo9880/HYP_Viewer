@@ -290,6 +290,7 @@ class _HypDashboardState extends State<HypDashboard> {
   // User-approved public Hitomi web results stay distinct from mirror
   // snapshots, which can arrive later and otherwise replace their lists.
   final Map<String, OnlineSearchWork> _webSearchResults = {};
+  String _webSearchQuery = '';
   int _remoteTotal = 0;
   int _remotePage = 0;
   bool _remoteHasMore = false;
@@ -534,7 +535,11 @@ class _HypDashboardState extends State<HypDashboard> {
     _activeRemoteSearchClient = null;
     _searchEpoch++;
     _remoteResults = [];
-    _webSearchResults.clear();
+    final currentQuery = _search.text.trim();
+    if (currentQuery != _webSearchQuery) {
+      _webSearchResults.clear();
+      _webSearchQuery = currentQuery;
+    }
     _remoteError = null;
     _remotePage = 0;
     _remoteTotal = 0;
@@ -2542,7 +2547,9 @@ class _HypDashboardState extends State<HypDashboard> {
     final visibleRemote = merged.values.where((work) =>
         !_isBlockedOnline(work)).toList();
     final hiddenCount = merged.length - visibleRemote.length;
-    final visibleFieldTotals = hiddenCount == 0 ? _remoteFieldTotals :
+    // Web-captured works must be counted even if no blacklist rule hid
+    // anything; the mirror's cached totals alone omit these new works.
+    final visibleFieldTotals =
         OnlineWorkSearch.facetCounts(visibleRemote, webFieldMatches);
     final existingIds = widget.library.works.map((w) => w.workId).toSet();
     final remoteFiltered = visibleRemote.where((w) =>
