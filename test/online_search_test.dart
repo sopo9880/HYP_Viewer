@@ -103,7 +103,7 @@ void main() {
     expect(result.works.map((entry) => entry.workId).toSet(),
         {'100', '101'});
     expect(result.total, 2);
-    expect(result.fieldTotals['artist'], 10);
+    expect(result.fieldTotals['artist'], 1);
     expect(result.warnings, isEmpty);
     client.close();
   });
@@ -113,7 +113,8 @@ void main() {
     final client = MockClient((request) async {
       seen.add((jsonDecode(request.body)['query'] as List).first as String);
       return http.Response(jsonEncode({
-        'results': [], 'count': 0,
+        'results': [{'id': 111, 'title': 'Pochi',
+                     'artists': ['Pochi']}], 'count': 1,
       }), 200);
     });
     await OnlineWorkSearch(client).searchUnified(
@@ -124,7 +125,7 @@ void main() {
 
   test('query plan covers all supported categories without guessing count', () {
     expect(OnlineWorkSearch.planQueries('Pochi').map((e) => e.$1).toList(),
-      ['general','artist','group','series','tag']);
+      ['general','artist','group','series','tag','female','male']);
     expect(OnlineWorkSearch.planQueries('artist:Pochi'),
       [('advanced','artist:Pochi')]);
     expect(OnlineWorkSearch.planQueries('Original | Translated')
@@ -176,6 +177,69 @@ void main() {
   test('plain gallery number avoids metadata field expansion', () {
     expect(OnlineWorkSearch.planQueries('1234567'),
         [('general', '1234567')]);
+  });
+
+  test('pochi artist metadata appears as an artist facet even when the '
+      'broad title round skips artist queries', () async {
+    final queried = <String>[];
+    final client = MockClient((request) async {
+      final query = (jsonDecode(request.body)['query'] as List).first as String;
+      queried.add(query);
+      return http.Response(jsonEncode({
+        'results': [
+          {'id': 1012074, 'title': 'Ane Naru Mono 4',
+           'artists': ['pochi'], 'language': 'korean'},
+          for (var i = 0; i < 8; i++)
+            {'id': 1002000 + i, 'title': 'Pochi book ' + i.toString()},
+        ],
+        // Provider count may include overlaps and must not be the facet count.
+        'count': 39,
+      }), 200);
+    });
+    final found = await OnlineWorkSearch(client)
+        .searchUnified('pochi', language: 'korean');
+    expect(queried, ['pochi']);
+    expect(found.total, 9);
+    expect(found.fieldTotals['artist'], 1);
+    expect(found.fieldTotals['general'], 8);
+    expect(found.matchedFields['1012074'], contains('artist'));
+    expect(found.matchedFields['1012074'], isNot(contains('general')));
+    expect(OnlineWorkSearch.facetCounts(found.works, found.matchedFields),
+        found.fieldTotals);
+    client.close();
+  });
+
+  test('one gallery returned by multiple fields counts only once per facet',
+      () async {
+    final client = MockClient((request) async {
+      final query = (jsonDecode(request.body)['query'] as List).first as String;
+      return http.Response(jsonEncode({
+        'results': [
+          {'id': 808808, 'title': 'Unrelated',
+           'artists': ['pochi'], 'tags': ['female:pochi']},
+        ],
+        'count': query == 'pochi' ? 100 : 200,
+      }), 200);
+    });
+    final found = await OnlineWorkSearch(client).searchUnified('pochi');
+    expect(found.total, 1);
+    expect(found.fieldTotals['artist'], 1);
+    expect(found.fieldTotals['female'], 1);
+    expect(found.fieldTotals['tag'], 1);
+    expect(found.matchedFields['808808'], contains('artist'));
+    client.close();
+  });
+
+  test('direct field lookup keeps source evidence if mirror omits artist',
+      () {
+    const remote = OnlineSearchWork(workId: '1012074',
+        title: 'Ane Naru Mono 4');
+    expect(OnlineWorkSearch.metadataFields(remote, 'pochi'), isEmpty);
+    final combined = OnlineWorkSearch.combineWorks(remote,
+        const OnlineSearchWork(workId: '1012074',
+            title: 'Ane Naru Mono 4', artists: ['pochi']));
+    expect(OnlineWorkSearch.metadataFields(combined, 'pochi'),
+        contains('artist'));
   });
 
   test('international results prefer all-language provider only', () async {
