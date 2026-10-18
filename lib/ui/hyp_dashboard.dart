@@ -2368,6 +2368,17 @@ class _HypDashboardState extends State<HypDashboard> {
         (_remoteFieldFilter.isEmpty ||
          (_remoteFieldMatches[w.workId] ?? const <String>[])
              .contains(_remoteFieldFilter))).toList();
+    const facetOrder = [
+      'general', 'artist', 'group', 'series', 'tag',
+      'female', 'male', 'advanced',
+    ];
+    final visibleFacets = facetOrder.where((field) =>
+        (field != 'advanced' ||
+            _remoteFieldTotals.containsKey('advanced') ||
+            _remoteFieldFilter == 'advanced') &&
+        (_showEmptyRemoteFields ||
+         (_remoteFieldTotals[field] ?? 0) > 0 ||
+         _remoteFieldFilter == field)).toList();
     final showLocal = _searchScope != 'online';
     final showOnline = _searchScope != 'local';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -2434,22 +2445,42 @@ class _HypDashboardState extends State<HypDashboard> {
         const SizedBox(height: 18),
         Text(AppLocalizations.of(context)!.searchFetchedUnique(_remoteTotal),
             style: Theme.of(context).textTheme.titleMedium),
-        if (_remoteFieldTotals.isNotEmpty)
-          Wrap(spacing: 6, runSpacing: 3, children: [
-            FilterChip(
-              label: Text(AppLocalizations.of(context)!.searchAllFields),
-              selected: _remoteFieldFilter.isEmpty,
-              onSelected: (_) => setState(() => _remoteFieldFilter = ''),
-            ),
-            for (final entry in _remoteFieldTotals.entries)
+        if (_search.text.trim().isNotEmpty)
+          SingleChildScrollView(
+            key: const Key('search-facet-scroll'),
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
               FilterChip(
-                label: Text(AppLocalizations.of(context)!.searchFieldCount(
-                    _searchFieldLabel(context, entry.key), entry.value)),
-                selected: _remoteFieldFilter == entry.key,
-                onSelected: (chosen) => setState(() =>
-                    _remoteFieldFilter = chosen ? entry.key : ''),
+                key: const Key('search-facet-all'),
+                label: Text(AppLocalizations.of(context)!.searchAllFields),
+                selected: _remoteFieldFilter.isEmpty,
+                onSelected: (_) => _selectRemoteFacet('', true),
               ),
-          ]),
+              const SizedBox(width: 6),
+              for (final field in visibleFacets) ...[
+                FilterChip(
+                  key: Key('search-facet-' + field),
+                  label: Text(AppLocalizations.of(context)!.searchFieldCount(
+                    _searchFieldLabel(context, field),
+                    _remoteFieldTotals[field] ?? 0,
+                  )),
+                  selected: _remoteFieldFilter == field,
+                  onSelected: (chosen) => _selectRemoteFacet(field, chosen),
+                ),
+                const SizedBox(width: 6),
+              ],
+              TextButton.icon(
+                key: const Key('search-facet-show-zeros'),
+                onPressed: () => setState(() =>
+                    _showEmptyRemoteFields = !_showEmptyRemoteFields),
+                icon: Icon(_showEmptyRemoteFields
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined, size: 18),
+                label: HypText(_showEmptyRemoteFields
+                    ? '0건 분야 숨기기' : '0건 분야 보기'),
+              ),
+            ]),
+          ),
         if (_remoteWarnings.isNotEmpty)
           ExpansionTile(
             title: Text(AppLocalizations.of(context)!.searchPartialSources),
@@ -2459,17 +2490,31 @@ class _HypDashboardState extends State<HypDashboard> {
             ],
           ),
         const SizedBox(height: 8),
-        if (_remoteBusy) ...[
+        if (_remoteBusy || _loadingRemoteFacets.isNotEmpty) ...[
           const LinearProgressIndicator(),
-          if (_remoteProgressTotal > 0)
+          if (_remoteBusy && _remoteProgressTotal > 0)
             Text(AppLocalizations.of(context)!.searchProgress(
                 _remoteProgressDone, _remoteProgressTotal)),
+          if (_loadingRemoteFacets.isNotEmpty)
+            HypText('선택한 분야 추가 검색 중: ' +
+                _loadingRemoteFacets.join(', ')),
         ],
         if (_remoteError != null) ...[
           HypText('온라인 검색에 실패했어. 내 서재 검색은 정상 동작해.\n' +
               _remoteError!, style: const TextStyle(color: Colors.orangeAccent)),
           TextButton.icon(onPressed: () => _fetchOnlineSearch(epoch: _searchEpoch),
             icon: const Icon(Icons.refresh), label: const HypText('다시 검색')),
+        ],
+        if (_remoteFacetError != null) ...[
+          HypText('분야별 추가 검색 오류: ' + _remoteFacetError!,
+              style: const TextStyle(color: Colors.orangeAccent)),
+          TextButton.icon(
+            onPressed: () => _loadRemoteFacet(_remoteFieldFilter,
+                epoch: _searchEpoch,
+                next: _loadedRemoteFacets.contains(_remoteFieldFilter)),
+            icon: const Icon(Icons.refresh),
+            label: const HypText('분야 검색 다시 시도'),
+          ),
         ],
         if (!_remoteBusy && _remoteError == null && _remoteResults.isEmpty)
           const Padding(padding: EdgeInsets.all(15),
@@ -2531,10 +2576,21 @@ class _HypDashboardState extends State<HypDashboard> {
                 : () => _showOnlineWork(group.first),
           ),
         ),
-        if (!_remoteBusy && _remoteHasMore && _remoteResults.isNotEmpty)
+        if (!_remoteBusy && !_loadingRemoteFacets.contains(_remoteFieldFilter) &&
+            ((_remoteFieldFilter.isEmpty ||
+              _remoteFieldFilter == 'general' ||
+              _remoteFieldFilter == 'advanced')
+                ? _remoteHasMore && _remoteResults.isNotEmpty
+                : _moreRemoteFacets.contains(_remoteFieldFilter)))
           OutlinedButton.icon(
-            onPressed: () => _fetchOnlineSearch(
-                epoch: _searchEpoch, next: true),
+            onPressed: () {
+              final field = _remoteFieldFilter;
+              if (field.isEmpty || field == 'general' || field == 'advanced') {
+                _fetchOnlineSearch(epoch: _searchEpoch, next: true);
+              } else {
+                _loadRemoteFacet(field, epoch: _searchEpoch, next: true);
+              }
+            },
             icon: const Icon(Icons.expand_more),
             label: const HypText('온라인 결과 더 보기'),
           ),
