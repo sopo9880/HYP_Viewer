@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_background/flutter_background.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:local_notifier/local_notifier.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -449,8 +450,11 @@ class _DesktopDownloadTray with WindowListener, TrayListener {
       ];
       await trayManager.setContextMenu(Menu(items: items));
       _lastMenuUpdate = DateTime.now();
-    } catch (_) {
-      // Native tray errors must not terminate an otherwise working app.
+    } catch (error, stack) {
+      // Native tray errors must not terminate downloads; log them for
+      // Windows user reports instead of silently discarding the failure.
+      debugPrint('HYP Viewer tray menu refresh failed: $error');
+      debugPrintStack(stackTrace: stack);
     } finally {
       _menuRefreshing = false;
     }
@@ -625,9 +629,22 @@ class _DesktopDownloadTray with WindowListener, TrayListener {
 
   @override
   void onTrayIconRightMouseDown() {
-    // The plugin displays the menu itself on right click. Refresh once
-    // using the in-memory state (no download network calls).
-    unawaited(_refreshMenu());
+    // tray_manager 0.5.x does not automatically show this context menu on
+    // Windows. setContextMenu() only prepares items; a separate popup call
+    // is required for the actual right-click event.
+    unawaited(_popupContextMenu());
+  }
+
+  Future<void> _popupContextMenu() async {
+    if (!_initialized || _closing) return;
+    try {
+      // Menus are prepared at init and when download state changes. Showing
+      // the already prepared menu avoids a native setContextMenu race.
+      await trayManager.popUpContextMenu();
+    } catch (error, stack) {
+      debugPrint('HYP Viewer Windows tray popup failed: $error');
+      debugPrintStack(stackTrace: stack);
+    }
   }
 
   @override

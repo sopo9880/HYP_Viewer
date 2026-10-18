@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import '../core/i18n.dart';
+import 'hyp_animated_title.dart';
 import 'package:flutter/services.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
@@ -697,9 +698,11 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
         appBar: _controlsVisible ? AppBar(
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
-          title: HypText(widget.work.title.isEmpty
-              ? widget.work.workId : widget.work.title,
-              overflow: TextOverflow.ellipsis),
+          title: HypAnimatedTitle(
+            key: const Key('reader-title'),
+            title: widget.work.title.isEmpty
+                ? widget.work.workId : widget.work.title,
+          ),
           actions: [
             if (widget.settings.showDownloadAction &&
                 widget.onDownloadOffline != null)

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../core/candidate_verifier.dart';
 import '../core/i18n.dart';
+import 'hyp_animated_title.dart';
 import '../l10n/app_localizations.dart';
 import '../core/number_extractor.dart';
 
@@ -262,11 +263,12 @@ class CandidateEditorState extends State<CandidateEditor> {
           const Icon(Icons.verified_rounded,
               color: Colors.greenAccent, size: 16),
           const SizedBox(width: 5),
-          Flexible(child: HypText(
-            slot.result!.title.isEmpty
+          Flexible(child: HypAnimatedTitle(
+            key: Key('candidate-title-' + slot.id.toString()),
+            title: slot.result!.title.isEmpty
                 ? HypI18n.t(context, '작품 존재 확인')
                 : slot.result!.title,
-            maxLines: 1, overflow: TextOverflow.ellipsis,
+            motion: HypTitleMotion.automatic,
             style: const TextStyle(fontSize: 12, color: Colors.greenAccent),
           )),
         ]);

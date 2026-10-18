@@ -141,9 +141,10 @@ void main() {
     final version = File('lib/core/release_version.dart').readAsStringSync();
     final request = File('.github/release-request.txt')
         .readAsStringSync().trim();
-    expect(pubspec, contains('version: 0.4.11+30'));
-    expect(version, contains("'0.4.11'"));
-    expect(request, 'v0.4.11');
+    final release = pubspec.split('version: ').last.split('+').first.trim();
+    expect(release, startsWith('0.'));
+    expect(version, contains("const String hypReleaseVersion = '$release';"));
+    expect(request, 'v$release');
     expect(pubspec, contains('local_notifier: ^0.1.6'));
   });
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../core/work.dart';
 import 'hyp_theme.dart';
+import 'hyp_animated_title.dart';
 
 /// A series occupies exactly one normal library grid cell.
 /// Up to three real member covers are offset inside the same cover viewport.
@@ -84,9 +85,12 @@ class HypWorkGroupCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  HypText(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  HypAnimatedTitle(
+                    key: Key('group-title-' + members.first.groupId),
+                    title: title,
                     style: const TextStyle(fontSize: 13,
-                        fontWeight: FontWeight.w800)),
+                        fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 4),
                   Text(AppLocalizations.of(context)!.groupCardWorks(members.length), maxLines: 1,
                     overflow: TextOverflow.ellipsis,

@@ -35,6 +35,7 @@ import 'ui/cover_cropper.dart';
 import 'ui/work_editor.dart';
 import 'ui/work_info.dart';
 import 'ui/hyp_dashboard.dart';
+import 'ui/hyp_animated_title.dart';
 import 'ui/hyp_theme.dart';
 import 'core/number_extractor.dart';
 import 'core/candidate_verifier.dart';
@@ -924,8 +925,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                     final item = items[index];
                     return CheckboxListTile(
                       dense: true, value: selected.contains(item.videoId),
-                      title: Text(item.title, maxLines: 2,
-                          overflow: TextOverflow.ellipsis),
+                      title: HypAnimatedTitle(title: item.title),
                       subtitle: Text(item.videoId),
                       onChanged: (value) => refresh(() {
                         if (value == true && selected.length < 5) {
@@ -2699,8 +2699,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 for (final work in selected.take(4))
-                  HypText('#' + work.workId + ' · ' + work.title,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  HypAnimatedTitle(
+                    title: '#' + work.workId + ' · ' + work.title,
+                  ),
                 if (selected.length > 4)
                   HypText('외 ' + (selected.length - 4).toString() + '개'),
                 const SizedBox(height: 10),

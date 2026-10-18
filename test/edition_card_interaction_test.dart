@@ -5,7 +5,7 @@ import 'package:hyp_viewer/l10n/app_localizations.dart';
 import 'package:hyp_viewer/ui/work_edition_card.dart';
 
 void main() {
-  testWidgets('stack cover resumes while title opens language chooser',
+  testWidgets('stack cover resumes; title is inert; chooser remains accessible',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1100, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -38,7 +38,13 @@ void main() {
     await tester.pump();
     expect(read, 1);
     expect(choose, 0);
+    // The title tap is reserved for showing the full text, not navigating.
     await tester.tap(find.byKey(const Key('edition-title-edition_test')));
+    await tester.pump();
+    expect(choose, 0);
+    expect(read, 1);
+    // The previous language picker stays available as its own target.
+    await tester.tap(find.byKey(const Key('edition-choose-edition_test')));
     await tester.pump();
     expect(choose, 1);
     expect(read, 1);

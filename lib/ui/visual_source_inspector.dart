@@ -28,6 +28,7 @@ import '../core/visual_ocr.dart';
 import '../core/visual_signature.dart';
 import '../core/work.dart';
 import 'hyp_theme.dart';
+import 'hyp_animated_title.dart';
 
 class VisualInspectionResult {
   final String text, workId, title, author, sourceUrl;
@@ -597,9 +598,11 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
                   Text(hit.provider, style: Theme.of(context)
                       .textTheme.labelSmall),
                   const SizedBox(height: 4),
-                  Text(hit.title.isEmpty ? loc.inspectorUnknownTitle : hit.title,
-                    maxLines: 3, overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall),
+                  HypAnimatedTitle(
+                    title: hit.title.isEmpty
+                        ? loc.inspectorUnknownTitle : hit.title,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
                   if (hit.author.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(hit.author, maxLines: 2,
@@ -654,10 +657,11 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(match.title.isEmpty
-                      ? loc.workCardUntitled(match.workId) : match.title,
-                    maxLines: 3, overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall),
+                  HypAnimatedTitle(
+                    title: match.title.isEmpty
+                        ? loc.workCardUntitled(match.workId) : match.title,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
                   if (match.author.isNotEmpty)
                     Text(match.author, maxLines: 2,
                         overflow: TextOverflow.ellipsis),
@@ -709,10 +713,13 @@ class _VisualSourceInspectorState extends State<VisualSourceInspector> {
           Expanded(child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(item.title.isEmpty
-                  ? loc.workCardUntitled(item.workId) : item.title,
-                maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleSmall),
+              HypAnimatedTitle(
+                title: item.title.isEmpty
+                    ? loc.workCardUntitled(item.workId) : item.title,
+                motion: status?.exists == true
+                    ? HypTitleMotion.automatic : HypTitleMotion.onTap,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
               Text('#' + item.workId + ' · ' + label,
                 style: Theme.of(context).textTheme.bodySmall),
               Text(item.evidence, maxLines: 2,

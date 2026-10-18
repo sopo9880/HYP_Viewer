@@ -12,6 +12,7 @@ import '../core/work.dart';
 import '../core/work_editions.dart';
 import '../core/work_grouping.dart';
 import '../l10n/app_localizations.dart';
+import 'hyp_animated_title.dart';
 
 typedef EditionPageLookup = Future<OnlineSearchResult> Function(
     String query, int page);
@@ -344,8 +345,7 @@ class _EditionFinderDialogState extends State<EditionFinderDialog> {
                         _selected.remove(item.id);
                       }
                     }),
-                    title: Text(item.title, maxLines: 2,
-                        overflow: TextOverflow.ellipsis),
+                    title: HypAnimatedTitle(title: item.title),
                     subtitle: Text(
                       '#' + item.id + ' · ' +
                       WorkEditions.languageName(item.language) + ' · ' +

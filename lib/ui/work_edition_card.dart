@@ -7,6 +7,7 @@ import '../core/work.dart';
 import '../core/work_editions.dart';
 import '../l10n/app_localizations.dart';
 import 'hyp_theme.dart';
+import 'hyp_animated_title.dart';
 
 /// A language stack has two intentional targets: cover = resume reading,
 /// title/details = open the language picker.
@@ -90,17 +91,16 @@ class HypWorkEditionCard extends StatelessWidget {
               ),
             ),
             InkWell(
-              key: Key('edition-title-' + group),
+              key: Key('edition-details-' + group),
               onTap: onOpen,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    HypText(
-                      title.isEmpty ? editions.first.workId : title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    HypAnimatedTitle(
+                      key: Key('edition-title-' + group),
+                      title: title.isEmpty ? editions.first.workId : title,
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 5),
@@ -114,8 +114,12 @@ class HypWorkEditionCard extends StatelessWidget {
                           fontSize: 11, color: HypColors.muted),
                     ),
                     const SizedBox(height: 5),
-                    Text(AppLocalizations.of(context)!.editionChoose,
-                        style: const TextStyle(fontSize: 10)),
+                    InkWell(
+                      key: Key('edition-choose-' + group),
+                      onTap: onOpen,
+                      child: Text(AppLocalizations.of(context)!.editionChoose,
+                          style: const TextStyle(fontSize: 10)),
+                    ),
                   ],
                 ),
               ),
