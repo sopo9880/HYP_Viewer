@@ -28,6 +28,7 @@ class ShortsFinderPanel extends StatefulWidget {
   final Future<void> Function() onSave;
   final Future<void> Function(String code)? onQuickAddNumber;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
+  final Future<void> Function(String)? onPreview;
   final CandidateBatchVerify? onVerifyCandidateCodes;
   final BlacklistRules blacklist;
   final Future<void> Function(BlacklistRule)? onBlacklistAdd;
@@ -53,6 +54,7 @@ class ShortsFinderPanel extends StatefulWidget {
     required this.onSave,
     this.onQuickAddNumber,
     required this.onSaveSelectedWorks,
+    this.onPreview,
     this.onVerifyCandidateCodes,
     this.blacklist = const BlacklistRules(),
     this.onBlacklistAdd,
@@ -388,6 +390,7 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             blacklist: widget.blacklist,
             onBlacklistAdd: widget.onBlacklistAdd,
             onSave: widget.onSaveSelectedWorks,
+            onPreview: widget.onPreview,
             busy: widget.busy,
           ),
           const SizedBox(height: 12),
@@ -423,12 +426,25 @@ class _ShortsFinderPanelState extends State<ShortsFinderPanel> {
             ]);
           }),
           const SizedBox(height: 14),
-          FilledButton.icon(
-            key: const Key('save-work-button'),
-            onPressed: widget.busy ? null : widget.onSave,
-            icon: const Icon(Icons.bookmark_add_outlined),
-            label: const HypText('확정한 작품을 서재에 저장'),
-          ),
+          Wrap(spacing: 8, runSpacing: 6, children: [
+            FilledButton.icon(
+              key: const Key('save-work-button'),
+              onPressed: widget.busy ? null : widget.onSave,
+              icon: const Icon(Icons.bookmark_add_outlined),
+              label: const HypText('확정한 작품을 서재에 저장'),
+            ),
+            OutlinedButton.icon(
+              key: const Key('preview-confirmed-id'),
+              onPressed: widget.busy || widget.onPreview == null ? null : () {
+                final id = widget.workId.text.trim();
+                if (RegExp(r'^\d{6,12}$').hasMatch(id)) {
+                  widget.onPreview!(id);
+                }
+              },
+              icon: const Icon(Icons.visibility_outlined),
+              label: HypText(HypI18n.t(context, '미리보기')),
+            ),
+          ]),
           const SizedBox(height: 6),
           HypText(
             '후보 번호는 자동 검증된 작품 번호가 아니야. 원문을 보고 직접 확인한 뒤 저장해줘.',

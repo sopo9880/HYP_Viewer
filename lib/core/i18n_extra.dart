@@ -1,6 +1,10 @@
 /// Additional 0.4 translations for on-device UI; titles remain verbatim.
 abstract final class HypExtraTranslations {
   static const Map<String, List<String>> labels = {
+    "미리보기": ["Preview", "プレビュー"],
+    "저장하지 않고 미리보기": ["Preview without saving", "保存せずにプレビュー"],
+    "서재에 저장": ["Save to Library", "本棚に保存"],
+    "서재에 저장됨": ["Saved to Library", "本棚に保存済み"],
     "블랙리스트": ["Blacklist", "ブラックリスト"],
     "블랙리스트 관리": ["Manage Blacklist", "ブラックリスト管理"],
     "블랙리스트에 추가": ["Add to Blacklist", "ブラックリストに追加"],

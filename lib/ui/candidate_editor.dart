@@ -34,6 +34,7 @@ class CandidateEditor extends StatefulWidget {
   final CandidateBatchVerify? onVerify;
   final BlacklistRules blacklist;
   final Future<void> Function(BlacklistRule)? onBlacklistAdd;
+  final Future<void> Function(String)? onPreview;
   final List<NumberCandidate> Function()? onCrossLineFallback;
   final Future<void> Function(List<String>) onSave;
   final bool busy;
@@ -46,6 +47,7 @@ class CandidateEditor extends StatefulWidget {
     this.onVerify,
     this.blacklist = const BlacklistRules(),
     this.onBlacklistAdd,
+    this.onPreview,
     this.onCrossLineFallback,
   });
 
@@ -339,6 +341,14 @@ class CandidateEditorState extends State<CandidateEditor> {
               ),
             ),
           ),
+          if (_valid.hasMatch(slot.controller.text.trim()) &&
+              widget.onPreview != null && _blocked(slot) == null)
+            IconButton(
+              key: Key('candidate-preview-' + slot.id.toString()),
+              tooltip: HypI18n.t(context, '미리보기'),
+              onPressed: () => widget.onPreview!(slot.controller.text.trim()),
+              icon: const Icon(Icons.visibility_outlined),
+            ),
           if (_valid.hasMatch(slot.controller.text.trim()) &&
               widget.onBlacklistAdd != null && _blocked(slot) == null)
             IconButton(

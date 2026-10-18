@@ -116,6 +116,8 @@ class HypDashboard extends StatefulWidget {
       List<OnlineSearchWork> remoteWorks)? onLinkEditions;
   final Future<void> Function(WorkEntry) onUnlinkEdition;
   final Future<void> Function(OnlineSearchWork) onReadOnlineSearchWork;
+  final Future<void> Function(OnlineSearchWork) onPreviewOnlineSearchWork;
+  final Future<void> Function(String) onPreviewCandidate;
   final Future<void> Function(List<String> codes) onSaveSelectedWorks;
   final CandidateBatchVerify onVerifyCandidateCodes;
   final List<NumberCandidate> Function()? onCrossLineFallback;
@@ -217,6 +219,8 @@ class HypDashboard extends StatefulWidget {
     this.onLinkEditions,
     required this.onUnlinkEdition,
     required this.onReadOnlineSearchWork,
+    required this.onPreviewOnlineSearchWork,
+    required this.onPreviewCandidate,
     required this.onSaveSelectedWorks,
     required this.onVerifyCandidateCodes,
     this.onCrossLineFallback,
@@ -1431,6 +1435,7 @@ class _HypDashboardState extends State<HypDashboard> {
         onCrossLineFallback: widget.onCrossLineFallback,
         blacklist: widget.blacklist,
         onBlacklistAdd: widget.onBlacklistAdd,
+        onPreview: widget.onPreviewCandidate,
       ),
       const SizedBox(height: 24),
       Row(children: [
@@ -2802,12 +2807,22 @@ class _HypDashboardState extends State<HypDashboard> {
               label: const HypText('서재 추가'),
             ),
             FilledButton.icon(
+              key: const Key('online-preview-without-save'),
               onPressed: () {
                 Navigator.pop(ctx);
-                _openReaderWith(() => widget.onReadOnlineSearchWork(work));
+                _openReaderWith(() => widget.onPreviewOnlineSearchWork(work));
               },
-              icon: const Icon(Icons.menu_book),
-              label: const HypText('서재 추가하고 읽기'),
+              icon: const Icon(Icons.visibility_outlined),
+              label: HypText(HypI18n.t(context, '저장하지 않고 미리보기')),
+            ),
+            IconButton(
+              tooltip: HypI18n.t(context, '블랙리스트에 추가'),
+              onPressed: () {
+                Navigator.pop(ctx);
+                widget.onBlacklistAdd(BlacklistRule(kind: 'id',
+                    value: work.workId));
+              },
+              icon: const Icon(Icons.block_outlined),
             ),
           ]),
         ]),
