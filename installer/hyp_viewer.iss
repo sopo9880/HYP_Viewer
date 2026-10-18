@@ -17,6 +17,7 @@ OutputBaseFilename=HYP_Viewer_Setup_v{#MyAppVersion}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\windows\runner\resources\app_icon.ico
 DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible

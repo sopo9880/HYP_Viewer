@@ -31,6 +31,11 @@ jobs:
           cache: true
       - name: Generate Flutter Android host project
         run: flutter create --platforms=android --org com.sopo9880 --project-name hyp_viewer .
+      - name: Apply approved Android launcher icon
+        run: |
+          python3 -m pip install --disable-pip-version-check pillow
+          python3 scripts/apply_app_icons.py --platform android
+          python3 -m unittest discover -s scripts -p test_apply_app_icons.py
       - name: Configure Japanese/Korean offline OCR models
         run: python3 scripts/configure_android_ocr.py
       - run: flutter pub get
@@ -66,6 +71,11 @@ jobs:
           cache: true
       - name: Generate Flutter Windows host project
         run: flutter create --platforms=windows --org com.sopo9880 --project-name hyp_viewer .
+      - name: Apply approved Windows launcher, tray and installer icons
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python scripts/apply_app_icons.py --platform windows
+          python -m unittest discover -s scripts -p test_apply_app_icons.py
       - name: Prevent duplicate Windows app processes
         run: python scripts/patch_windows_single_instance.py
       - name: Install WebView2 NuGet CLI
