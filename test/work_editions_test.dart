@@ -28,6 +28,13 @@ void main() {
     final korean = work('222222', 'A Title | 한국어', 'korean');
     expect(WorkEditions.compare(japanese, korean).autoLink, true);
   });
+  test('compilation is related content, not same-chapter translation', () {
+    final chapter = work('111111', 'Story 3화', 'japanese');
+    final omnibus = work('222222', 'Story (1~3화 합본)',
+        'korean');
+    expect(WorkEditions.compare(chapter, omnibus).autoLink, false);
+  });
+
   test('later chapter is never mixed with first chapter', () {
     final a = work('111111', 'A Title 1화', 'japanese');
     final b = work('222222', 'A Title 2화', 'korean');
