@@ -37,8 +37,23 @@ class OnlineSearchWork {
   });
 
   factory OnlineSearchWork.fromJson(Map<String, dynamic> data) {
-    List<String> names(String key) => data[key] is List
-        ? (data[key] as List).whereType<String>().take(60).toList() : const [];
+    List<String> names(String key) {
+      final value = data[key];
+      if (value is! List) return const [];
+      return value.take(60).map((item) {
+        if (item is String) return item.trim();
+        if (item is Map) {
+          final raw = item['artist'] ?? item['group'] ?? item['parody'] ??
+              item['series'] ?? item['tag'] ?? item['name'];
+          if (raw is! String || raw.trim().isEmpty) return '';
+          final prefix = key == 'tags' && item['female'] == true
+              ? 'female:' : key == 'tags' && item['male'] == true
+                  ? 'male:' : '';
+          return prefix + raw.trim();
+        }
+        return '';
+      }).where((item) => item.isNotEmpty).toList();
+    }
     String string(String key) => data[key] is String ? data[key] as String : '';
     final aliases = <String>{};
     for (final key in ['aliases', 'titles', 'alternative_titles']) {
