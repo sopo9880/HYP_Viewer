@@ -314,6 +314,7 @@ class _HypDashboardState extends State<HypDashboard> {
   Timer? _notificationExitTimer;
   String? _openedGroupId;
   final Set<String> _selectedWorkIds = <String>{};
+  final Set<String> _selectedGroupIds = <String>{};
   bool get _canSelectWorks => _page == HypPage.library ||
       _page == HypPage.downloads || _search.text.trim().isNotEmpty;
 
@@ -834,13 +835,25 @@ class _HypDashboardState extends State<HypDashboard> {
 
   void _toggleSelectionMode() => setState(() {
     _selectingWorks = !_selectingWorks;
-    if (!_selectingWorks) _selectedWorkIds.clear();
+    if (!_selectingWorks) {
+      _selectedWorkIds.clear();
+      _selectedGroupIds.clear();
+    }
   });
 
   void _toggleSelectedWork(WorkEntry work) => setState(() {
     if (!_selectedWorkIds.add(work.workId)) {
       _selectedWorkIds.remove(work.workId);
     }
+  });
+
+  void _toggleSelectedGroup(String id) => setState(() {
+    if (!_selectedGroupIds.add(id)) _selectedGroupIds.remove(id);
+  });
+
+  void _startSelectingGroup(String id) => setState(() {
+    _selectingWorks = true;
+    _selectedGroupIds.add(id);
   });
 
   void _startSelection(WorkEntry work) => setState(() {
@@ -863,7 +876,7 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   Future<void> _editSelectedWork() async {
-    if (_selectedWorkIds.length != 1) return;
+    if (_selectedGroupIds.isNotEmpty || _selectedWorkIds.length != 1) return;
     final matching = widget.library.works.where(
         (w) => w.workId == _selectedWorkIds.first).toList();
     if (matching.isEmpty) return;
@@ -1761,6 +1774,10 @@ class _HypDashboardState extends State<HypDashboard> {
             coverImages: _coverImages,
             onOpen: () => setState(() => _openedGroupId = entry),
             onAction: (action) => _groupAction(action, entry, members),
+            selectionMode: _selectingWorks,
+            selected: _selectedGroupIds.contains(entry),
+            onSelect: () => _toggleSelectedGroup(entry),
+            onLongPress: () => _startSelectingGroup(entry),
           );
         }
         return _editionTile(entry as List<WorkEntry>);
@@ -1788,48 +1805,104 @@ class _HypDashboardState extends State<HypDashboard> {
   }
 
   Future<void> _groupSelectedWorks() async {
-    final selected = _works.where((w) =>
-        _selectedWorkIds.contains(w.workId) && w.groupId.isEmpty).toList();
-    if (selected.length < 2) return;
-    selected.sort(WorkGrouping.compareChapters);
-    final input = TextEditingController(
-        text: WorkGrouping.normalizedSeries(selected.first.title));
-    String? title;
+    final ordered = <WorkEntry>[];
+    final included = <String>{};
+    for (final groupId in _selectedGroupIds) {
+      final members = widget.library.works.where((w) =>
+          w.groupId == groupId).toList()
+        ..sort((a, b) => a.groupOrder.compareTo(b.groupOrder));
+      for (final work in members) {
+        if (included.add(work.workId)) ordered.add(work);
+      }
+    }
+    final singles = _works.where((w) =>
+        _selectedWorkIds.contains(w.workId)).toList()
+      ..sort(WorkGrouping.compareChapters);
+    for (final work in singles) {
+      if (included.add(work.workId)) ordered.add(work);
+    }
+    if (ordered.map(WorkEditions.groupKey).toSet().length < 2 ||
+        _selectedGroupIds.length + _selectedWorkIds.length < 2) return;
+    final input = TextEditingController(text: _selectedGroupIds.length == 1
+        ? widget.library.works.firstWhere((w) =>
+            w.groupId == _selectedGroupIds.first).groupTitle
+        : WorkGrouping.normalizedSeries(ordered.first.title));
+    (String, List<String>)? result;
     try {
-      title = await showDialog<String>(
+      result = await showDialog<(String, List<String>)>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const HypText('선택한 작품 묶기'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            HypText(selected.length.toString() + '개 작품을 하나의 세트로 묶어.'),
-            const SizedBox(height: 10),
-            TextField(
-              key: const Key('group-name-input'),
-              controller: input,
-              decoration: InputDecoration(
-                labelText: HypI18n.t(context, '묶음 이름'))),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx),
+        builder: (ctx) => StatefulBuilder(builder: (dialog, update) =>
+          AlertDialog(
+            title: HypText(HypI18n.t(dialog, '선택한 작품과 묶음 통합')),
+            content: SizedBox(
+              width: 460, height: MediaQuery.sizeOf(dialog).height * 0.48,
+              child: Column(children: [
+                HypText('묶음 ' + _selectedGroupIds.length.toString() +
+                    '개 포함 · 총 ' + ordered.length.toString() + '개 작품'),
+                const SizedBox(height: 8),
+                TextField(key: const Key('group-name-input'),
+                  controller: input, onChanged: (_) => update(() {}),
+                  decoration: InputDecoration(
+                      labelText: HypI18n.t(dialog, '묶음 이름'))),
+                const SizedBox(height: 10),
+                Expanded(child: ListView.builder(
+                  itemCount: ordered.length,
+                  itemBuilder: (context, index) {
+                    final work = ordered[index];
+                    return ListTile(
+                      dense: true, title: HypAnimatedTitle(title: work.title),
+                      subtitle: Text('#' + work.workId),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          tooltip: HypI18n.t(dialog, '한 칸 위로'),
+                          onPressed: index == 0 ? null : () => update(() {
+                            final value = ordered.removeAt(index);
+                            ordered.insert(index - 1, value);
+                          }),
+                          icon: const Icon(Icons.arrow_upward)),
+                        IconButton(
+                          tooltip: HypI18n.t(dialog, '한 칸 아래로'),
+                          onPressed: index == ordered.length - 1 ? null :
+                              () => update(() {
+                                final value = ordered.removeAt(index);
+                                ordered.insert(index + 1, value);
+                              }),
+                          icon: const Icon(Icons.arrow_downward)),
+                      ]),
+                    );
+                  },
+                )),
+              ]),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog),
                 child: const HypText('취소')),
-            FilledButton(
-              key: const Key('group-confirm'),
-              onPressed: () => Navigator.pop(ctx, input.text.trim()),
-              child: const HypText('묶음 만들기')),
-          ],
+              FilledButton(
+                key: const Key('group-confirm'),
+                onPressed: input.text.trim().isEmpty ? null : () =>
+                    Navigator.pop(dialog, (input.text.trim(),
+                        ordered.map((w) => w.workId).toList())),
+                child: HypText(HypI18n.t(dialog, '한 묶음으로 통합'))),
+            ],
+          ),
         ),
       );
     } finally {
       input.dispose();
     }
-    if (title == null || title.isEmpty || !mounted) return;
-    await widget.onGroupWorks(
-        selected.map((w) => w.workId).toList(), title);
-    if (!mounted) return;
-    setState(() {
-      _selectedWorkIds.clear();
-      _selectingWorks = false;
-    });
+    if (result == null || !mounted) return;
+    try {
+      await widget.onGroupWorks(result.$2, result.$1);
+      if (!mounted) return;
+      setState(() {
+        _selectedWorkIds.clear();
+        _selectedGroupIds.clear();
+        _selectingWorks = false;
+      });
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: HypText('묶음 통합 실패: $error')));
+    }
   }
 
   Future<void> _enrichAndGroup() async {
