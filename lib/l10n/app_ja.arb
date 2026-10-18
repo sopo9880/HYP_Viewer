@@ -640,6 +640,7 @@
   "readerFinishBody": "最後のページです。読了として記録し、ビューアーを閉じますか？",
   "readerFinishAndExit": "読了して終了",
   "readerExitWithoutFinishing": "読了せずに終了",
+  "readerBackToStart": "最初から",
   "readerContinueReading": "読書を続ける",
   "settingsCompleteConfirmTitle": "最終ページで読了を確認",
   "settingsCompleteConfirmHint": "最終ページで「次へ」を押すと、読了と終了を確認します。オフの場合は最終ページの表示時に自動的に読了になります。",

@@ -640,6 +640,7 @@
   "readerFinishBody": "마지막 페이지까지 읽었어. 완독으로 표시하고 뷰어를 종료할까?",
   "readerFinishAndExit": "완독하고 종료",
   "readerExitWithoutFinishing": "완독하지 않고 종료",
+  "readerBackToStart": "처음으로",
   "readerContinueReading": "계속 읽기",
   "settingsCompleteConfirmTitle": "마지막 페이지에서 완독 확인",
   "settingsCompleteConfirmHint": "마지막 장에서 다음 페이지를 넘기면 완독하고 종료할지 물어봐. 끄면 마지막 장을 표시할 때 자동 완독 처리해.",
