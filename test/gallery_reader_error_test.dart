@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hyp_viewer/core/gallery.dart';
+import 'package:hyp_viewer/core/online_reader_failure.dart';
 import 'package:hyp_viewer/core/reader_settings.dart';
 import 'package:hyp_viewer/core/work.dart';
 import 'package:hyp_viewer/l10n/app_localizations.dart';
@@ -24,6 +25,21 @@ class _FailingGallery implements GalleryPageSource {
   }
 }
 
+
+
+class _StructuredFailingGallery implements GalleryPageSource {
+  @override int get pageCount => 5;
+  @override String filename(int index) => 'page.png';
+
+  @override
+  Future<Uint8List> loadPage(int index) async {
+    throw OnlineReaderFailure(
+      code: 'IMAGE_HTTP_ERROR', stage: OnlineReaderStage.image,
+      workId: '2711759', page: index + 1, httpStatus: 403,
+      host: 'w1.gold-usergeneratedcontent.net',
+      description: '이미지 서버가 오류 응답을 반환했어.');
+  }
+}
 
 Widget _localizedApp({required Widget home, ThemeData? theme, Key? key}) =>
     MaterialApp(
@@ -79,4 +95,24 @@ void main() {
     await tester.pump();
     expect(browserPage, 1);
   });
+  testWidgets('typed image error shows code and diagnostic copy action',
+      (tester) async {
+    await tester.pumpWidget(_localizedApp(
+      theme: ThemeData.dark(),
+      home: GalleryReader(
+        work: WorkEntry.create(workId: '2711759'),
+        archive: _StructuredFailingGallery(),
+        diskCacheEnabled: false,
+        settings: const ReaderSettings(preloadPages: 0,
+            hideReaderUiOnOpen: false),
+        onPageChanged: (_) {},
+      ),
+    ));
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('IMAGE_HTTP_ERROR'), findsOneWidget);
+    expect(find.byKey(const Key('reader-copy-diagnostic')), findsOneWidget);
+    expect(find.textContaining('HTTP 403'), findsOneWidget);
+  });
+
 }

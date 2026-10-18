@@ -166,6 +166,19 @@ jobs:
           - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
           - Android: $ANDROID_NOTE
 
+          Changes in v0.4.16:
+          - Replace generic in-app online reader errors with structured
+            diagnostic codes for mismatched gallery IDs, missing/wrong/empty
+            image lists, malformed metadata JSON, CDN failures, DNS errors,
+            timeouts, image hash and gg.js routing changes.
+          - Present localized Korean, English and Japanese failure dialogs
+            with copyable safe diagnostics, retry and web-reader fallback.
+          - Show detailed failure codes and copy action for in-reader image
+            loading errors without leaking raw responses or signed URLs.
+          - Add regression coverage for metadata errors, routing, HTTP/CDN
+            failures, localization and dialog actions.
+          - Existing library, progress, downloads and settings are preserved.
+
           Changes in v0.4.15:
           - Broaden reviewed Auto grouping using title similarity even when
             author and circle metadata are unavailable.
