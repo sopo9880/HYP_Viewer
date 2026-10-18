@@ -1,6 +1,14 @@
 /// Additional 0.4 translations for on-device UI; titles remain verbatim.
 abstract final class HypExtraTranslations {
   static const Map<String, List<String>> labels = {
+    "모든 다운로드 취소": ["Cancel All Downloads", "すべてのダウンロードをキャンセル"],
+    "현재 진행 중인 작품과 대기 중인 다운로드를 모두 취소할까? 이미 저장한 작품은 그대로 유지돼.": ["Cancel the active and queued downloads? Already saved works will be kept.", "進行中と待機中のダウンロードをすべてキャンセルしますか？保存済みの作品は保持されます。"],
+    "돌아가기": ["Go Back", "戻る"],
+    "전체 취소": ["Cancel All", "すべてキャンセル"],
+    "앱 내 다운로드·검증 (진단)": ["In-app Download & Verify (Diagnostics)", "アプリ内ダウンロード・検証（診断）"],
+    "브라우저로 EXE 받기 (안정)": ["Download EXE in Browser (Safe)", "ブラウザーでEXEを取得（安定）"],
+    "다운로드 → 보안 설정 확인": ["Download → Review Security Settings", "ダウンロード→セキュリティ設定を確認"],
+    "브라우저 다운로드를 열지 못했어.": ["Unable to open the browser download.", "ブラウザーでダウンロードを開始できませんでした。"],
     "댓글 열기 시도": ["Try Opening Comments", "コメントを開く"],
     "외부 브라우저로 열기": ["Open in External Browser", "外部ブラウザで開く"],
     "댓글 분석 결과 열기": ["Show Comment Results", "コメント解析結果を表示"],
@@ -278,6 +286,7 @@ abstract final class HypExtraTranslations {
   };
     // Existing user data (titles, comments, URLs) is not translated.
   static const Map<String, List<String>> prefixes = {
+    "최근 작품 열기 실패: ": ["Unable to Open Recent Work: ", "最近読んだ作品を開けません: "],
     "독서 활동 기록 불러오기 실패: ": ["Failed to Load Reading Activity: ","読書履歴の読み込みに失敗: "],
     "독서 활동 기록 저장 실패: ": ["Failed to Save Reading Activity: ","読書履歴の保存に失敗: "],
     "독서 활동 기록 삭제 실패: ": ["Failed to Clear Reading Activity: ","読書履歴の削除に失敗: "],
@@ -358,6 +367,9 @@ abstract final class HypExtraTranslations {
   /// Full-message translations prevent Korean suffixes from appearing after
   /// otherwise localized counts, notifications and recovery dialogues.
   static final List<(RegExp, String, String)> _dynamicFormats = [
+    (RegExp(r'^이전 Windows 업데이트 다운로드가 예상치 못하게 종료됐어 \(([^)]+)\)\. 설정에서 GitHub 릴리스 다운로드를 선택하거나 다시 시도해줘\.$'),
+      'The previous Windows update download stopped unexpectedly ({1}). Choose the GitHub Release browser download in Settings or retry.',
+      '前回のWindows更新ダウンロードが予期せず終了しました（{1}）。設定からGitHubリリースのブラウザーダウンロードを選ぶか、再試行してください。'),
     (RegExp(r'^다운로드 완료: (\d+)장\. 이제 인터넷 없이도 읽을 수 있어\.$'),
       'Downloaded {1} pages for offline reading.',
       '{1}ページを保存しました。オフラインで閲覧できます。'),

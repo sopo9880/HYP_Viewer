@@ -94,6 +94,42 @@ class UpdateProgressLimiter {
 /// verified download and installer handover from an unexpected native exit.
 /// Never logs URLs, titles, authentication, or the downloaded asset contents.
 abstract final class UpdateDiagnostics {
+  /// A marker from a previous launch that began a download but never
+  /// reached a normal terminal state. A Windows native process crash may
+  /// bypass all Dart try/catch/finally handlers.
+  static String? unfinishedPhase(String contents) {
+    String? current;
+    for (final line in const LineSplitter().convert(contents)) {
+      final parts = line.trim().split(' ');
+      if (parts.length < 2) continue;
+      final phase = parts[1];
+      if (phase == 'begin') {
+        current = phase;
+      } else if (current != null) {
+        if (phase == 'end' || phase == 'installer-handover' ||
+            phase == 'failed' || phase == 'verified' ||
+            phase == 'interrupted-detected') {
+          current = null;
+        } else if (phase.startsWith('download-')) {
+          current = phase;
+        }
+      }
+    }
+    return current;
+  }
+
+  static Future<String?> readUnfinished({Directory? baseDirectory}) async {
+    try {
+      final base = baseDirectory ?? await getApplicationSupportDirectory();
+      final file = File(base.path + Platform.pathSeparator + 'hyp_updates' +
+          Platform.pathSeparator + 'update_diagnostics.log');
+      if (!await file.exists()) return null;
+      return unfinishedPhase(await file.readAsString());
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> record(String phase, {
     Object? error, StackTrace? stack, Directory? baseDirectory,
   }) async {
@@ -205,11 +241,13 @@ class UpdateService {
       ReleaseUpdate release, ReleaseAsset installer, {
       void Function(double progress)? onProgress,
       void Function(String status)? onStatus,
+      Future<void> Function(String phase)? onPhase,
     }) async {
     if (installer.size < 1 || installer.size > maxInstallerBytes ||
         !ReleaseAsset._trustedAssetUrl(installer.downloadUrl)) {
       throw const FormatException('허용되지 않은 릴리스 설치 파일이야.');
     }
+    if (onPhase != null) await onPhase('checksum-start');
     String expected = '';
     for (var attempt = 0; attempt < 5; attempt++) {
       try {
@@ -223,7 +261,9 @@ class UpdateService {
         await Future<void>.delayed(retryBaseDelay * (attempt + 1));
       }
     }
+    if (onPhase != null) await onPhase('checksum-verified');
     final root = baseDirectory ?? await getApplicationSupportDirectory();
+    if (onPhase != null) await onPhase('storage-ready');
     final dir = Directory(root.path + Platform.pathSeparator + 'hyp_updates');
     await dir.create(recursive: true);
     final temp = File(dir.path + Platform.pathSeparator + installer.name + '.part');
@@ -240,6 +280,7 @@ class UpdateService {
 
     if (await target.exists()) {
       if (await validHash(target)) {
+        if (onPhase != null) await onPhase('cache-verified');
         onProgress?.call(1);
         onStatus?.call('검증된 설치 파일을 다시 사용해.');
         return target;
@@ -276,6 +317,7 @@ class UpdateService {
       if (received == installer.size) {
         onStatus?.call('설치 파일 SHA-256 검증 중...');
         if (await validHash(temp)) {
+          if (onPhase != null) await onPhase('resume-verified');
           if (await target.exists()) await target.delete();
           onProgress?.call(1);
           return await temp.rename(target.path);
@@ -290,6 +332,7 @@ class UpdateService {
         onStatus?.call(received > 0
             ? '네트워크 연결 복구 · ' + (received ~/ 1024).toString() + 'KB부터 이어받는 중'
             : '업데이트 파일을 다운로드하는 중...');
+        if (onPhase != null) await onPhase('request-start');
         final request = http.Request('GET', installer.downloadUrl);
         if (received > 0) {
           request.headers['Range'] = 'bytes=' + received.toString() + '-';
@@ -297,6 +340,7 @@ class UpdateService {
         }
         final response = await client.send(request)
             .timeout(const Duration(seconds: 20));
+        if (onPhase != null) await onPhase('response-headers');
         if (response.statusCode == 416) {
           await temp.delete();
           etag = '';
@@ -334,9 +378,15 @@ class UpdateService {
         }
         sink = temp.openWrite(mode: received > 0 ? FileMode.append : FileMode.write);
         var completed = received;
+        var sawFirstChunk = false;
         onProgress?.call(completed / installer.size);
+        if (onPhase != null) await onPhase('stream-start');
         await for (final chunk in response.stream.timeout(
             const Duration(seconds: 45))) {
+          if (!sawFirstChunk) {
+            sawFirstChunk = true;
+            if (onPhase != null) await onPhase('first-chunk');
+          }
           completed += chunk.length;
           if (completed > maxInstallerBytes || completed > installer.size) {
             throw const FormatException('설치 파일의 크기가 예상보다 커.');
@@ -347,6 +397,7 @@ class UpdateService {
         await sink.flush();
         await sink.close();
         sink = null;
+        if (onPhase != null) await onPhase('bytes-written');
         if (completed != installer.size) {
           throw const HttpException('다운로드가 중단됐어. 이어받기를 시도해.');
         }
@@ -358,6 +409,7 @@ class UpdateService {
           throw const FormatException('SHA-256 검증 실패: 손상된 파일을 삭제했어.');
         }
         if (await target.exists()) await target.delete();
+        if (onPhase != null) await onPhase('sha256-verified');
         onStatus?.call('설치 파일 검증 완료.');
         return await temp.rename(target.path);
       } on FormatException {

@@ -1,2 +1,2 @@
 /// Reviewed GitHub release version; matches the current 0.x release request.
-const String hypReleaseVersion = '0.4.10';
+const String hypReleaseVersion = '0.4.11';
