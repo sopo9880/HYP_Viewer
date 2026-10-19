@@ -82,11 +82,56 @@ class DownloadFailureStore {
   }
 
   Future<void> remove(String workId) {
-    if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
+    if (!RegExp(r'^\d{1,12}
+  Future<void> _mutate(void Function(Map<String, FailedDownload>) edit) {
+    final write = _pendingWrite.then((_) async {
+      final current = await (_loaded ??= _read());
+      final updated = Map<String, FailedDownload>.from(current);
+      edit(updated);
+      final file = await _file;
+      final staged = File(file.path + '.tmp');
+      final previous = File(file.path + '.previous');
+      await staged.writeAsString(jsonEncode({
+        'version': 1,
+        'failed': [
+          for (final entry in updated.values)
+            {'id': entry.workId, 'source': entry.source, 'code': entry.code}
+        ],
+      }), flush: true);
+      var moved = false;
+      try {
+        if (await file.exists()) {
+          if (await previous.exists()) await previous.delete();
+          await file.rename(previous.path);
+          moved = true;
+        }
+        await staged.rename(file.path);
+      } catch (_) {
+        if (moved && !await file.exists() && await previous.exists()) {
+          await previous.rename(file.path);
+        }
+        rethrow;
+      } finally {
+        if (await staged.exists()) await staged.delete();
+      }
+      _loaded = Future.value(updated);
+    });
+    _pendingWrite = write.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return write;
+  }
+}
+).hasMatch(workId)) {
       throw const FormatException('잘못된 작품 번호야.');
     }
     return _mutate((items) => items.remove(workId));
   }
+
+  /// Dismiss all terminal-failure *records*, not gallery archives, works,
+  /// approved queued jobs, partial downloads or reading progress.
+  ///
+  /// Use the existing atomic, serialized persistence path so the empty list
+  /// survives restart and cannot race an overlapping record/remove call.
+  Future<void> clear() => _mutate((items) => items.clear());
 
   Future<void> _mutate(void Function(Map<String, FailedDownload>) edit) {
     final write = _pendingWrite.then((_) async {
@@ -124,4 +169,25 @@ class DownloadFailureStore {
     _pendingWrite = write.then<void>((_) {}, onError: (Object _, StackTrace __) {});
     return write;
   }
+}
+
+
+/**
+ * Limit the "automatic retry stopped" banner to one display per unchanged
+ * set of terminally failed works. A dismissed/cleared record resets the
+ * notification gate, while genuinely different blocked works may be shown.
+ */
+class TerminalFailureNoticePolicy {
+  String? _lastBlockedSignature;
+
+  bool shouldNotify(Iterable<String> workIds) {
+    final ids = workIds.toSet().toList()..sort();
+    if (ids.isEmpty) return false;
+    final signature = ids.join(',');
+    if (signature == _lastBlockedSignature) return false;
+    _lastBlockedSignature = signature;
+    return true;
+  }
+
+  void reset() => _lastBlockedSignature = null;
 }

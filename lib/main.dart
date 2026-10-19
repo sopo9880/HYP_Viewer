@@ -142,6 +142,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   final Completer<void> _initialFailedDownloadsRead = Completer<void>();
   bool _downloadFailuresReadFailed = false;
   Map<String, FailedDownload> _failedDownloads = {};
+  // Prevent repeatedly surfacing the same terminal-failure skip banner.
+  final TerminalFailureNoticePolicy _blockedDownloadNoticePolicy =
+      TerminalFailureNoticePolicy();
+  static const String _blockedDownloadNotice =
+      '자동 재시도가 중지된 작품은 다운로드 화면에서 직접 재시도해줘.';
   final BackgroundDownloadRuntime _backgroundDownloads =
       BackgroundDownloadRuntime.instance;
   final Map<String, String> _downloadSourceById = {};
@@ -983,9 +988,45 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       throw StateError('손상된 실패 기록을 복구해야 재시도할 수 있어.');
     }
     await _downloadFailures.remove(workId);
+    _blockedDownloadNoticePolicy.reset();
     if (mounted) setState(() {
       _failedDownloads = {..._failedDownloads}..remove(workId);
+      if (message == _blockedDownloadNotice) message = '';
     });
+  }
+
+  /// Hide a failed item without deleting a gallery, archive or library entry.
+  Future<void> _dismissFailedDownload(String workId) async {
+    if (!_failedDownloads.containsKey(workId)) return;
+    try {
+      await _clearFailedDownload(workId);
+    } catch (error) {
+      _status('다운로드 실패 기록 삭제 실패: $error');
+    }
+  }
+
+  /// Clear only the persisted terminal-failure journal, not the download
+  /// queue or downloaded pages. Future user-requested bulk downloads may
+  /// attempt these works again; no job is created by this operation.
+  Future<void> _clearAllFailedDownloads() async {
+    await _initialFailedDownloadsRead.future;
+    if (_downloadFailuresReadFailed) {
+      _status('손상된 다운로드 실패 기록을 복구해야 목록을 삭제할 수 있어.');
+      return;
+    }
+    if (_failedDownloads.isEmpty) return;
+    try {
+      await _downloadFailures.clear();
+      _blockedDownloadNoticePolicy.reset();
+      if (mounted) {
+        setState(() {
+          _failedDownloads = {};
+          if (message == _blockedDownloadNotice) message = '';
+        });
+      }
+    } catch (error) {
+      _status('전체 다운로드 실패 기록 삭제 실패: $error');
+    }
   }
 
   Future<void> _retryFailedDownload(String workId) async {
@@ -2629,7 +2670,14 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final queued = works.where((work) =>
         !_failedDownloads.containsKey(work.workId)).toList();
     if (queued.isEmpty) {
-      _status('자동 재시도가 중지된 작품은 다운로드 화면에서 직접 재시도해줘.');
+      // Skip the same terminal failures silently after one informational
+      // notice per unchanged blocked set. Never loop or requeue failures.
+      final blockedIds = works
+          .where((work) => _failedDownloads.containsKey(work.workId))
+          .map((work) => work.workId).toSet().toList()..sort();
+      if (!restored && _blockedDownloadNoticePolicy.shouldNotify(blockedIds)) {
+        _status(_blockedDownloadNotice);
+      }
       return;
     }
     // Persist approved jobs with their original download source.
@@ -3631,6 +3679,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     queuedDownloadCount: _downloadQueue.length,
     failedDownloads: _failedDownloads,
     onRetryFailedDownload: _retryFailedDownload,
+    onDismissFailedDownload: _dismissFailedDownload,
+    onClearFailedDownloads: _clearAllFailedDownloads,
     onDownloadJsonSource: _downloadJsonSource,
     onDeleteOffline: _deleteOffline,
     onDeleteWork: _deleteWork,

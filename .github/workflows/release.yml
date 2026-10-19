@@ -253,6 +253,15 @@ jobs:
             or online gallery/edition result sheets close.
           - Add Flutter regression coverage for native presets, blank-query
             browsing and focus-safe Cancel/Apply/back navigation.
+          - Add dismiss (X) for individual stopped-download failure records
+            and a confirmation-protected Clear All action.
+          - Persist failure-record removal across restarts using the existing
+            atomic journal; never delete CBZ files, library entries, reading
+            history or active/pending download jobs.
+          - Suppress repeated identical 'auto retry stopped' notifications
+            while keeping explicit future user-requested retries available.
+          - Add KO/EN/JA strings and UI/serialization regression tests for
+            single dismissal, Clear All, confirmation and restart safety.
 
           Changes in v0.4.20:
           - Unify the five displayed Windows/Android DPI presets, retaining

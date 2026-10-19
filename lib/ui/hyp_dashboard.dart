@@ -45,6 +45,7 @@ import 'work_cards.dart';
 import 'auto_group_wizard.dart';
 import 'work_group_card.dart';
 import 'hyp_animated_title.dart';
+import 'failed_downloads_panel.dart';
 
 enum HypPage { home, library, favorites, downloads, history, settings }
 
@@ -146,6 +147,8 @@ class HypDashboard extends StatefulWidget {
   final int queuedDownloadCount;
   final Map<String, FailedDownload> failedDownloads;
   final Future<void> Function(String workId)? onRetryFailedDownload;
+  final Future<void> Function(String workId)? onDismissFailedDownload;
+  final Future<void> Function()? onClearFailedDownloads;
   final Future<void> Function(WorkEntry) onDownloadJsonSource;
   final Future<void> Function(WorkEntry) onDeleteOffline;
   final Future<void> Function(WorkEntry) onDeleteWork;
@@ -251,6 +254,8 @@ class HypDashboard extends StatefulWidget {
     required this.queuedDownloadCount,
     this.failedDownloads = const {},
     this.onRetryFailedDownload,
+    this.onDismissFailedDownload,
+    this.onClearFailedDownloads,
     required this.onDownloadJsonSource,
     required this.onDeleteOffline,
     required this.onDeleteWork,
@@ -3194,37 +3199,12 @@ class _HypDashboardState extends State<HypDashboard> {
         const SizedBox(height: 12),
       ],
       if (widget.failedDownloads.isNotEmpty) ...[
-        HypPanel(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            HypText(
-              AppLocalizations.of(context)!.downloadFailedHeading,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            HypText(AppLocalizations.of(context)!.downloadFailedHelp),
-            const SizedBox(height: 8),
-            for (final failed in widget.failedDownloads.values.toList().reversed.take(25))
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(children: [
-                  Expanded(child: HypText(
-                    AppLocalizations.of(context)!.downloadFailedDetail(
-                        failed.workId, failed.code),
-                    key: Key('failed-download-' + failed.workId),
-                  )),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    key: Key('retry-failed-' + failed.workId),
-                    onPressed: widget.onRetryFailedDownload == null ? null :
-                        () => widget.onRetryFailedDownload!(failed.workId),
-                    child: HypText(
-                      AppLocalizations.of(context)!.downloadFailedRetry),
-                  ),
-                ]),
-              ),
-          ],
-        )),
+        FailedDownloadsPanel(
+          failedDownloads: widget.failedDownloads,
+          onRetry: widget.onRetryFailedDownload,
+          onDismiss: widget.onDismissFailedDownload,
+          onClearAll: widget.onClearFailedDownloads,
+        ),
         const SizedBox(height: 12),
       ],
       if (widget.downloadingGalleryKey != null) ...[
