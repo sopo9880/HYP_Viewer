@@ -182,9 +182,11 @@ class HitomiGalleryProvider {
   static const _maxScriptBytes = 1024 * 1024;
 
   /// Try the official CDN first, then independently hosted Heliotrope mirrors.
-  /// Each candidate must contain the requested ID and a usable image list.
-  /// Never replace one gallery with an unrelated gallery's images.
-  Future<Map<dynamic, dynamic>> _verifiedGalleryInfo(String workId) async {
+  /// Title/ID lookup needs only a matching ID, while actual reading must
+  /// validate image files before trusting a source or falling back.
+  Future<Map<dynamic, dynamic>> _verifiedGalleryInfo(String workId, {
+    bool requireFiles = false,
+  }) async {
     if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
       throw const FormatException('작품 번호는 숫자 1~12자리여야 해.');
     }
@@ -207,7 +209,9 @@ class HitomiGalleryProvider {
               noCache: noCache);
           final decoded = _decodeGalleryInfo(raw, workId: workId,
               host: host, retried: noCache);
-          _validateGalleryFiles(decoded, workId: workId, host: host);
+          if (requireFiles) {
+            _validateGalleryFiles(decoded, workId: workId, host: host);
+          }
           return decoded;
         } on OnlineReaderFailure catch (error) {
           if (source == 0) {
@@ -343,11 +347,221 @@ class HitomiGalleryProvider {
   }
 
   Future<HitomiGallery> load(String workId, {bool dataSaver = false}) async {
-    if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
+    if (!RegExp(r'^\d{1,12}
+    if (!decoded.containsKey('files')) {
+      throw OnlineReaderFailure(code: 'META_FILES_MISSING',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        description: '메타데이터에 이미지 목록(files)이 없어.');
+    }
+    if (decoded['files'] is! List) {
+      throw OnlineReaderFailure(code: 'META_FILES_TYPE',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        actualType: OnlineReaderFailure.jsonType(decoded['files']),
+        description: '이미지 목록(files)이 배열이 아니야.');
+    }
+    final files = decoded['files'] as List;
+    if (files.isEmpty) {
+      throw OnlineReaderFailure(code: 'META_FILES_EMPTY',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        description: '이미지 목록(files)이 비어 있어.');
+    }
+    if (files.length > GalleryArchive.maxPages) {
+      throw OnlineReaderFailure(code: 'META_PAGE_LIMIT',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: _host,
+        description: '지원하는 최대 페이지 수를 초과했어.');
+    }
+    final ggScript = await _readScript(Uri.https(_host, '/gg.js'),
+      workId: workId, stage: OnlineReaderStage.routing);
+    late final _HitomiGg gg;
+    try {
+      gg = _HitomiGg.fromScript(ggScript);
+    } on FormatException catch (error) {
+      throw OnlineReaderFailure.classify(error,
+        workId: workId, stage: OnlineReaderStage.routing, host: _host);
+    }
+    final urls = <Uri>[];
+    final thumbnails = <Uri>[];
+    for (var index = 0; index < files.length; index++) {
+      final item = files[index];
+      if (item is! Map) {
+        throw OnlineReaderFailure(code: 'META_IMAGE_ENTRY_INVALID',
+          stage: OnlineReaderStage.metadata, workId: workId,
+          httpStatus: 200, host: _host, page: index + 1,
+          actualType: OnlineReaderFailure.jsonType(item),
+          description: '이미지 파일 정보 형식이 올바르지 않아.');
+      }
+      try {
+        urls.add(gg.urlFor(item));
+        thumbnails.add(gg.thumbnailFor(item));
+      } on FormatException {
+        throw OnlineReaderFailure(code: 'ROUTING_HASH_INVALID',
+          stage: OnlineReaderStage.routing, workId: workId,
+          host: _host, page: index + 1,
+          description: '이미지 파일의 해시 정보가 잘못됐어.');
+      }
+    }
+    return HitomiGallery(
+      workId: workId,
+      title: decoded['title'] is String ? decoded['title'] as String : '',
+      pageUrls: List.unmodifiable(urls),
+      thumbnailUrls: List.unmodifiable(thumbnails),
+      dataSaver: dataSaver,
+      client: client,
+    );
+  }
+
+  Future<String> _readScript(Uri uri, {
+    String workId = '',
+    OnlineReaderStage stage = OnlineReaderStage.metadata,
+    bool noCache = false,
+  }) async {
+    if (uri.scheme != 'https' || uri.port != 443 ||
+        !<String>{_host, ..._fallbackHosts}.contains(uri.host)) {
+      throw const FormatException('지원하지 않는 소스 서버야.');
+    }
+    final request = http.Request('GET', uri)
+      ..followRedirects = false
+      ..headers['Accept'] = 'application/json,text/javascript,application/javascript,text/plain,*/*';
+    if (uri.host == _host) {
+      request.headers['Referer'] = 'https://hitomi.la/';
+    }
+    if (noCache) {
+      request.headers['Cache-Control'] = 'no-cache, no-store';
+      request.headers['Pragma'] = 'no-cache';
+    }
+    late final http.StreamedResponse response;
+    try {
+      response = await client.send(request)
+          .timeout(const Duration(seconds: 18));
+    } catch (error) {
+      throw OnlineReaderFailure.classify(error,
+        workId: workId, stage: stage, host: uri.host);
+    }
+    if (response.statusCode != 200) {
+      throw OnlineReaderFailure(
+        code: stage == OnlineReaderStage.routing
+            ? 'ROUTING_HTTP_ERROR' : 'META_HTTP_ERROR',
+        stage: stage, workId: workId, host: uri.host,
+        httpStatus: response.statusCode,
+        description: '메타데이터 서버가 오류 응답을 반환했어.');
+
+    }
+    if (response.contentLength != null &&
+        response.contentLength! > _maxScriptBytes) {
+      throw OnlineReaderFailure(code: 'META_SIZE_LIMIT',
+        stage: stage, workId: workId, host: uri.host, httpStatus: 200,
+        description: '메타데이터 크기가 제한을 초과했어.');
+    }
+    final bytes = BytesBuilder(copy: false);
+    var read = 0;
+    try {
+      await for (final chunk in response.stream.timeout(
+          const Duration(seconds: 25))) {
+        read += chunk.length;
+        if (read > _maxScriptBytes) {
+          throw OnlineReaderFailure(code: 'META_SIZE_LIMIT',
+            stage: stage, workId: workId, host: uri.host, httpStatus: 200,
+            description: '메타데이터가 허용 크기를 초과했어.');
+        }
+        bytes.add(chunk);
+      }
+    } catch (error) {
+      throw OnlineReaderFailure.classify(error,
+        workId: workId, stage: stage, host: uri.host);
+    }
+    try {
+      return utf8.decode(bytes.takeBytes());
+    } on FormatException {
+      throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',
+        stage: stage, workId: workId, host: uri.host, httpStatus: 200,
+        description: '메타데이터의 문자 인코딩이 올바르지 않아.');
+    }
+  }
+}
+
+/// Parses the current public gg.js routing information.
+/// Host suffixes are limited to w1/w2, as in the current public WebP client;
+/// do not generate numeric legacy JPEG image domains from an original filename.
+class _HitomiGg {
+  final int defaultOffset;
+  final Map<int, int> offsets;
+  final String pathPrefix;
+
+  const _HitomiGg(this.defaultOffset, this.offsets, this.pathPrefix);
+
+  factory _HitomiGg.fromScript(String script) {
+    final fallback = RegExp(r'var\s+o\s*=\s*(\d+)').firstMatch(script);
+    final override = RegExp(r'o\s*=\s*(\d+)\s*;\s*break\s*;')
+        .firstMatch(script);
+    final cases = RegExp(r'case\s+(\d+)\s*:').allMatches(script).toList();
+    final b = RegExp(r"b:\s*'([^']*)'").firstMatch(script);
+    if (fallback == null || b == null ||
+        (override == null && cases.isNotEmpty)) {
+      throw const FormatException('이미지 서버 라우팅 형식이 변경됐어.');
+    }
+    final defaultOffset = int.parse(fallback.group(1)!);
+    final overrideOffset = override == null
+        ? defaultOffset : int.parse(override.group(1)!);
+    if (defaultOffset < 0 || defaultOffset > 1 ||
+        overrideOffset < 0 || overrideOffset > 1) {
+      throw const FormatException(
+          '이미지 서버 선택 값이 범위를 벗어났어. 최신 gg.js 형식을 확인해 줘.');
+    }
+    final map = <int, int>{};
+    for (final caseMatch in cases) {
+      final hashCode = int.parse(caseMatch.group(1)!);
+      if (hashCode < 0 || hashCode > 4095) {
+        throw const FormatException('이미지 해시 라우팅 값이 유효하지 않아.');
+      }
+      map[hashCode] = overrideOffset;
+    }
+    final prefix = b.group(1)!;
+    if (!RegExp(r'^[a-zA-Z0-9/_-]{1,60}$').hasMatch(prefix)) {
+      throw const FormatException('이미지 경로 정보가 올바르지 않아.');
+    }
+    return _HitomiGg(defaultOffset, map, prefix);
+  }
+
+  /// Compact WebP thumbnails from the site's dedicated thumbnail servers.
+  /// The hash-based layout is independent of the original image dimensions.
+  Uri thumbnailFor(Map file) {
+    final hash = file['hash']?.toString().toLowerCase() ?? '';
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(hash)) {
+      throw const FormatException('이미지 해시 정보가 잘못됐어.');
+    }
+    final last = hash.substring(hash.length - 3);
+    final group = int.parse(last.substring(2) + last.substring(0, 2),
+        radix: 16);
+    final which = String.fromCharCode(97 + (offsets[group] ?? defaultOffset));
+    return Uri.https('${which}tn.gold-usergeneratedcontent.net',
+        '/webpsmalltn/${last[2]}/${last.substring(0, 2)}/$hash.webp');
+  }
+
+  Uri urlFor(Map file) {
+    final hash = file['hash']?.toString().toLowerCase() ?? '';
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(hash)) {
+      throw const FormatException('이미지 해시 정보가 잘못됐어.');
+    }
+    final last = hash.substring(hash.length - 3);
+    final group = int.parse(last.substring(2) + last.substring(0, 2), radix: 16);
+    final hostSuffix = 1 + (offsets[group] ?? defaultOffset);
+    // WebP is supplied by the current public gallery image servers even for
+    // entries lacking an old 'haswebp' flag.
+    return Uri.https(
+      'w$hostSuffix.gold-usergeneratedcontent.net',
+      '/$pathPrefix$group/$hash.webp',
+    );
+  }
+}
+).hasMatch(workId)) {
       throw const FormatException('작품 번호는 숫자 1~12자리여야 해.');
     }
 
-    final decoded = await _verifiedGalleryInfo(workId);
+    final decoded = await _verifiedGalleryInfo(workId, requireFiles: true);
     if (!decoded.containsKey('files')) {
       throw OnlineReaderFailure(code: 'META_FILES_MISSING',
         stage: OnlineReaderStage.metadata, workId: workId,

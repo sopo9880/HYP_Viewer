@@ -463,6 +463,9 @@ void main() {
 
   test('missing mirror image files do not stop the final fallback', () async {
     final client = MockClient((request) async {
+      if (request.url.path == '/gg.js') {
+        return http.Response("var o = 0; var x={b: '2026/'};", 200);
+      }
       if (request.url.host == 'ltn.gold-usergeneratedcontent.net') {
         return http.Response('No galleryinfo', 404);
       }
@@ -477,11 +480,40 @@ void main() {
       }), 200);
     });
     try {
-      expect(await HitomiGalleryProvider(client).fetchTitle('3538281'),
-          'Complete');
+      final gallery = await HitomiGalleryProvider(client).load('3538281');
+      expect(gallery.title, 'Complete');
+      expect(gallery.pageCount, 1);
     } finally {
       client.close();
     }
   });
+
+  test('metadata title and info lookups do not require image files',
+      () async {
+    final seen = <Uri>[];
+    final client = MockClient((request) async {
+      seen.add(request.url);
+      return http.Response('var galleryinfo = ' + jsonEncode({
+        'id': 3538281, 'title': 'Sparse but valid gallery',
+      }) + ';', 200);
+    });
+    try {
+      final provider = HitomiGalleryProvider(client);
+      expect(await provider.fetchTitle('3538281'), 'Sparse but valid gallery');
+      final info = await provider.fetchInfo('3538281');
+      expect(info.workId, '3538281');
+      expect(info.pageCount, 0);
+      expect(seen.length, 2);
+      expect(seen.every((uri) => uri.host ==
+          'ltn.gold-usergeneratedcontent.net'), isTrue);
+      // A gallery with no image list must not be opened as a reader.
+      await expectLater(provider.load('3538281'),
+        throwsA(isA<OnlineReaderFailure>().having(
+          (failure) => failure.code, 'code', 'META_FILES_MISSING')));
+    } finally {
+      client.close();
+    }
+  });
+
 
 }
