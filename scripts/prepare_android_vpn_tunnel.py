@@ -59,6 +59,7 @@ def build():
             "APP_ABI=" + " ".join(ABIS),
             "APP_PLATFORM=android-29",
             "APP_MODULES=hev-socks5-tunnel",
+            "APP_CFLAGS=-DANDROID",
             "-j2",
         ], cwd=str(sources), check=True)
         for abi in ABIS:

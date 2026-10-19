@@ -102,4 +102,41 @@ void main() {
     expect(widget, contains('Duration(seconds: 12)'));
     expect(widget, contains('widget.onFinished(widget.query'));
   });
+
+  test('Android DPI lifecycle has no duplicate or truncated declarations',
+      () async {
+    final dart = await File('lib/core/android_dpi.dart').readAsString();
+    for (final signature in <String>[
+      'Future<void> setExcludedApps(',
+      'Future<void> refresh() async {',
+      'Future<bool> checkSite() async {',
+      'Future<void> _serialize(',
+    ]) {
+      expect(signature.allMatches(dart).length, 1,
+          reason: 'duplicate/missing Android DPI lifecycle declaration');
+    }
+    expect(dart, contains("RegExp(r'^[A-Za-z0-9_.]{3,150}\$')"));
+    expect(dart, contains("'vpnStatus'"));
+  });
+
+  test('Pinned native ByeDPI arguments and NDK build wiring are valid',
+      () async {
+    final presets = await File(
+      'android/app/src/main/kotlin/com/sopo9880/hyp_viewer/AndroidDpiPresets.kt',
+    ).readAsString();
+    final build = await File('scripts/prepare_android_vpn_tunnel.py')
+        .readAsString();
+    for (final workflow in [
+      '.github/workflows/verify.yml',
+      '.github/workflows/release.yml',
+    ]) {
+      final source = await File(workflow).readAsString();
+      expect(source, contains('cmdline-tools/latest/bin/sdkmanager'));
+    }
+    expect(presets, contains('"-M", "h"'));
+    expect(presets, isNot(contains('"-M", "hcsmix"')));
+    expect(build, contains('APP_CFLAGS=-DANDROID'));
+    expect(build, contains('780b396b0fc3d0355fc0614e221e3446933669c4'));
+  });
+
 }

@@ -30,7 +30,7 @@ class AndroidDpiPreferences {
     'russia_blacklist_dnsredir': '-s 1 -H russia-blacklist.txt + VPN DNS',
     'all': '-s 1',
     'all_dnsredir': '-s 1 + VPN DNS',
-    'all_dnsredir_hardcore': '-s 1 -d 3 -q 1 -M hcsmix + VPN DNS',
+    'all_dnsredir_hardcore': '-s 1 -d 3 -q 1 -M h + VPN DNS',
   };
 
   bool get needsAlternativeDns =>
@@ -299,52 +299,8 @@ class AndroidDpiManager extends ChangeNotifier {
   }
 
   Future<void> setExcludedApps(List<String> packages) async {
-    if (packages.length > 100 || packages.any((p) =>
-        !RegExp(r'^[A-Za-z0-9_.]{3,150}
-    if (!Platform.isAndroid || phase != AndroidDpiPhase.running) return;
-    try {
-      final actual = await _channel.invokeMapMethod<String, dynamic>('status');
-      final vpn = preferences.scope == 'device'
-          ? await _channel.invokeMapMethod<String, dynamic>('vpnStatus')
-          : null;
-      if (actual?['running'] != true ||
-          actual?['port'] != AndroidDpiHttpOverrides.port ||
-          (preferences.scope == 'device' && vpn?['running'] != true)) {
-        _monitor?.cancel();
-        _monitor = null;
-        // A dead proxy must produce a visible error, never a silent bypass.
-        _status(AndroidDpiPhase.failed, 'proxy-disconnected');
-      }
-    } catch (_) {
-      _status(AndroidDpiPhase.failed, 'status-check-failed');
-    }
-  }
-
-  Future<bool> checkSite() async {
-    if (!Platform.isAndroid || phase != AndroidDpiPhase.running) return false;
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 8);
-    try {
-      final request = await client.getUrl(Uri.https('hitomi.la', '/'))
-          .timeout(const Duration(seconds: 10));
-      final response = await request.close()
-          .timeout(const Duration(seconds: 10));
-      await response.drain<void>().timeout(const Duration(seconds: 10));
-      return response.statusCode >= 200 && response.statusCode < 500;
-    } catch (_) {
-      return false;
-    } finally {
-      client.close(force: true);
-    }
-  }
-
-  Future<void> _serialize(Future<void> Function() work) {
-    final next = _pending.then((_) => work());
-    _pending = next.then<void>((_) {}, onError: (Object _, StackTrace __) {});
-    return next;
-  }
-}
-).hasMatch(p))) {
+    if (packages.length > 100 || packages.any((packageName) =>
+        !RegExp(r'^[A-Za-z0-9_.]{3,150}$').hasMatch(packageName))) {
       throw const FormatException('Invalid excluded package');
     }
     final wasRunning = phase == AndroidDpiPhase.running &&
@@ -363,11 +319,15 @@ class AndroidDpiManager extends ChangeNotifier {
     if (!Platform.isAndroid || phase != AndroidDpiPhase.running) return;
     try {
       final actual = await _channel.invokeMapMethod<String, dynamic>('status');
+      final vpn = preferences.scope == 'device'
+          ? await _channel.invokeMapMethod<String, dynamic>('vpnStatus')
+          : null;
       if (actual?['running'] != true ||
-          actual?['port'] != AndroidDpiHttpOverrides.port) {
+          actual?['port'] != AndroidDpiHttpOverrides.port ||
+          (preferences.scope == 'device' && vpn?['running'] != true)) {
         _monitor?.cancel();
         _monitor = null;
-        // A dead proxy must produce a visible error, never a silent bypass.
+        // A dead proxy/VPN must produce an error, never a successful ON.
         _status(AndroidDpiPhase.failed, 'proxy-disconnected');
       }
     } catch (_) {

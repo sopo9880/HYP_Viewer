@@ -28,7 +28,7 @@ internal object AndroidDpiPresets {
             options.addAll(listOf("-H", blacklistPath))
         }
         if (preset == "all_dnsredir_hardcore") {
-            options.addAll(listOf("-d", "3", "-q", "1", "-M", "hcsmix"))
+            options.addAll(listOf("-d", "3", "-q", "1", "-M", "h"))
         }
         return options
     }
