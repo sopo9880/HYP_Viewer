@@ -16,6 +16,7 @@ import '../core/gallery.dart';
 import '../core/cover_store.dart';
 import '../core/reader_settings.dart';
 import 'windows_dpi_panel.dart';
+import 'android_dpi_panel.dart';
 import '../core/i18n.dart';
 import '../l10n/app_localizations.dart';
 import '../core/number_extractor.dart';
@@ -3332,6 +3333,12 @@ class _HypDashboardState extends State<HypDashboard> {
       if (Platform.isWindows) ...[
          _settingsPanel('dpi', AppLocalizations.of(context)!.dpiSettingsTitle,
            const WindowsDpiSettingsPanel()),
+         const SizedBox(height: 10),
+       ],
+       if (Platform.isAndroid) ...[
+         _settingsPanel('androidDpi',
+             AppLocalizations.of(context)!.androidDpiTitle,
+             const AndroidDpiSettingsPanel()),
          const SizedBox(height: 10),
        ],
        _settingsPanel('hero', AppLocalizations.of(context)!.settingsHero, Column(

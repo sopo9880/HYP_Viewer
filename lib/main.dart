@@ -19,6 +19,7 @@ import 'core/cover_store.dart';
 import 'core/hero_artwork_store.dart';
 import 'core/reader_settings.dart';
 import 'core/windows_dpi.dart';
+import 'core/android_dpi.dart';
 import 'core/i18n.dart';
 import 'l10n/app_localizations.dart';
 import 'core/reader_downloader.dart';
@@ -74,6 +75,11 @@ void main() async {
     unawaited(WindowsDpiManager.instance.initialize());
   }
   runApp(const HypViewerApp());
+  if (Platform.isAndroid) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(AndroidDpiManager.instance.initialize());
+    });
+  }
 }
 
 class HypViewerApp extends StatelessWidget {

@@ -122,6 +122,12 @@ jobs:
           python3 scripts/apply_app_icons.py --platform android
       - name: Configure Japanese/Korean offline OCR models
         run: python3 scripts/configure_android_ocr.py
+      - name: Stage pinned MIT ByeDPI native engine for Android
+        run: python3 scripts/prepare_android_byedpi.py
+      - name: Configure Android NDK ByeDPI and WebView proxy
+        run: python3 scripts/configure_android_dpi.py
+      - name: Validate Android DPI engine sources and Gradle wiring
+        run: python3 -m unittest discover -s scripts -p test_android_dpi_prepare.py
       - run: flutter pub get
       - name: Patch WebView Android ProGuard compatibility
         run: python3 scripts/patch_webview_proguard.py
@@ -205,6 +211,18 @@ jobs:
             with cache bypass and expose the numeric returned gallery ID.
             Always reject cross-gallery responses after revalidation.
           - Preserve v0.4.16 user library, reading history and app settings.
+
+          Changes in v0.4.19:
+          - Implement Android app-local ByeDPI using the MIT native engine
+            compiled from a verified pinned source revision into the APK.
+          - Route Android WebView plus Dart HTTP(S) metadata, online search,
+            images and authorized downloads through the same local proxy.
+          - Provide opt-in Android DPI ON/OFF, preset selection, restart,
+            startup preference, status diagnostics and a connectivity test.
+          - Keep Windows DPI separate and preserve user libraries, downloaded
+            CBZ archives, reading progress and existing app settings.
+          - This is app-scoped; no root or system VPN takeover. Real-device
+            DPI bypass requires additional on-device network validation.
 
           Changes in v0.4.18:
           - Use two independent Heliotrope metadata mirrors when the primary

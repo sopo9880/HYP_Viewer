@@ -13,6 +13,16 @@ import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import android.net.Uri
+import androidx.webkit.ProxyConfig
+import androidx.webkit.ProxyController
+import androidx.webkit.WebViewFeature
+import io.flutter.plugin.common.MethodCall
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.util.concurrent.Executor
+import kotlin.concurrent.thread
 import android.provider.DocumentsContract
 import android.os.Handler
 import android.os.Looper
@@ -30,6 +40,11 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val channelName = "hyp_viewer/share"
+    private var dpiOperationBusy = false
+    private val dpiPreferences by lazy {
+        getSharedPreferences("hyp_android_dpi_local", Context.MODE_PRIVATE)
+    }
+    private val proxyCallbackExecutor = Executor { command -> runOnUiThread(command) }
     private var channel: MethodChannel? = null
     private var pendingSharedText: String? = null
     private var pendingSharedImagePaths: List<String> = emptyList()
@@ -387,6 +402,30 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
+            "hyp_viewer/android_dpi").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "start" -> startAndroidDpi(call, result)
+                "stop" -> stopAndroidDpi(result)
+                "status" -> {
+                    val port = dpiPreferences.getInt("port", 0)
+                    val supported = WebViewFeature.isFeatureSupported(
+                        WebViewFeature.PROXY_OVERRIDE)
+                    // Never open a socket on the Android UI thread.
+                    thread(name = "HYP-DPI-status", isDaemon = true) {
+                        val live = port in 1025..65535 && isDpiListening(port)
+                        runOnUiThread {
+                            result.success(mapOf(
+                                "supported" to supported,
+                                "running" to live,
+                                "port" to port
+                            ))
+                        }
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
         channel?.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -399,6 +438,152 @@ class MainActivity : FlutterActivity() {
                     pendingSharedImagePaths = emptyList()
                 }
                 else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun isDpiListening(port: Int): Boolean = try {
+        Socket().use { socket ->
+            socket.connect(InetSocketAddress("127.0.0.1", port), 140)
+            true
+        }
+    } catch (_: Exception) { false }
+
+    private fun newDpiPort(): Int = ServerSocket(
+        0, 1, InetAddress.getByName("127.0.0.1")
+    ).use { server -> server.localPort }
+
+    private fun stopNativeDpi() {
+        try {
+            startService(Intent(this, AndroidDpiService::class.java).apply {
+                action = AndroidDpiService.ACTION_STOP
+            })
+        } catch (_: Exception) { /* Already stopped. */ }
+    }
+
+    private fun startAndroidDpi(call: MethodCall, result: MethodChannel.Result) {
+        if (dpiOperationBusy) {
+            result.error("busy", "Android DPI operation already running", null)
+            return
+        }
+        val preset = call.argument<String>("preset") ?: "standard"
+        if (preset !in listOf("standard", "strong", "sni")) {
+            result.error("invalid_preset", "Unknown ByeDPI preset", null)
+            return
+        }
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+            result.error("webview_unsupported",
+                "This Android WebView cannot use a local HTTP proxy", null)
+            return
+        }
+        dpiOperationBusy = true
+        val stored = dpiPreferences.getInt("port", 0)
+        val port = try {
+            if (stored in 1025..65535) stored else newDpiPort()
+        } catch (_: Exception) {
+            dpiOperationBusy = false
+            result.error("port", "Unable to reserve local DPI port", null)
+            return
+        }
+        dpiPreferences.edit().putInt("port", port).apply()
+        try {
+            // The Service ignores a second START when its engine already runs.
+            // This avoids checking local sockets on the Android main thread.
+            val intent = Intent(this, AndroidDpiService::class.java).apply {
+                action = AndroidDpiService.ACTION_START
+                putExtra(AndroidDpiService.EXTRA_PORT, port)
+                putExtra(AndroidDpiService.EXTRA_PRESET, preset)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (_: Exception) {
+            dpiOperationBusy = false
+            result.error("service", "Android DPI service could not start", null)
+            return
+        }
+        thread(name = "HYP-DPI-probe", isDaemon = true) {
+            var listening = false
+            for (attempt in 0 until 55) {
+                if (isDpiListening(port)) {
+                    listening = true
+                    break
+                }
+                try { Thread.sleep(125L) } catch (_: InterruptedException) {}
+            }
+            runOnUiThread {
+                if (!listening) {
+                    dpiOperationBusy = false
+                    stopNativeDpi()
+                    result.error("engine_timeout",
+                        "ByeDPI native proxy did not start", null)
+                    return@runOnUiThread
+                }
+                try {
+                    val config = ProxyConfig.Builder()
+                        .addProxyRule("http://127.0.0.1:" + port)
+                        .addBypassRule("127.0.0.1")
+                        .addBypassRule("localhost")
+                        .build()
+                    ProxyController.getInstance().setProxyOverride(config,
+                        proxyCallbackExecutor, Runnable {
+                            dpiOperationBusy = false
+                            result.success(mapOf("running" to true, "port" to port))
+                        })
+                } catch (_: Exception) {
+                    dpiOperationBusy = false
+                    stopNativeDpi()
+                    result.error("webview_proxy",
+                        "Unable to configure WebView HTTP proxy", null)
+                }
+            }
+        }
+    }
+
+    private fun stopAndroidDpi(result: MethodChannel.Result) {
+        if (dpiOperationBusy) {
+            result.error("busy", "Android DPI operation already running", null)
+            return
+        }
+        dpiOperationBusy = true
+        val port = dpiPreferences.getInt("port", 0)
+        stopNativeDpi()
+        // Explicitly wait for the isolated native process to release the port,
+        // otherwise changing presets could silently reuse the old engine.
+        thread(name = "HYP-DPI-stop", isDaemon = true) {
+            var released = port !in 1025..65535
+            for (attempt in 0 until 32) {
+                if (!isDpiListening(port)) {
+                    released = true
+                    break
+                }
+                try { Thread.sleep(100L) } catch (_: InterruptedException) {}
+            }
+            runOnUiThread {
+                if (!released) {
+                    dpiOperationBusy = false
+                    result.error("stop_timeout",
+                        "Native DPI proxy did not release its port", null)
+                    return@runOnUiThread
+                }
+                if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+                    dpiOperationBusy = false
+                    result.success(null)
+                    return@runOnUiThread
+                }
+                try {
+                    ProxyController.getInstance().clearProxyOverride(
+                        proxyCallbackExecutor, Runnable {
+                            dpiOperationBusy = false
+                            result.success(null)
+                        })
+                } catch (_: Exception) {
+                    dpiOperationBusy = false
+                    result.error("webview_proxy_reset",
+                        "Unable to clear WebView HTTP proxy", null)
+                }
             }
         }
     }
