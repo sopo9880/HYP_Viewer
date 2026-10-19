@@ -45,6 +45,7 @@ import 'work_cards.dart';
 import 'auto_group_wizard.dart';
 import 'work_group_card.dart';
 import 'hyp_animated_title.dart';
+import 'failed_downloads_panel.dart';
 
 enum HypPage { home, library, favorites, downloads, history, settings }
 
@@ -146,6 +147,8 @@ class HypDashboard extends StatefulWidget {
   final int queuedDownloadCount;
   final Map<String, FailedDownload> failedDownloads;
   final Future<void> Function(String workId)? onRetryFailedDownload;
+  final Future<void> Function(String workId)? onDismissFailedDownload;
+  final Future<void> Function()? onClearFailedDownloads;
   final Future<void> Function(WorkEntry) onDownloadJsonSource;
   final Future<void> Function(WorkEntry) onDeleteOffline;
   final Future<void> Function(WorkEntry) onDeleteWork;
@@ -251,6 +254,8 @@ class HypDashboard extends StatefulWidget {
     required this.queuedDownloadCount,
     this.failedDownloads = const {},
     this.onRetryFailedDownload,
+    this.onDismissFailedDownload,
+    this.onClearFailedDownloads,
     required this.onDownloadJsonSource,
     required this.onDeleteOffline,
     required this.onDeleteWork,
@@ -838,6 +843,10 @@ class _HypDashboardState extends State<HypDashboard> {
     _dashboardFocus.requestFocus();
     _openedGroupId = null;
     _lastHomeBack = null;
+    // A homepage capture with no search term has no TextField change event.
+    // Clear imported results explicitly when navigating to another section.
+    _webSearchResults.clear();
+    _webSearchQuery = '';
     _search.clear();
     setState(() {
       _page = page;
@@ -861,6 +870,11 @@ class _HypDashboardState extends State<HypDashboard> {
     }
     if (_search.text.isNotEmpty) {
       _search.clear();
+      return;
+    }
+    if (_webSearchResults.isNotEmpty) {
+      _dashboardFocus.requestFocus();
+      setState(() => _webSearchResults.clear());
       return;
     }
     if (_page == HypPage.library && _openedGroupId != null) {
@@ -1403,13 +1417,18 @@ class _HypDashboardState extends State<HypDashboard> {
 
   Future<void> _openHitomiWebSearch() async {
     final query = _search.text.trim();
-    if (query.isEmpty || query.length > 150) return;
+    if (query.length > 150) return;
     final epoch = _searchEpoch;
-    _searchFocus.unfocus();
-    final imported = await Navigator.of(context)
-        .push<List<HitomiWebGallery>>(MaterialPageRoute(
-      builder: (_) => HitomiWebSearchPage(query: query),
-    ));
+    // On both Cancel and Apply, keep focus on the non-text dashboard scope.
+    final imported = await ReaderNavigationFocus
+        .showResult<List<HitomiWebGallery>?>(
+      returnFocus: _dashboardFocus,
+      isMounted: () => mounted,
+      openRoute: () => Navigator.of(context)
+          .push<List<HitomiWebGallery>>(MaterialPageRoute(
+        builder: (_) => HitomiWebSearchPage(query: query),
+      )),
+    );
     if (!mounted || epoch != _searchEpoch ||
         imported == null || imported.isEmpty) return;
     setState(() {
@@ -1456,8 +1475,7 @@ class _HypDashboardState extends State<HypDashboard> {
         alignment: Alignment.centerRight,
         child: TextButton.icon(
           key: const Key('search-web-site'),
-          onPressed: _search.text.trim().isNotEmpty &&
-                  _search.text.trim().length <= 150
+          onPressed: _search.text.trim().length <= 150
               ? _openHitomiWebSearch : null,
           icon: const Icon(Icons.public_outlined, size: 18),
           label: Text(AppLocalizations.of(context)!.webSearchAction),
@@ -1467,7 +1485,9 @@ class _HypDashboardState extends State<HypDashboard> {
   );
 
   Widget _contents() {
-    final pageContent = _search.text.trim().isNotEmpty
+    final showSearchResults = _search.text.trim().isNotEmpty ||
+        _webSearchResults.isNotEmpty;
+    final pageContent = showSearchResults
         ? _searchContent()
         : switch (_page) {
             HypPage.home => _homeContent(),
@@ -1480,7 +1500,9 @@ class _HypDashboardState extends State<HypDashboard> {
             HypPage.settings => _settingsContent(),
           };
     return ListView(
-      key: ValueKey(_search.text.trim().isEmpty ? _page.name : 'search'),
+      key: ValueKey(showSearchResults
+          ? (_search.text.trim().isEmpty ? 'web-results' : 'search')
+          : _page.name),
       padding: const EdgeInsets.fromLTRB(22, 2, 22, 30),
       children: [pageContent],
     );
@@ -2647,7 +2669,8 @@ class _HypDashboardState extends State<HypDashboard> {
     final visibleFacets = facetOrder.where((field) =>
         field != 'advanced' || _searchedRemoteFields.contains('advanced') ||
         _remoteFieldFilter == 'advanced').toList();
-    final showLocal = _searchScope != 'online';
+    final showLocal = _searchScope != 'online' &&
+        _search.text.trim().isNotEmpty;
     final showOnline = _searchScope != 'local';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       HypSectionTitle(icon: Icons.search_rounded,
@@ -2896,9 +2919,12 @@ class _HypDashboardState extends State<HypDashboard> {
   Future<void> _showOnlineEditionCandidates(
       List<OnlineSearchWork> candidates) async {
     if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context, isScrollControlled: true,
-      builder: (sheet) => SafeArea(child: Padding(
+    await ReaderNavigationFocus.showResult<void>(
+      returnFocus: _dashboardFocus,
+      isMounted: () => mounted,
+      openRoute: () => showModalBottomSheet<void>(
+        context: context, isScrollControlled: true,
+        builder: (sheet) => SafeArea(child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(AppLocalizations.of(sheet)!.editionChoose,
@@ -2924,13 +2950,17 @@ class _HypDashboardState extends State<HypDashboard> {
           )),
         ]),
       )),
+      ),
     );
   }
 
   Future<void> _showOnlineWork(OnlineSearchWork work) async {
-    await showModalBottomSheet<void>(
-      context: context, isScrollControlled: true,
-      builder: (ctx) => SafeArea(child: Padding(
+    await ReaderNavigationFocus.showResult<void>(
+      returnFocus: _dashboardFocus,
+      isMounted: () => mounted,
+      openRoute: () => showModalBottomSheet<void>(
+        context: context, isScrollControlled: true,
+        builder: (ctx) => SafeArea(child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -2980,6 +3010,7 @@ class _HypDashboardState extends State<HypDashboard> {
           ]),
         ]),
       )),
+      ),
     );
   }
 
@@ -3168,37 +3199,12 @@ class _HypDashboardState extends State<HypDashboard> {
         const SizedBox(height: 12),
       ],
       if (widget.failedDownloads.isNotEmpty) ...[
-        HypPanel(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            HypText(
-              AppLocalizations.of(context)!.downloadFailedHeading,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            HypText(AppLocalizations.of(context)!.downloadFailedHelp),
-            const SizedBox(height: 8),
-            for (final failed in widget.failedDownloads.values.toList().reversed.take(25))
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(children: [
-                  Expanded(child: HypText(
-                    AppLocalizations.of(context)!.downloadFailedDetail(
-                        failed.workId, failed.code),
-                    key: Key('failed-download-' + failed.workId),
-                  )),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    key: Key('retry-failed-' + failed.workId),
-                    onPressed: widget.onRetryFailedDownload == null ? null :
-                        () => widget.onRetryFailedDownload!(failed.workId),
-                    child: HypText(
-                      AppLocalizations.of(context)!.downloadFailedRetry),
-                  ),
-                ]),
-              ),
-          ],
-        )),
+        FailedDownloadsPanel(
+          failedDownloads: widget.failedDownloads,
+          onRetry: widget.onRetryFailedDownload,
+          onDismiss: widget.onDismissFailedDownload,
+          onClearAll: widget.onClearFailedDownloads,
+        ),
         const SizedBox(height: 12),
       ],
       if (widget.downloadingGalleryKey != null) ...[

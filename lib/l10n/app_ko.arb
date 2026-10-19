@@ -804,7 +804,7 @@
   "inspectorLocalEmptyHint": "먼저 서재 이미지 인덱스를 생성해줘. 모든 페이지가 포함되는 건 아니야.",
   "inspectorCandidateNotConfirmed": "번호 후보는 이미지 또는 제목·작가 단서로 찾은 결과야. 실제 작품인지 확인 후 가져와줘.",
   "downloadFailedHeading": "자동 재시도 중지된 작품",
-  "downloadFailedHelp": "서버 오류로 실패한 작품은 자동으로 다시 받지 않아. 나머지는 계속 다운로드하며 이곳에서 작품별로 재시도할 수 있어.",
+  "downloadFailedHelp": "오류로 중지된 작품은 자동 재시도하지 않습니다. X 또는 전체 삭제는 실패 기록만 지우며 서재와 다운로드 파일은 유지합니다. 이후 다운로드를 다시 요청하면 재시도할 수 있습니다.",
   "downloadFailedDetail": "#{id} · {code}",
   "@downloadFailedDetail": {"placeholders":{"id":{"type":"String"},"code":{"type":"String"}}},
   "downloadFailedRetry": "다시 시도",
@@ -824,5 +824,8 @@
   "androidDpiDnsNotice": "DNS 리디렉션은 전체 VPN 모드에서 77.88.8.8:53을 사용합니다. Windows GoodbyeDPI의 77.88.8.8:1253과 동일하지 않습니다. 앱 전용 모드에서는 DNS 리디렉션이 적용되지 않습니다.",
   "autoWebSearchEnable": "웹으로 검색하기 자동 실행 (기본 ON)",
   "autoWebSearchDescription": "온라인 검색 시 공개 웹페이지를 함께 검색하고 작품 번호를 자동 수집·통합합니다. 검색 입력 중이나 내 서재 검색에서는 실행하지 않습니다.",
-  "autoWebSearchWorking": "웹사이트 검색 결과 수집 중…"
+  "autoWebSearchWorking": "웹사이트 검색 결과 수집 중…",
+  "downloadFailedDismiss": "실패 기록 지우기",
+  "downloadFailedClearAll": "전체 삭제",
+  "downloadFailedClearAllConfirm": "자동 재시도 중지된 작품의 실패 기록을 전부 지울까요? 서재·다운로드 파일·진행 중인 작업은 삭제되지 않습니다. 이후 전체 다운로드를 다시 요청하면 해당 작품도 재시도될 수 있습니다."
 }

@@ -486,8 +486,9 @@ class MainActivity : FlutterActivity() {
             result.error("busy", "Android DPI operation already running", null)
             return
         }
-        val preset = call.argument<String>("preset") ?: "standard"
-        if (preset !in listOf("standard", "strong", "sni")) {
+        // App-local HTTP CONNECT and device VPN share one allowlist.
+        val preset = call.argument<String>("preset") ?: "all_dnsredir"
+        if (preset !in AndroidDpiPresets.names) {
             result.error("invalid_preset", "Unknown ByeDPI preset", null)
             return
         }

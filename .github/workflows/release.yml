@@ -238,6 +238,31 @@ jobs:
             Always reject cross-gallery responses after revalidation.
           - Preserve v0.4.16 user library, reading history and app settings.
 
+          Changes in v0.4.21:
+          - Fix Android local ByeDPI startup rejecting the five new DPI preset
+            names as invalid_preset. Share the native preset allowlist with
+            the existing device-wide VPN entry point.
+          - Keep the 'Search on website' action enabled with an empty search
+            field. Open https://hitomi.la/ when no query is provided; preserve
+            the existing encoded site search for nonempty queries.
+          - Allow manual Collect/Apply from the site home page without a
+            query and display those imported gallery results in the app;
+            clear them when navigating elsewhere or dismissing with Back.
+          - Keep search text and results but prevent unwanted search-field
+            focus and Android keyboard reopening after public web search
+            or online gallery/edition result sheets close.
+          - Add Flutter regression coverage for native presets, blank-query
+            browsing and focus-safe Cancel/Apply/back navigation.
+          - Add dismiss (X) for individual stopped-download failure records
+            and a confirmation-protected Clear All action.
+          - Persist failure-record removal across restarts using the existing
+            atomic journal; never delete CBZ files, library entries, reading
+            history or active/pending download jobs.
+          - Suppress repeated identical 'auto retry stopped' notifications
+            while keeping explicit future user-requested retries available.
+          - Add KO/EN/JA strings and UI/serialization regression tests for
+            single dismissal, Clear All, confirmation and restart safety.
+
           Changes in v0.4.20:
           - Unify the five displayed Windows/Android DPI presets, retaining
             legacy settings and warning that ByeDPI's low-level split strategy

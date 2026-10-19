@@ -88,6 +88,11 @@ class DownloadFailureStore {
     return _mutate((items) => items.remove(workId));
   }
 
+  /// Dismiss only the terminal-failure journal entries. The approved
+  /// download queue, library, saved CBZ files and reading history are not
+  /// modified. Reuses the existing serialized, atomic file writer.
+  Future<void> clear() => _mutate((items) => items.clear());
+
   Future<void> _mutate(void Function(Map<String, FailedDownload>) edit) {
     final write = _pendingWrite.then((_) async {
       final current = await (_loaded ??= _read());
@@ -124,4 +129,22 @@ class DownloadFailureStore {
     _pendingWrite = write.then<void>((_) {}, onError: (Object _, StackTrace __) {});
     return write;
   }
+}
+
+/// Show the automatic-retry-stopped notice only once per unchanged set of
+/// blocked works. A newly blocked set can be reported, and explicit removal
+/// of failure records resets the gate.
+class TerminalFailureNoticePolicy {
+  String? _lastBlockedSignature;
+
+  bool shouldNotify(Iterable<String> workIds) {
+    final ids = workIds.toSet().toList()..sort();
+    if (ids.isEmpty) return false;
+    final signature = ids.join(',');
+    if (signature == _lastBlockedSignature) return false;
+    _lastBlockedSignature = signature;
+    return true;
+  }
+
+  void reset() => _lastBlockedSignature = null;
 }

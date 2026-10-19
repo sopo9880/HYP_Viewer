@@ -804,7 +804,7 @@
   "inspectorLocalEmptyHint": "先に本棚画像インデックスを作成してください。全ページは対象外です。",
   "inspectorCandidateNotConfirmed": "候補は画像やタイトル・作者の手掛かりによるものです。確認後に取り込んでください。",
   "downloadFailedHeading": "自動再試行を停止した作品",
-  "downloadFailedHelp": "エラーが起きた作品は自動で再試行しません。他の作品は続行します。ここから作品ごとに再試行できます。",
+  "downloadFailedHelp": "エラーの作品は自動再試行しません。×や「すべて削除」で消えるのは失敗記録だけで、本棚や保存済みファイルは残ります。後でダウンロードを再度要求すると再試行できます。",
   "downloadFailedDetail": "#{id} · {code}",
   "@downloadFailedDetail": {"placeholders":{"id":{"type":"String"},"code":{"type":"String"}}},
   "downloadFailedRetry": "再試行",
@@ -824,5 +824,8 @@
   "androidDpiDnsNotice": "VPNのDNS設定は77.88.8.8:53です。Windows GoodbyeDPIの77.88.8.8:1253とは異なります。アプリ専用モードではDNSリダイレクトは適用されません。",
   "autoWebSearchEnable": "Webサイトの自動検索（初期設定ON）",
   "autoWebSearchDescription": "オンラインAPI検索と同時に公開Webサイトを検索し、ギャラリーのリンクを自動収集・統合します。ライブラリのみの検索や入力中は実行しません。",
-  "autoWebSearchWorking": "Webサイトから検索結果を収集中…"
+  "autoWebSearchWorking": "Webサイトから検索結果を収集中…",
+  "downloadFailedDismiss": "失敗記録を消す",
+  "downloadFailedClearAll": "すべて削除",
+  "downloadFailedClearAllConfirm": "自動再試行を停止した作品の失敗記録をすべて削除しますか？本棚・保存済みファイル・進行中の作業は削除されません。後で一括ダウンロードを行うと再試行される場合があります。"
 }
