@@ -206,6 +206,24 @@ jobs:
             Always reject cross-gallery responses after revalidation.
           - Preserve v0.4.16 user library, reading history and app settings.
 
+          Changes in v0.4.18:
+          - Use two independent Heliotrope metadata mirrors when the primary
+            Hitomi CDN returns another gallery ID or invalid metadata.
+            Accept metadata only after checking the requested ID and files.
+          - Stop auto-retrying only a failed work after all metadata sources
+            are exhausted. Preserve the rest of the download queue and existing
+            CBZ files. Failed works appear in Downloads with a manual Retry.
+          - Save terminal failures independently from pending jobs, preventing
+            repeated attempts on app relaunch/resume without losing the
+            user's library, offline archives, or reader progress.
+
+          Changes in v0.4.17:
+          - Bundle the verified official GoodbyeDPI engine in the Windows
+            installer with opt-in UAC-managed control and safe presets.
+          - Correct Hitomi website search title extraction by work ID and
+            preserve metadata ID mismatch diagnostics without using images
+            belonging to another work.
+
           Changes in v0.4.16:
           - Add Hitomi direct website search: collect visible gallery links
             in an embedded browser and merge verified work IDs into existing

@@ -175,73 +175,159 @@ class HitomiGalleryProvider {
   const HitomiGalleryProvider(this.client);
 
   static const _host = 'ltn.gold-usergeneratedcontent.net';
+  static const _fallbackHosts = <String>[
+    'heliotrope.saebasol.org',
+    'inst.psec.dev',
+  ];
   static const _maxScriptBytes = 1024 * 1024;
 
-  /// Shared, verified metadata reader for title, work info and reader.
-  /// One cache-bypass request is allowed on ID mismatches only. Returning
-  /// another gallery's images as though they belonged to this ID is forbidden.
+  /// Try the official CDN first, then independently hosted Heliotrope mirrors.
+  /// Each candidate must contain the requested ID and a usable image list.
+  /// Never replace one gallery with an unrelated gallery's images.
   Future<Map<dynamic, dynamic>> _verifiedGalleryInfo(String workId) async {
     if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
       throw const FormatException('작품 번호는 숫자 1~12자리여야 해.');
     }
-    for (var attempt = 0; attempt < 2; attempt++) {
-      final noCache = attempt == 1;
-      final uri = Uri.https(_host, '/galleries/$workId.js',
-        noCache ? {'_hyp_retry': DateTime.now()
-            .microsecondsSinceEpoch.toString()} : null);
-      final raw = await _readScript(uri, workId: workId, noCache: noCache);
-      final match = RegExp(r'\bgalleryinfo\s*=').firstMatch(raw);
-      // Some mirrors return a bare JSON object instead of JS assignment.
-      // Never parse an unrelated script object.
-      final start = match != null ? raw.indexOf('{', match.end)
-          : raw.trimLeft().startsWith('{') ? raw.indexOf('{') : -1;
-      final end = raw.lastIndexOf('}');
-      if (start < 0 || end <= start) {
-        throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',
-          stage: OnlineReaderStage.metadata, workId: workId,
-          httpStatus: 200, host: _host,
-          description: '메타데이터에 galleryinfo JSON 객체가 없어.');
+    OnlineReaderFailure? primaryFailure;
+    OnlineReaderFailure? fallbackFailure;
+    for (var source = 0; source <= _fallbackHosts.length; source++) {
+      final host = source == 0 ? _host : _fallbackHosts[source - 1];
+      // Repeat only a mismatched CDN response using a cache-bypass request.
+      // Each independent mirror is queried only once.
+      final maximumAttempts = source == 0 ? 2 : 1;
+      for (var attempt = 0; attempt < maximumAttempts; attempt++) {
+        final noCache = source == 0 && attempt == 1;
+        final uri = source == 0
+            ? Uri.https(_host, '/galleries/$workId.js',
+                noCache ? {'_hyp_retry': DateTime.now()
+                    .microsecondsSinceEpoch.toString()} : null)
+            : Uri.https(host, '/api/hitomi/galleryinfo/$workId');
+        try {
+          final raw = await _readScript(uri, workId: workId,
+              noCache: noCache);
+          final decoded = _decodeGalleryInfo(raw, workId: workId,
+              host: host, retried: noCache);
+          _validateGalleryFiles(decoded, workId: workId, host: host);
+          return decoded;
+        } on OnlineReaderFailure catch (error) {
+          if (source == 0) {
+            primaryFailure = error;
+            if (!noCache && error.code == 'META_ID_MISMATCH') {
+              continue;
+            }
+          } else {
+            fallbackFailure = error;
+          }
+          break;
+        }
       }
-      Object? decoded;
-      try {
-        decoded = jsonDecode(raw.substring(start, end + 1));
-      } on FormatException {
-        throw OnlineReaderFailure(code: 'META_JSON_INVALID',
-          stage: OnlineReaderStage.metadata, workId: workId,
-          httpStatus: 200, host: _host,
-          description: '메타데이터 JSON 해석에 실패했어.');
-      }
-      if (decoded is! Map) {
-        throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',
-          stage: OnlineReaderStage.metadata, workId: workId,
-          actualType: OnlineReaderFailure.jsonType(decoded),
-          httpStatus: 200, host: _host,
-          description: '메타데이터가 JSON 객체가 아니야.');
-      }
-      if (!decoded.containsKey('id') || decoded['id'] == null) {
-        throw OnlineReaderFailure(code: 'META_ID_MISSING',
-          stage: OnlineReaderStage.metadata, workId: workId,
-          httpStatus: 200, host: _host,
-          description: '메타데이터에 작품 번호가 없어.');
-      }
-      final rawId = decoded['id'];
-      final reported = rawId is num && rawId.isFinite &&
-          rawId == rawId.toInt()
-          ? rawId.toInt().toString()
-          : rawId is String ? rawId.trim() : '';
-      if (reported != workId) {
-        if (attempt == 0) continue;
-        throw OnlineReaderFailure(code: 'META_ID_MISMATCH',
-          stage: OnlineReaderStage.metadata, workId: workId,
-          returnedWorkId: RegExp(r'^\d{1,12}$').hasMatch(reported)
-              ? reported : null,
-          actualType: OnlineReaderFailure.jsonType(rawId),
-          retried: true, httpStatus: 200, host: _host,
-          description: '재요청 후에도 서버에서 다른 작품 번호를 반환했어.');
-      }
-      return decoded;
     }
-    throw StateError('Unreachable gallery metadata state');
+    final failure = primaryFailure ?? fallbackFailure!;
+    // Preserve the original diagnostic (including the mismatched ID) while
+    // stating that every separate metadata route was exhausted.
+    throw OnlineReaderFailure(
+      code: failure.code, stage: OnlineReaderStage.metadata, workId: workId,
+      returnedWorkId: failure.returnedWorkId,
+      actualType: failure.actualType, httpStatus: failure.httpStatus,
+      host: failure.host, retried: true,
+      description: '기본 서버와 대체 메타데이터 서버 모두에서 '
+          '요청한 작품의 올바른 정보를 얻지 못했어.',
+    );
+  }
+
+  Map<dynamic, dynamic> _decodeGalleryInfo(String raw, {
+    required String workId, required String host, required bool retried,
+  }) {
+    final match = RegExp(r'\bgalleryinfo\s*=').firstMatch(raw);
+    // Heliotrope returns a bare JSON object, the original CDN a JS assignment.
+    final start = match != null ? raw.indexOf('{', match.end)
+        : raw.trimLeft().startsWith('{') ? raw.indexOf('{') : -1;
+    final end = raw.lastIndexOf('}');
+    if (start < 0 || end <= start) {
+      throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',
+        stage: OnlineReaderStage.metadata, workId: workId, host: host,
+        httpStatus: 200,
+        description: '메타데이터에 galleryinfo JSON 객체가 없어.');
+    }
+    Object? decoded;
+    try {
+      decoded = jsonDecode(raw.substring(start, end + 1));
+    } on FormatException {
+      throw OnlineReaderFailure(code: 'META_JSON_INVALID',
+        stage: OnlineReaderStage.metadata, workId: workId, host: host,
+        httpStatus: 200,
+        description: '메타데이터 JSON 해석에 실패했어.');
+    }
+    if (decoded is! Map) {
+      throw OnlineReaderFailure(code: 'META_RESPONSE_INVALID',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        actualType: OnlineReaderFailure.jsonType(decoded),
+        httpStatus: 200, host: host,
+        description: '메타데이터가 JSON 객체가 아니야.');
+    }
+    if (!decoded.containsKey('id') || decoded['id'] == null) {
+      throw OnlineReaderFailure(code: 'META_ID_MISSING',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: host,
+        description: '메타데이터에 작품 번호가 없어.');
+    }
+    final rawId = decoded['id'];
+    final reported = rawId is num && rawId.isFinite &&
+        rawId == rawId.toInt()
+        ? rawId.toInt().toString()
+        : rawId is String ? rawId.trim() : '';
+    if (reported != workId) {
+      throw OnlineReaderFailure(code: 'META_ID_MISMATCH',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        returnedWorkId: RegExp(r'^\d{1,12}$').hasMatch(reported)
+            ? reported : null,
+        actualType: OnlineReaderFailure.jsonType(rawId),
+        retried: retried, httpStatus: 200, host: host,
+        description: '서버에서 요청한 작품과 다른 번호를 반환했어.');
+    }
+    return decoded;
+  }
+
+  void _validateGalleryFiles(Map<dynamic, dynamic> decoded, {
+    required String workId, required String host,
+  }) {
+    if (!decoded.containsKey('files')) {
+      throw OnlineReaderFailure(code: 'META_FILES_MISSING',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: host,
+        description: '메타데이터에 이미지 목록(files)이 없어.');
+    }
+    if (decoded['files'] is! List) {
+      throw OnlineReaderFailure(code: 'META_FILES_TYPE',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        actualType: OnlineReaderFailure.jsonType(decoded['files']),
+        httpStatus: 200, host: host,
+        description: '이미지 목록(files)이 배열이 아니야.');
+    }
+    final files = decoded['files'] as List;
+    if (files.isEmpty) {
+      throw OnlineReaderFailure(code: 'META_FILES_EMPTY',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: host,
+        description: '메타데이터에 이미지 목록이 비어 있어.');
+    }
+    if (files.length > GalleryArchive.maxPages) {
+      throw OnlineReaderFailure(code: 'META_PAGE_LIMIT',
+        stage: OnlineReaderStage.metadata, workId: workId,
+        httpStatus: 200, host: host,
+        description: '지원하는 최대 페이지 수를 초과했어.');
+    }
+    // Mirrors may be stale. Verify their image records before accepting one.
+    // Retain the primary CDN's existing image-routing error classification.
+    if (host != _host) for (final item in files) {
+      if (item is! Map || item['hash'] is! String ||
+          !RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(item['hash'] as String)) {
+        throw OnlineReaderFailure(code: 'META_IMAGE_ENTRY_INVALID',
+          stage: OnlineReaderStage.metadata, workId: workId,
+          httpStatus: 200, host: host,
+          description: '이미지 파일 정보가 올바르지 않아.');
+      }
+    }
   }
 
   /// Fetching a title does not download images or gg.js.
@@ -333,13 +419,16 @@ class HitomiGalleryProvider {
     OnlineReaderStage stage = OnlineReaderStage.metadata,
     bool noCache = false,
   }) async {
-    if (uri.scheme != 'https' || uri.host != _host) {
+    if (uri.scheme != 'https' || uri.port != 443 ||
+        !<String>{_host, ..._fallbackHosts}.contains(uri.host)) {
       throw const FormatException('지원하지 않는 소스 서버야.');
     }
     final request = http.Request('GET', uri)
       ..followRedirects = false
-      ..headers['Accept'] = 'text/javascript,application/javascript,text/plain,*/*'
-      ..headers['Referer'] = 'https://hitomi.la/';
+      ..headers['Accept'] = 'application/json,text/javascript,application/javascript,text/plain,*/*';
+    if (uri.host == _host) {
+      request.headers['Referer'] = 'https://hitomi.la/';
+    }
     if (noCache) {
       request.headers['Cache-Control'] = 'no-cache, no-store';
       request.headers['Pragma'] = 'no-cache';

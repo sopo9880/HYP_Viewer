@@ -802,5 +802,10 @@
   "@inspectorLocalCount": {"placeholders":{"count":{"type":"int"}}},
   "inspectorLocalEmpty": "내 서재에서 일치하는 작품을 찾지 못했어",
   "inspectorLocalEmptyHint": "먼저 서재 이미지 인덱스를 생성해줘. 모든 페이지가 포함되는 건 아니야.",
-  "inspectorCandidateNotConfirmed": "번호 후보는 이미지 또는 제목·작가 단서로 찾은 결과야. 실제 작품인지 확인 후 가져와줘."
+  "inspectorCandidateNotConfirmed": "번호 후보는 이미지 또는 제목·작가 단서로 찾은 결과야. 실제 작품인지 확인 후 가져와줘.",
+  "downloadFailedHeading": "자동 재시도 중지된 작품",
+  "downloadFailedHelp": "서버 오류로 실패한 작품은 자동으로 다시 받지 않아. 나머지는 계속 다운로드하며 이곳에서 작품별로 재시도할 수 있어.",
+  "downloadFailedDetail": "#{id} · {code}",
+  "@downloadFailedDetail": {"placeholders":{"id":{"type":"String"},"code":{"type":"String"}}},
+  "downloadFailedRetry": "다시 시도"
 }

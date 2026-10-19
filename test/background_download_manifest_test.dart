@@ -34,4 +34,16 @@ void main() {
     expect(source, contains('"pauseVolumeRepeat"'));
     expect(source, contains('"consumeOpenDownloads"'));
   });
+  test('failed download is removed only from its own persistent job', () async {
+    final main = await File('lib/main.dart').readAsString();
+    expect(main, contains('await _downloadJobs.remove(work.workId);'));
+    expect(main, contains('await _recordFailedDownload(work.workId, e, source:'));
+    expect(main, contains('!_failedDownloads.containsKey(work.workId)'));
+    expect(main, contains('await _initialFailedDownloadsRead.future'));
+    expect(main, contains('for (final id in pending.keys.where('));
+    // The batch should keep running, never clear the queue on one error.
+    expect(main, contains('while (_downloadQueue.isNotEmpty &&'));
+    expect(main, contains('onRetryFailedDownload: _retryFailedDownload'));
+  });
+
 }

@@ -364,7 +364,7 @@ void main() {
       expect(error.returnedWorkId, '9999999');
       expect(error.retried, true);
       expect(error.toString(), isNot(contains('DO_NOT_USE')));
-      expect(seen.length, 2);
+      expect(seen.length, 4);
     } finally {
       client.close();
     }
@@ -390,7 +390,95 @@ void main() {
             throwsA(isA<OnlineReaderFailure>()
                 .having((e) => e.code, 'code', 'META_ID_MISMATCH')));
       }
-      expect(requests, 6);
+      expect(requests, 12);
+    } finally {
+      client.close();
+    }
+  });
+
+  test('wrong CDN ID recovers from independent galleryinfo mirror', () async {
+    final calls = <Uri>[];
+    final client = MockClient((request) async {
+      calls.add(request.url);
+      if (request.url.path == '/galleries/3538281.js') {
+        return http.Response('var galleryinfo = ' +
+            jsonEncode({'id': '4089005', 'title': 'Wrong gallery',
+              'files': [{'hash': hash}]}) + ';', 200);
+      }
+      if (request.url.host == 'heliotrope.saebasol.org') {
+        expect(request.url.path, '/api/hitomi/galleryinfo/3538281');
+        return http.Response(jsonEncode({
+          'id': 3538281, 'title': 'Recovered gallery',
+          'files': [{'hash': hash, 'name': '001.png'}],
+        }), 200);
+      }
+      if (request.url.path == '/gg.js') {
+        return http.Response("var o = 0; var x={b: '2026/'};", 200);
+      }
+      fail('Do not query the next fallback after a verified response');
+    });
+    try {
+      final gallery = await HitomiGalleryProvider(client).load('3538281');
+      expect(gallery.workId, '3538281');
+      expect(gallery.title, 'Recovered gallery');
+      expect(gallery.pageCount, 1);
+      expect(calls.where((u) => u.path == '/galleries/3538281.js').length, 2);
+      expect(calls.any((u) => u.host == 'heliotrope.saebasol.org'), true);
+      expect(calls.any((u) => u.host == 'inst.psec.dev'), false);
+    } finally {
+      client.close();
+    }
+  });
+
+  test('invalid first mirror is rejected and the next one is tried', () async {
+    final calls = <String>[];
+    final client = MockClient((request) async {
+      calls.add(request.url.host);
+      if (request.url.host == 'ltn.gold-usergeneratedcontent.net') {
+        return http.Response('CDN unavailable', 503);
+      }
+      if (request.url.host == 'heliotrope.saebasol.org') {
+        return http.Response(jsonEncode({
+          'id': 4089005, 'title': 'Wrong gallery',
+          'files': [{'hash': hash}],
+        }), 200);
+      }
+      return http.Response(jsonEncode({
+        'id': '3538281', 'title': 'Verified backup',
+        'files': [{'hash': hash}],
+      }), 200);
+    });
+    try {
+      expect(await HitomiGalleryProvider(client).fetchTitle('3538281'),
+          'Verified backup');
+      expect(calls, [
+        'ltn.gold-usergeneratedcontent.net',
+        'heliotrope.saebasol.org',
+        'inst.psec.dev',
+      ]);
+    } finally {
+      client.close();
+    }
+  });
+
+  test('missing mirror image files do not stop the final fallback', () async {
+    final client = MockClient((request) async {
+      if (request.url.host == 'ltn.gold-usergeneratedcontent.net') {
+        return http.Response('No galleryinfo', 404);
+      }
+      if (request.url.host == 'heliotrope.saebasol.org') {
+        return http.Response(jsonEncode({
+          'id': 3538281, 'title': 'Incomplete', 'files': [],
+        }), 200);
+      }
+      return http.Response(jsonEncode({
+        'id': 3538281, 'title': 'Complete',
+        'files': [{'hash': hash}],
+      }), 200);
+    });
+    try {
+      expect(await HitomiGalleryProvider(client).fetchTitle('3538281'),
+          'Complete');
     } finally {
       client.close();
     }
