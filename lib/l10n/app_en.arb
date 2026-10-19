@@ -807,5 +807,12 @@
   "downloadFailedHelp": "Failed works will not retry automatically. Other downloads continue, and you can retry each work here.",
   "downloadFailedDetail": "#{id} · {code}",
   "@downloadFailedDetail": {"placeholders":{"id":{"type":"String"},"code":{"type":"String"}}},
-  "downloadFailedRetry": "Retry"
+  "downloadFailedRetry": "Retry",
+  "androidDpiTitle": "Android network compatibility (ByeDPI)",
+  "androidDpiNotice": "An on-device ByeDPI proxy routes only HYP Viewer WebView, metadata and image/download HTTP(S) traffic. It does not change other apps, require a VPN or root, or install a certificate. Effectiveness varies by network.",
+  "androidDpiEnable": "Enable bundled Android ByeDPI",
+  "androidDpiStandard": "Standard TLS split (-s 1)",
+  "androidDpiStrong": "Stronger split + OOB (-s 1 -q 1)",
+  "androidDpiSni": "SNI-focused split (-s 0+sm)",
+  "dpiShowDiagnostics": "View DPI diagnostics"
 }

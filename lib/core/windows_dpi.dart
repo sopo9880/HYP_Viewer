@@ -262,21 +262,99 @@ class WindowsDpiManager extends ChangeNotifier {
           .writeAsString('starting', flush: true);
       _launchAt = DateTime.now();
       _setPhase(WindowsDpiPhase.starting);
-      await Process.start('powershell.exe', [
+      // Do not detach: the previous version discarded the supervisor's exit
+      // code and stderr. A quick PowerShell failure looked like a 50s UAC
+      // timeout, even if UAC was never requested.
+      final launcher = await Process.start('powershell.exe', [
         '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
         '-WindowStyle', 'Hidden', '-File', supervisor.path,
         '-SessionId', id, '-ParentPid', pid.toString(),
-      ], mode: ProcessStartMode.detached, runInShell: false);
+        // Crucial: UAC under another account has a different APPDATA.
+        '-SessionPath', folder.path,
+      ], mode: ProcessStartMode.normal, runInShell: false);
+      unawaited(_watchLauncher(launcher, folder));
       _monitor?.cancel();
       _monitor = Timer.periodic(const Duration(milliseconds: 500), (_) {
         unawaited(refreshStatus());
       });
     } on FormatException {
       _setPhase(WindowsDpiPhase.failed, 'invalid-arguments');
-    } catch (error) {
-      _setPhase(WindowsDpiPhase.failed, error is FileSystemException
-          ? 'bundled-engine-missing' : 'launcher-failed');
+    } on FileSystemException catch (error) {
+      _setPhase(WindowsDpiPhase.failed,
+          error.message == 'bundled-engine-missing'
+              ? 'bundled-engine-missing' : 'launcher-start-failed');
+    } catch (_) {
+      _setPhase(WindowsDpiPhase.failed, 'launcher-start-failed');
     }
+  }
+
+  Future<void> _watchLauncher(Process process, Directory session) async {
+    const maximum = 2048;
+    final out = StringBuffer();
+    final err = StringBuffer();
+    void collect(StringBuffer target, String data) {
+      if (target.length < maximum) {
+        target.write(data.substring(0,
+            min(data.length, maximum - target.length)));
+      }
+    }
+    final stdoutSubscription = process.stdout
+        .transform(const Utf8Decoder(allowMalformed: true)).listen((data) => collect(out, data));
+    final stderrSubscription = process.stderr
+        .transform(const Utf8Decoder(allowMalformed: true)).listen((data) => collect(err, data));
+    final exitCode = await process.exitCode;
+    await stdoutSubscription.cancel();
+    await stderrSubscription.cancel();
+    if (_session?.path != session.path) return;
+    // A completed non-elevated bootstrap does not imply that elevated
+    // GoodbyeDPI has started; preserve its async stage/status evidence.
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final file = File(session.path + Platform.pathSeparator + 'status.txt');
+    String stage;
+    try {
+      stage = (await file.readAsString()).trim();
+    } catch (_) {
+      stage = 'status-unreadable';
+    }
+    try {
+      await File(session.path + Platform.pathSeparator + 'launcher-log.txt')
+          .writeAsString(
+            'exit=$exitCode\nstage=$stage\n'
+            'stdout:\n$out\nstderr:\n$err\n',
+            flush: true);
+    } catch (_) {
+      // Failure diagnostics must never affect library or downloaded files.
+    }
+    if (stage.startsWith('error:') ||
+        stage.startsWith('running:') || stage == 'stopped' ||
+        phase != WindowsDpiPhase.starting) return;
+    if (exitCode != 0 ||
+        stage == 'starting' || stage == 'status-unreadable') {
+      // Cancel even a delayed UAC prompt; the elevated child checks this
+      // signal before opening WinDivert, so failure never becomes late ON.
+      try {
+        await File(session.path + Platform.pathSeparator + 'stop.signal')
+            .writeAsString('stop', flush: true);
+      } catch (_) {}
+      _monitor?.cancel();
+      _setPhase(WindowsDpiPhase.failed,
+          exitCode != 0 ? 'supervisor-exited' : 'supervisor-not-started');
+    }
+  }
+
+  /// Distinguishes launcher, elevation, and engine startup failures.
+  /// Pure logic is regression-tested on both Android and Windows runners.
+  static String? classifyStartupTimeout(String stage, Duration elapsed) {
+    final threshold = stage == 'starting'
+        ? const Duration(seconds: 8)
+        : const Duration(seconds: 50);
+    if (elapsed <= threshold) return null;
+    return switch (stage) {
+      'starting' => 'supervisor-no-start',
+      'elevation-requested' => 'elevation-approval-timeout',
+      'supervisor-elevated' || 'engine-starting' => 'engine-start-timeout',
+      _ => 'supervisor-start-timeout',
+    };
   }
 
   Future<void> refreshStatus() async {
@@ -286,29 +364,72 @@ class WindowsDpiManager extends ChangeNotifier {
     try {
       if (!await status.exists()) return;
       final value = (await status.readAsString()).trim();
-      if (phase == WindowsDpiPhase.starting && value == 'starting' &&
-          _launchAt != null &&
-          DateTime.now().difference(_launchAt!) > const Duration(seconds: 50)) {
-        await File(dir.path + Platform.pathSeparator + 'stop.signal')
-            .writeAsString('stop', flush: true);
-        _setPhase(WindowsDpiPhase.failed, 'elevation-timeout');
+      if (RegExp(r'^running:[0-9]{1,10}$').hasMatch(value)) {
+        _setPhase(WindowsDpiPhase.running);
+        return;
+      }
+      if (value == 'stopped') {
+        _setPhase(WindowsDpiPhase.stopped);
         _monitor?.cancel();
         return;
       }
-      if (value.startsWith('running:')) {
-        _setPhase(WindowsDpiPhase.running);
-      } else if (value == 'stopped') {
-        _setPhase(WindowsDpiPhase.stopped);
+      final error = RegExp(r'^error:([a-z0-9-]{1,60})$')
+          .firstMatch(value)?.group(1);
+      if (error != null) {
+        _setPhase(WindowsDpiPhase.failed, error);
         _monitor?.cancel();
-      } else if (value.startsWith('error:')) {
-        _setPhase(WindowsDpiPhase.failed,
-          RegExp(r'^error:([a-z-]{1,60})$').firstMatch(value)?.group(1) ??
-              'unknown-failure');
+        return;
+      }
+      if (phase != WindowsDpiPhase.starting) return;
+      final elapsed = _launchAt == null ? Duration.zero :
+          DateTime.now().difference(_launchAt!);
+      // A missing PowerShell acknowledgment is not a UAC timeout.
+      final timeoutCode = classifyStartupTimeout(value, elapsed);
+      if (timeoutCode != null) {
+        await File(dir.path + Platform.pathSeparator + 'stop.signal')
+            .writeAsString('stop', flush: true);
+        _setPhase(WindowsDpiPhase.failed, timeoutCode);
         _monitor?.cancel();
+        return;
+      }
+      if (value == 'starting' || value == 'supervisor-started' ||
+          value == 'elevation-requested' || value == 'supervisor-elevated' ||
+          value == 'engine-starting') {
+        _setPhase(WindowsDpiPhase.starting, value);
       }
     } catch (_) {
-      // A concurrently written status file is transient, not success.
+      // A concurrently written status file may be transient; the timeout
+      // and bootstrap process exit code still provide a bounded diagnosis.
     }
+  }
+
+  /// Read bounded, on-device diagnostics for the failed launch. Nothing is
+  /// sent externally. The separate elevated supervisor writes the raw OS
+  /// failure locally, while status codes are safe to display in the UI.
+  Future<String> readDiagnosticDetails() async {
+    final dir = _session;
+    if (dir == null || !Platform.isWindows) return '';
+    final chunks = <String>[];
+    for (final name in <String>[
+      'launcher-log.txt', 'supervisor-error.txt',
+    ]) {
+      final file = File(dir.path + Platform.pathSeparator + name);
+      try {
+        if (await file.exists()) {
+          final data = await file.readAsString();
+          if (data.trim().isNotEmpty) {
+            chunks.add('$name:\n' +
+                data.substring(0, min(data.length, 2048)));
+          }
+        }
+      } catch (_) {
+        chunks.add('$name: unreadable');
+      }
+    }
+    if (chunks.isEmpty) {
+      return 'No supervisor output has been recorded for this attempt.';
+    }
+    return chunks.join('\n\n');
   }
 
   Future<void> stop() async {

@@ -38,6 +38,12 @@ jobs:
           python3 -m unittest discover -s scripts -p test_apply_app_icons.py
       - name: Configure Japanese/Korean offline OCR models
         run: python3 scripts/configure_android_ocr.py
+      - name: Stage pinned MIT ByeDPI native engine for Android
+        run: python3 scripts/prepare_android_byedpi.py
+      - name: Configure Android NDK ByeDPI and WebView proxy
+        run: python3 scripts/configure_android_dpi.py
+      - name: Validate Android DPI engine sources and Gradle wiring
+        run: python3 -m unittest discover -s scripts -p test_android_dpi_prepare.py
       - run: flutter pub get
       - name: Patch WebView Android ProGuard compatibility
         run: python3 scripts/patch_webview_proguard.py
@@ -96,6 +102,9 @@ jobs:
             'scripts/windows_dpi_supervisor.ps1',
             [ref]$tokens, [ref]$errors)
           if ($errors.Count -gt 0) { throw ($errors | Out-String) }
+      - name: Smoke-test Windows DPI supervisor path and startup acknowledgment
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/test_windows_dpi_supervisor.ps1
       - name: Bundle verified official GoodbyeDPI for Windows
         shell: pwsh
         run: |

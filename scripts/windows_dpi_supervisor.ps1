@@ -8,20 +8,33 @@ param(
   [string] $SessionId,
   [Parameter(Mandatory=$true)]
   [ValidateRange(1,2147483647)]
-  [int] $ParentPid
+  [int] $ParentPid,
+  [Parameter(Mandatory=$true)]
+  [ValidateNotNullOrEmpty()]
+  [string] $SessionPath,
+  [switch] $DiagnosticProbe
 )
 
 $ErrorActionPreference = 'Stop'
-$baseDir = Join-Path $env:APPDATA 'HYP Viewer\dpi_runtime'
-$session = Join-Path $baseDir $SessionId
+# Use the original user's absolute path; elevated accounts may have a
+# completely different APPDATA. Never silently rebuild the session path.
+if (-not [System.IO.Path]::IsPathRooted($SessionPath)) { exit 2 }
+try { $session = [System.IO.Path]::GetFullPath($SessionPath).TrimEnd('\') }
+catch { exit 2 }
+$baseDir = Split-Path -Parent $session
+$parentDir = Split-Path -Parent $baseDir
+if ((Split-Path -Leaf $session) -ne $SessionId -or
+    (Split-Path -Leaf $baseDir) -ne 'dpi_runtime' -or
+    (Split-Path -Leaf $parentDir) -ne 'HYP Viewer') {
+  exit 2
+}
 $statusFile = Join-Path $session 'status.txt'
 $stopFile = Join-Path $session 'stop.signal'
+$detailFile = Join-Path $session 'supervisor-error.txt'
 
 function Status([string] $value) {
-  if (Test-Path -LiteralPath $session -PathType Container) {
-    [System.IO.File]::WriteAllText($statusFile, $value,
-      (New-Object System.Text.UTF8Encoding($false)))
-  }
+  [System.IO.File]::WriteAllText($statusFile, $value,
+    (New-Object System.Text.UTF8Encoding($false)))
 }
 
 function IsElevated {
@@ -30,18 +43,35 @@ function IsElevated {
   return $user.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-if (-not (Test-Path -LiteralPath $session -PathType Container)) {
+if (-not (Test-Path -LiteralPath $session -PathType Container) -or
+    -not (Test-Path -LiteralPath $statusFile -PathType Leaf)) {
   exit 2
 }
-
+# This first acknowledgment separates failed PowerShell launches from UAC.
+Status 'supervisor-started'
+if ($DiagnosticProbe) {
+  # CI smoke test; does not elevate or launch the engine.
+  Status 'diagnostic-ready'
+  exit 0
+}
+if (Test-Path -LiteralPath $stopFile -PathType Leaf) {
+  Status 'error:cancelled'
+  exit 4
+}
 if (-not (IsElevated)) {
   try {
-    # Safe parameters are restricted to hex session ID and numeric parent PID.
+    Status 'elevation-requested'
     $argLine = '-NoProfile -NonInteractive -ExecutionPolicy Bypass ' +
       '-WindowStyle Hidden -File "' + $PSCommandPath + '" ' +
-      '-SessionId ' + $SessionId + ' -ParentPid ' + $ParentPid
-    Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $argLine -WindowStyle Hidden -Verb RunAs | Out-Null
+      '-SessionId ' + $SessionId + ' -ParentPid ' + $ParentPid +
+      ' -SessionPath "' + $session + '"'
+    Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $argLine -Verb RunAs -ErrorAction Stop | Out-Null
   } catch {
+    try {
+      $detail = [string] $_.Exception.Message
+      [System.IO.File]::WriteAllText($detailFile,
+        $detail.Substring(0, [Math]::Min(2048, $detail.Length)))
+    } catch {}
     Status 'error:elevation-denied'
     exit 3
   }
@@ -51,9 +81,10 @@ if (-not (IsElevated)) {
 $child = $null
 $finished = $false
 try {
-  Status 'starting'
-  $parent = Get-Process -Id $ParentPid -ErrorAction Stop
-  if ($parent.ProcessName -ne 'hyp_viewer') { throw 'invalid-parent' }
+  Status 'supervisor-elevated'
+  if (Test-Path -LiteralPath $stopFile -PathType Leaf) { throw 'cancelled' }
+  $hostProcess = Get-Process -Id $ParentPid -ErrorAction Stop
+  if ($hostProcess.ProcessName -ne 'hyp_viewer') { throw 'invalid-parent' }
   $configPath = Join-Path $session 'arguments.json'
   if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
     throw 'missing-options'
@@ -127,6 +158,7 @@ try {
       throw 'missing-bundled-engine'
     }
   }
+  Status 'engine-starting'
   $child = Start-Process -FilePath $engine -WorkingDirectory $PSScriptRoot -ArgumentList $argsList -WindowStyle Hidden -PassThru -ErrorAction Stop
   Start-Sleep -Milliseconds 250
   $child.Refresh()
@@ -142,13 +174,18 @@ try {
   $finished = $true
 } catch {
   # Fixed text codes only: no profile paths or command lines.
-  $allowed = @('invalid-parent','missing-options','invalid-custom-arguments',
+  $allowed = @('cancelled','invalid-parent','missing-options','invalid-custom-arguments',
     'too-many-arguments','invalid-numeric-argument','invalid-dns-address',
     'invalid-blacklist-file','unsupported-goodbyedpi-argument',
     'unsupported-preset','missing-bundled-engine','engine-exited-at-startup',
     'engine-exited')
   $reason = [string] $_.Exception.Message
   if ($allowed -notcontains $reason) { $reason = 'startup-failed' }
+  try {
+    $detail = [string] $_.Exception.ToString()
+    [System.IO.File]::WriteAllText($detailFile,
+      $detail.Substring(0, [Math]::Min(2048, $detail.Length)))
+  } catch {}
   Status ('error:' + $reason)
 } finally {
   if ($null -ne $child) {

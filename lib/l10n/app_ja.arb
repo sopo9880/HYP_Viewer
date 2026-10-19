@@ -807,5 +807,12 @@
   "downloadFailedHelp": "エラーが起きた作品は自動で再試行しません。他の作品は続行します。ここから作品ごとに再試行できます。",
   "downloadFailedDetail": "#{id} · {code}",
   "@downloadFailedDetail": {"placeholders":{"id":{"type":"String"},"code":{"type":"String"}}},
-  "downloadFailedRetry": "再試行"
+  "downloadFailedRetry": "再試行",
+  "androidDpiTitle": "Android通信互換モード (ByeDPI)",
+  "androidDpiNotice": "端末内のByeDPIプロキシはHYP ViewerのWebView・メタデータ・画像ダウンロードのHTTP(S)通信にのみ適用されます。他のアプリに影響せず、VPN・root・証明書のインストールは不要です。効果はネットワークによって異なります。",
+  "androidDpiEnable": "Android内蔵ByeDPIを使用",
+  "androidDpiStandard": "標準TLS分割 (-s 1)",
+  "androidDpiStrong": "強化分割＋OOB (-s 1 -q 1)",
+  "androidDpiSni": "SNI分割 (-s 0+sm)",
+  "dpiShowDiagnostics": "DPI診断の詳細を表示"
 }
