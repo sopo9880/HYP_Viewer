@@ -19,9 +19,12 @@ class HitomiWebSearch {
 
   static Uri searchUri(String query) {
     final trimmed = query.trim();
-    if (trimmed.isEmpty || trimmed.length > 150) {
-      throw const FormatException('Search query must contain 1-150 characters');
+    if (trimmed.length > 150) {
+      throw const FormatException('Search query must be at most 150 characters');
     }
+    // An empty manual search opens the Hitomi home page. Automatic
+    // background website search remains gated on a nonempty query.
+    if (trimmed.isEmpty) return Uri.parse('https://hitomi.la/');
     // Hitomi uses the entire raw query component, not a q= parameter.
     return Uri.parse('https://hitomi.la/search.html?' +
         Uri.encodeComponent(trimmed));

@@ -1,22 +1,22 @@
 import 'package:flutter/widgets.dart';
 
-/// Reader navigation should not restore focus to an underlying search field:
-/// on Android that reopens the IME as soon as the route is popped.
+/// Keep keyboard focus away from the underlying search TextField when opening
+/// a reader, web search route, or an online search-result bottom sheet.
 ///
-/// Give keyboard focus to the dashboard's non-text shortcut scope BEFORE
-/// pushing the reader and AGAIN after its pop transition is complete.
-/// Search text remains intact and the field can be tapped normally later.
+/// Give focus to the dashboard's non-text shortcut scope BEFORE navigation
+/// and AGAIN after the route or modal is dismissed. Search text/results remain
+/// intact; tapping the field manually can still request focus normally.
 abstract final class ReaderNavigationFocus {
-  static Future<void> show({
+  static Future<T> showResult<T>({
     required FocusNode returnFocus,
-    required Future<void> Function() openReader,
+    required Future<T> Function() openRoute,
     required bool Function() isMounted,
   }) async {
     if (isMounted() && returnFocus.canRequestFocus) {
       returnFocus.requestFocus();
     }
     try {
-      await openReader();
+      return await openRoute();
     } finally {
       if (isMounted()) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -27,4 +27,15 @@ abstract final class ReaderNavigationFocus {
       }
     }
   }
+
+  /// Existing reader API delegates to the same focus-safe navigation policy.
+  static Future<void> show({
+    required FocusNode returnFocus,
+    required Future<void> Function() openReader,
+    required bool Function() isMounted,
+  }) => showResult<void>(
+    returnFocus: returnFocus,
+    openRoute: openReader,
+    isMounted: isMounted,
+  );
 }

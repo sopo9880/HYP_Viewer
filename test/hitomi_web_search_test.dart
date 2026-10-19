@@ -9,7 +9,14 @@ void main() {
         'https://hitomi.la/search.html?artist%3Apochi');
     expect(HitomiWebSearch.searchUri('hello world').toString(),
         'https://hitomi.la/search.html?hello%20world');
-    expect(() => HitomiWebSearch.searchUri(''), throwsFormatException);
+    expect(HitomiWebSearch.searchUri('').toString(),
+        'https://hitomi.la/');
+    expect(HitomiWebSearch.searchUri('   ').toString(),
+        'https://hitomi.la/');
+    expect(HitomiWebSearch.searchUri('  artist:pochi  ').toString(),
+        'https://hitomi.la/search.html?artist%3Apochi');
+    expect(() => HitomiWebSearch.searchUri('x'.padRight(151, 'x')),
+        throwsFormatException);
   });
 
   test('parses only trusted gallery links and removes duplicate work IDs', () {

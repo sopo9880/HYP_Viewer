@@ -110,4 +110,128 @@ void main() {
     expect(searchFocus.hasFocus, isFalse);
     expect(dashboardFocus.hasPrimaryFocus, isTrue);
   });
+
+  testWidgets('online result bottom sheet does not refocus search on close',
+      (tester) async {
+    final search = FocusNode(debugLabel: 'online-search');
+    final dashboard = FocusNode(debugLabel: 'dashboard-shortcuts');
+    final controller = TextEditingController();
+    addTearDown(() {
+      search.dispose();
+      dashboard.dispose();
+      controller.dispose();
+    });
+    await tester.pumpWidget(MaterialApp(home: Focus(
+      focusNode: dashboard,
+      autofocus: true,
+      child: Builder(builder: (root) => Scaffold(body: Column(children: [
+        TextField(
+          key: const Key('online-search-field'),
+          controller: controller,
+          focusNode: search,
+        ),
+        FilledButton(
+          key: const Key('open-online-result'),
+          onPressed: () => ReaderNavigationFocus.showResult<void>(
+            returnFocus: dashboard,
+            isMounted: () => root.mounted,
+            openRoute: () => showModalBottomSheet<void>(
+              context: root,
+              builder: (sheet) => SafeArea(child: FilledButton(
+                key: const Key('close-online-result'),
+                onPressed: () => Navigator.of(sheet).pop(),
+                child: const Text('Close result'),
+              )),
+            ),
+          ),
+          child: const Text('Open result'),
+        ),
+      ]))),
+    )));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const Key('online-search-field')), 'gallery title');
+    await tester.pump();
+    expect(search.hasPrimaryFocus, isTrue);
+
+    await tester.tap(find.byKey(const Key('open-online-result')));
+    await tester.pumpAndSettle();
+    expect(search.hasFocus, isFalse);
+    await tester.tap(find.byKey(const Key('close-online-result')));
+    await tester.pumpAndSettle();
+
+    expect(controller.text, 'gallery title');
+    expect(search.hasFocus, isFalse);
+    expect(dashboard.hasPrimaryFocus, isTrue);
+    await tester.tap(find.byKey(const Key('online-search-field')));
+    await tester.pump();
+    expect(search.hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets('web search route Cancel and Apply preserve text but not focus',
+      (tester) async {
+    final search = FocusNode(debugLabel: 'web-search');
+    final dashboard = FocusNode(debugLabel: 'dashboard-shortcuts');
+    final controller = TextEditingController();
+    String? selected;
+    addTearDown(() {
+      search.dispose();
+      dashboard.dispose();
+      controller.dispose();
+    });
+    await tester.pumpWidget(MaterialApp(home: Focus(
+      focusNode: dashboard,
+      autofocus: true,
+      child: Builder(builder: (root) => Scaffold(body: Column(children: [
+        TextField(
+          key: const Key('web-search-field'),
+          controller: controller, focusNode: search,
+        ),
+        FilledButton(
+          key: const Key('open-web-result'),
+          onPressed: () async {
+            selected = await ReaderNavigationFocus.showResult<String?>(
+              returnFocus: dashboard,
+              isMounted: () => root.mounted,
+              openRoute: () => Navigator.of(root).push<String>(
+                MaterialPageRoute(builder: (page) => Scaffold(
+                  body: FilledButton(
+                    key: const Key('apply-web-result'),
+                    onPressed: () => Navigator.of(page).pop('work-1234567'),
+                    child: const Text('Apply'),
+                  ),
+                )),
+              ),
+            );
+          },
+          child: const Text('Open browser'),
+        ),
+      ]))),
+    )));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('web-search-field')), 'pochi');
+    await tester.pump();
+    expect(search.hasPrimaryFocus, isTrue);
+
+    await tester.tap(find.byKey(const Key('open-web-result')));
+    await tester.pumpAndSettle();
+    expect(search.hasFocus, isFalse);
+    await tester.tap(find.byKey(const Key('apply-web-result')));
+    await tester.pumpAndSettle();
+    expect(selected, 'work-1234567');
+    expect(controller.text, 'pochi');
+    expect(search.hasFocus, isFalse);
+    expect(dashboard.hasPrimaryFocus, isTrue);
+
+    // Reopen, then cancel via Android back: it must not restore the IME.
+    await tester.tap(find.byKey(const Key('web-search-field')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('open-web-result')));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(search.hasFocus, isFalse);
+    expect(dashboard.hasPrimaryFocus, isTrue);
+  });
+
 }
