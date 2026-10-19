@@ -79,14 +79,14 @@ void main() {
     final workflow = await File('.github/workflows/verify.yml')
         .readAsString();
 
-    expect(supervisor, contains('[string] $SessionPath'));
+    expect(supervisor, contains(r'[string] $SessionPath'));
     expect(supervisor, contains('Status \'supervisor-started\''));
     expect(supervisor, contains('Status \'elevation-requested\''));
     expect(supervisor, contains('Status \'supervisor-elevated\''));
     expect(supervisor, contains('Status \'engine-starting\''));
     expect(supervisor, contains('Status \'diagnostic-ready\''));
     expect(supervisor, contains('supervisor-error.txt'));
-    expect(supervisor, contains('Stop-Process -Id $child.Id'));
+    expect(supervisor, contains(r'Stop-Process -Id $child.Id'));
     expect(manager, contains("'-SessionPath', folder.path"));
     expect(manager, contains('ProcessStartMode.normal'));
     expect(manager, contains('process.exitCode'));
