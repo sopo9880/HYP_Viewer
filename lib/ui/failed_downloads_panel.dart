@@ -56,7 +56,7 @@ class FailedDownloadsPanel extends StatelessWidget {
           spacing: 10,
           runSpacing: 2,
           children: [
-            HypText(labels.downloadFailedHeading,
+            Text(labels.downloadFailedHeading,
                 style: const TextStyle(fontWeight: FontWeight.w700)),
             if (onClearAll != null)
               TextButton.icon(
@@ -68,20 +68,20 @@ class FailedDownloadsPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        HypText(labels.downloadFailedHelp),
+        Text(labels.downloadFailedHelp),
         const SizedBox(height: 8),
         for (final failed in failedDownloads.values.toList().reversed.take(25))
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 3),
             child: Row(children: [
-              Expanded(child: HypText(
+              Expanded(child: Text(
                 labels.downloadFailedDetail(failed.workId, failed.code),
                 key: Key('failed-download-' + failed.workId),
               )),
               TextButton(
                 key: Key('retry-failed-' + failed.workId),
                 onPressed: onRetry == null ? null : () => onRetry!(failed.workId),
-                child: HypText(labels.downloadFailedRetry),
+                child: Text(labels.downloadFailedRetry),
               ),
               if (onDismiss != null)
                 IconButton(
