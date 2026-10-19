@@ -813,5 +813,6 @@
   "androidDpiEnable": "Enable bundled Android ByeDPI",
   "androidDpiStandard": "Standard TLS split (-s 1)",
   "androidDpiStrong": "Stronger split + OOB (-s 1 -q 1)",
-  "androidDpiSni": "SNI-focused split (-s 0+sm)"
+  "androidDpiSni": "SNI-focused split (-s 0+sm)",
+  "dpiShowDiagnostics": "View DPI diagnostics"
 }

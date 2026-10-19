@@ -813,5 +813,6 @@
   "androidDpiEnable": "Android内蔵ByeDPIを使用",
   "androidDpiStandard": "標準TLS分割 (-s 1)",
   "androidDpiStrong": "強化分割＋OOB (-s 1 -q 1)",
-  "androidDpiSni": "SNI分割 (-s 0+sm)"
+  "androidDpiSni": "SNI分割 (-s 0+sm)",
+  "dpiShowDiagnostics": "DPI診断の詳細を表示"
 }

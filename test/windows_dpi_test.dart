@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hyp_viewer/core/windows_dpi.dart';
 
@@ -49,4 +51,50 @@ void main() {
     expect(RegExp(r'^[0-9a-f]{32}$').hasMatch(a), true);
     expect(a, isNot(b));
   });
+
+  test('Windows supervisor startup distinguishes three timeout causes', () {
+    final classify = WindowsDpiManager.classifyStartupTimeout;
+    expect(classify('starting', const Duration(seconds: 5)), isNull);
+    expect(classify('starting', const Duration(seconds: 9)),
+        'supervisor-no-start');
+    expect(classify('elevation-requested', const Duration(seconds: 30)),
+        isNull);
+    expect(classify('elevation-requested', const Duration(seconds: 51)),
+        'elevation-approval-timeout');
+    expect(classify('engine-starting', const Duration(seconds: 51)),
+        'engine-start-timeout');
+    expect(classify('supervisor-elevated', const Duration(seconds: 51)),
+        'engine-start-timeout');
+    expect(classify('supervisor-started', const Duration(seconds: 51)),
+        'supervisor-start-timeout');
+  });
+
+  test('Windows engine forwards explicit session path and captures launch exit',
+      () async {
+    final supervisor = await File('scripts/windows_dpi_supervisor.ps1')
+        .readAsString();
+    final manager = await File('lib/core/windows_dpi.dart').readAsString();
+    final windowsTest = await File('scripts/test_windows_dpi_supervisor.ps1')
+        .readAsString();
+    final workflow = await File('.github/workflows/verify.yml')
+        .readAsString();
+
+    expect(supervisor, contains('[string] $SessionPath'));
+    expect(supervisor, contains('Status \'supervisor-started\''));
+    expect(supervisor, contains('Status \'elevation-requested\''));
+    expect(supervisor, contains('Status \'supervisor-elevated\''));
+    expect(supervisor, contains('Status \'engine-starting\''));
+    expect(supervisor, contains('Status \'diagnostic-ready\''));
+    expect(supervisor, contains('supervisor-error.txt'));
+    expect(supervisor, contains('Stop-Process -Id $child.Id'));
+    expect(manager, contains("'-SessionPath', folder.path"));
+    expect(manager, contains('ProcessStartMode.normal'));
+    expect(manager, contains('process.exitCode'));
+    expect(manager, contains('launcher-log.txt'));
+    expect(manager, contains('supervisor-not-started'));
+    expect(manager, isNot(contains("'elevation-timeout'")));
+    expect(windowsTest, contains('-DiagnosticProbe'));
+    expect(workflow, contains('scripts/test_windows_dpi_supervisor.ps1'));
+  });
+
 }

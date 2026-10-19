@@ -79,6 +79,9 @@ jobs:
             'scripts/windows_dpi_supervisor.ps1',
             [ref]$tokens, [ref]$errors)
           if ($errors.Count -gt 0) { throw ($errors | Out-String) }
+      - name: Smoke-test Windows DPI supervisor path and startup acknowledgment
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/test_windows_dpi_supervisor.ps1
       - name: Bundle verified official GoodbyeDPI for Windows
         shell: pwsh
         run: |
@@ -213,6 +216,12 @@ jobs:
           - Preserve v0.4.16 user library, reading history and app settings.
 
           Changes in v0.4.19:
+          - Fix Windows GoodbyeDPI startup supervision: forward the original
+            user's absolute session path across UAC boundaries, record real
+            bootstrap exit codes and local stderr, and expose detailed steps
+            and diagnostics instead of reporting every failure as UAC timeout.
+          - Smoke-test Windows PowerShell supervisor session acknowledgment
+            and invalid paths without requesting elevation or starting driver.
           - Implement Android app-local ByeDPI using the MIT native engine
             compiled from a verified pinned source revision into the APK.
           - Route Android WebView plus Dart HTTP(S) metadata, online search,

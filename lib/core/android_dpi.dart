@@ -109,7 +109,7 @@ class AndroidDpiManager extends ChangeNotifier {
       _status(AndroidDpiPhase.unavailable, 'android-only');
       return;
     }
-    HttpOverrides.global ??= AndroidDpiHttpOverrides();
+    HttpOverrides.global = AndroidDpiHttpOverrides();
     try {
       final file = await _settingsFile;
       if (await file.exists()) {

@@ -813,5 +813,6 @@
   "androidDpiEnable": "Android 내장 ByeDPI 사용",
   "androidDpiStandard": "기본 · TLS 분할 (-s 1)",
   "androidDpiStrong": "강화 · 분할 및 OOB (-s 1 -q 1)",
-  "androidDpiSni": "SNI 중심 분할 (-s 0+sm)"
+  "androidDpiSni": "SNI 중심 분할 (-s 0+sm)",
+  "dpiShowDiagnostics": "DPI 진단 상세 보기"
 }

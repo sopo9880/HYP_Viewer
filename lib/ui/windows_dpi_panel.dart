@@ -18,6 +18,7 @@ class _WindowsDpiSettingsPanelState extends State<WindowsDpiSettingsPanel> {
   bool busy = false;
   bool? testResult;
   bool invalid = false;
+  String? diagnosticDetails;
 
   @override
   void initState() {
@@ -40,7 +41,7 @@ class _WindowsDpiSettingsPanelState extends State<WindowsDpiSettingsPanel> {
 
   Future<void> _run(Future<void> Function() operation) async {
     if (busy) return;
-    setState(() { busy = true; invalid = false; });
+    setState(() { busy = true; invalid = false; diagnosticDetails = null; });
     try {
       await operation();
     } catch (_) {
@@ -134,8 +135,15 @@ class _WindowsDpiSettingsPanelState extends State<WindowsDpiSettingsPanel> {
       const SizedBox(height: 10),
       Text(l.dpiStatus + ': ' + status, key: const Key('windows-dpi-status')),
       if (manager.diagnostic.isNotEmpty)
-        SelectableText('Code: ' + manager.diagnostic,
-            style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        SelectableText(
+          (manager.phase == WindowsDpiPhase.failed ? 'Code: ' : 'Stage: ') +
+              manager.diagnostic,
+          style: TextStyle(
+            color: manager.phase == WindowsDpiPhase.failed
+                ? Theme.of(context).colorScheme.error
+                : Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
       if (invalid) Text(l.dpiInvalid,
           style: TextStyle(color: Theme.of(context).colorScheme.error)),
       const SizedBox(height: 12),
@@ -145,6 +153,15 @@ class _WindowsDpiSettingsPanelState extends State<WindowsDpiSettingsPanel> {
           onPressed: locked || !pref.enabled ? null
               : () => _run(manager.restart),
           icon: const Icon(Icons.restart_alt), label: Text(l.dpiRestart)),
+        OutlinedButton.icon(
+          key: const Key('windows-dpi-details'),
+          onPressed: busy ? null : () => _run(() async {
+            final contents = await manager.readDiagnosticDetails();
+            if (mounted) setState(() => diagnosticDetails = contents);
+          }),
+          icon: const Icon(Icons.description_outlined),
+          label: Text(l.dpiShowDiagnostics),
+        ),
         OutlinedButton.icon(
           key: const Key('windows-dpi-test-connection'),
           onPressed: busy ? null : () async {
@@ -158,6 +175,11 @@ class _WindowsDpiSettingsPanelState extends State<WindowsDpiSettingsPanel> {
           },
           icon: const Icon(Icons.wifi_tethering), label: Text(l.dpiTest)),
       ]),
+      if (diagnosticDetails != null && diagnosticDetails!.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        SelectableText(diagnosticDetails!,
+            key: const Key('windows-dpi-diagnostic-details')),
+      ],
       if (testResult != null) ...[
         const SizedBox(height: 8),
         Text(testResult! ? l.dpiTestOk : l.dpiTestFail),
