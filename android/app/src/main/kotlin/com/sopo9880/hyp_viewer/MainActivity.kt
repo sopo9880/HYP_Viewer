@@ -13,6 +13,7 @@ import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import android.net.Uri
+import android.net.VpnService
 import androidx.webkit.ProxyConfig
 import androidx.webkit.ProxyController
 import androidx.webkit.WebViewFeature
@@ -41,6 +42,13 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val channelName = "hyp_viewer/share"
     private var dpiOperationBusy = false
+    private val vpnPermissionRequest = 9420
+    private var pendingVpnRequest: MethodChannel.Result? = null
+    private var pendingVpnPreset = ""
+    private var pendingVpnExcluded: ArrayList<String> = arrayListOf()
+    private val vpnSocksPort by lazy {
+        getSharedPreferences("hyp_android_dpi_socks", Context.MODE_PRIVATE)
+    }
     private val dpiPreferences by lazy {
         getSharedPreferences("hyp_android_dpi_local", Context.MODE_PRIVATE)
     }
@@ -407,6 +415,18 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "start" -> startAndroidDpi(call, result)
                 "stop" -> stopAndroidDpi(result)
+                "vpnStart" -> startDeviceDpiVpn(call, result)
+                "vpnStop" -> stopDeviceDpiVpn(result)
+                "vpnStatus" -> result.success(mapOf(
+                    "running" to AndroidDpiVpnService.isActive(),
+                    "code" to AndroidDpiVpnService.errorCode()
+                ))
+                "vpnApps" -> {
+                    thread(name = "HYP-VPN-apps") {
+                        val apps = launchableVpnApps()
+                        runOnUiThread { result.success(apps) }
+                    }
+                }
                 "status" -> {
                     val port = dpiPreferences.getInt("port", 0)
                     val supported = WebViewFeature.isFeatureSupported(
@@ -588,6 +608,164 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+
+    private fun launchableVpnApps(): List<Map<String, String>> {
+        val query = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val apps = packageManager.queryIntentActivities(query, 0)
+        return apps.mapNotNull { activity ->
+            val name = activity.activityInfo?.packageName ?: return@mapNotNull null
+            if (name == packageName) return@mapNotNull null
+            mapOf("package" to name,
+                  "name" to activity.loadLabel(packageManager).toString().take(100))
+        }.distinctBy { it["package"] }
+            .sortedBy { it["name"] }
+            .take(250)
+    }
+
+    private fun stopSocksDpi() {
+        try {
+            startService(Intent(this, AndroidDpiSocksService::class.java).apply {
+                action = AndroidDpiService.ACTION_STOP
+            })
+        } catch (_: Exception) {}
+    }
+
+    private fun startDeviceDpiVpn(call: MethodCall, result: MethodChannel.Result) {
+        if (pendingVpnRequest != null || dpiOperationBusy) {
+            result.error("vpn-busy", "VPN startup is already running", null)
+            return
+        }
+        if (AndroidDpiVpnService.isActive()) {
+            result.success(mapOf("running" to true))
+            return
+        }
+        val preset = call.argument<String>("preset") ?: ""
+        if (preset !in AndroidDpiPresets.names) {
+            result.error("invalid-preset", "Unsupported device DPI preset", null)
+            return
+        }
+        val excluded = call.argument<List<String>>("excluded") ?: emptyList()
+        if (excluded.size > 100 || excluded.any {
+                it.length > 150 || !Regex("[A-Za-z0-9_.]{3,150}").matches(it)
+            }) {
+            result.error("invalid-exclusions", "Unsupported package exclusion", null)
+            return
+        }
+        pendingVpnPreset = preset
+        pendingVpnExcluded = ArrayList(excluded.distinct())
+        pendingVpnRequest = result
+        try {
+            val consent = VpnService.prepare(this)
+            if (consent != null) {
+                startActivityForResult(consent, vpnPermissionRequest)
+            } else {
+                launchDeviceDpiVpn()
+            }
+        } catch (_: Exception) {
+            pendingVpnRequest = null
+            result.error("vpn-consent", "Android VPN consent unavailable", null)
+        }
+    }
+
+    private fun launchDeviceDpiVpn() {
+        val result = pendingVpnRequest ?: return
+        val port = try {
+            val previous = vpnSocksPort.getInt("port", 0)
+            if (previous in 1025..65535) previous else newDpiPort()
+        } catch (_: Exception) {
+            pendingVpnRequest = null
+            result.error("vpn-port", "Unable to allocate SOCKS5 port", null)
+            return
+        }
+        vpnSocksPort.edit().putInt("port", port).apply()
+        try {
+            val native = Intent(this, AndroidDpiSocksService::class.java).apply {
+                action = AndroidDpiService.ACTION_START
+                putExtra(AndroidDpiService.EXTRA_PORT, port)
+                putExtra(AndroidDpiService.EXTRA_PRESET, pendingVpnPreset)
+                putExtra(AndroidDpiService.EXTRA_PROXY_KIND, "socks5")
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(native)
+            } else {
+                startService(native)
+            }
+        } catch (_: Exception) {
+            pendingVpnRequest = null
+            result.error("vpn-socks-service", "Unable to launch local SOCKS5", null)
+            return
+        }
+        thread(name = "HYP-DPI-VPN-start", isDaemon = true) {
+            var listening = false
+            for (attempt in 0 until 65) {
+                if (isDpiListening(port)) { listening = true; break }
+                try { Thread.sleep(100L) } catch (_: InterruptedException) {}
+            }
+            if (listening) {
+                runOnUiThread {
+                    try {
+                        val intent = Intent(this, AndroidDpiVpnService::class.java).apply {
+                            action = AndroidDpiVpnService.ACTION_START
+                            putExtra(AndroidDpiVpnService.EXTRA_PORT, port)
+                            putExtra(AndroidDpiVpnService.EXTRA_PRESET, pendingVpnPreset)
+                            putStringArrayListExtra(AndroidDpiVpnService.EXTRA_EXCLUDED,
+                                pendingVpnExcluded)
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(intent)
+                        } else {
+                            startService(intent)
+                        }
+                    } catch (_: Exception) {}
+                }
+                for (attempt in 0 until 65) {
+                    if (AndroidDpiVpnService.isActive()) break
+                    try { Thread.sleep(100L) } catch (_: InterruptedException) {}
+                }
+            }
+            val ok = listening && AndroidDpiVpnService.isActive()
+            runOnUiThread {
+                val reply = pendingVpnRequest
+                pendingVpnRequest = null
+                if (ok) {
+                    reply?.success(mapOf("running" to true, "port" to port))
+                } else {
+                    stopSocksDpi()
+                    reply?.error("vpn-start-failed",
+                        AndroidDpiVpnService.errorCode().ifEmpty {
+                            if (listening) "Tunnel failed" else "SOCKS5 engine not listening"
+                        }, null)
+                }
+            }
+        }
+    }
+
+    private fun stopDeviceDpiVpn(result: MethodChannel.Result) {
+        if (pendingVpnRequest != null) {
+            result.error("vpn-busy", "VPN startup is running", null)
+            return
+        }
+        try {
+            startService(Intent(this, AndroidDpiVpnService::class.java).apply {
+                action = AndroidDpiVpnService.ACTION_STOP
+            })
+            stopSocksDpi()
+        } catch (_: Exception) {}
+        thread(name = "HYP-VPN-stop", isDaemon = true) {
+            for (attempt in 0 until 40) {
+                if (!AndroidDpiVpnService.isActive()) break
+                try { Thread.sleep(100L) } catch (_: InterruptedException) {}
+            }
+            runOnUiThread {
+                if (AndroidDpiVpnService.isActive()) {
+                    result.error("vpn-stop-timeout", "VPN did not stop", null)
+                } else {
+                    result.success(null)
+                }
+            }
+        }
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
@@ -600,6 +778,16 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == vpnPermissionRequest) {
+            if (resultCode == Activity.RESULT_OK) {
+                launchDeviceDpiVpn()
+            } else {
+                val reply = pendingVpnRequest
+                pendingVpnRequest = null
+                reply?.error("vpn-permission-denied", "VPN approval was declined", null)
+            }
+            return
+        }
         if (requestCode == securityUpdateRequest) {
             pendingSecurityUpdate?.success(true)
             pendingSecurityUpdate = null

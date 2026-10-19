@@ -12,37 +12,65 @@ class AndroidDpiPreferences {
   final bool enabled;
   final bool autoStart;
   final String preset;
+  final String scope; // app | device
+  final List<String> excludedApps;
 
   const AndroidDpiPreferences({
-    this.enabled = false, this.autoStart = false, this.preset = 'standard',
+    this.enabled = false, this.autoStart = false,
+    this.preset = 'all_dnsredir', this.scope = 'app',
+    this.excludedApps = const [],
   });
 
-  static const presets = ['standard', 'strong', 'sni'];
+  static const presets = <String>[
+    'russia_blacklist', 'russia_blacklist_dnsredir',
+    'all', 'all_dnsredir', 'all_dnsredir_hardcore',
+  ];
   static const options = <String, String>{
-    'standard': '-s 1',
-    'strong': '-s 1 -q 1',
-    'sni': '-s 0+sm',
+    'russia_blacklist': '-s 1 -H russia-blacklist.txt',
+    'russia_blacklist_dnsredir': '-s 1 -H russia-blacklist.txt + VPN DNS',
+    'all': '-s 1',
+    'all_dnsredir': '-s 1 + VPN DNS',
+    'all_dnsredir_hardcore': '-s 1 -d 3 -q 1 -M hcsmix + VPN DNS',
   };
 
+  bool get needsAlternativeDns =>
+      preset == 'russia_blacklist_dnsredir' ||
+      preset == 'all_dnsredir' || preset == 'all_dnsredir_hardcore';
+
   AndroidDpiPreferences copyWith({
-    bool? enabled, bool? autoStart, String? preset,
+    bool? enabled, bool? autoStart, String? preset, String? scope,
+    List<String>? excludedApps,
   }) => AndroidDpiPreferences(
     enabled: enabled ?? this.enabled,
     autoStart: autoStart ?? this.autoStart,
     preset: preset ?? this.preset,
+    scope: scope ?? this.scope,
+    excludedApps: excludedApps ?? this.excludedApps,
   );
 
   Map<String, Object> toJson() => {
     'enabled': enabled, 'autoStart': autoStart, 'preset': preset,
+    'scope': scope, 'excludedApps': excludedApps,
   };
 
-  factory AndroidDpiPreferences.fromJson(Map<String, dynamic> json) =>
-      AndroidDpiPreferences(
-        enabled: json['enabled'] == true,
-        autoStart: json['autoStart'] == true,
-        preset: presets.contains(json['preset'])
-            ? json['preset'] as String : 'standard',
-      );
+  factory AndroidDpiPreferences.fromJson(Map<String, dynamic> json) {
+    final selected = json['preset']?.toString() ?? '';
+    final legacy = const {'standard', 'strong', 'sni'}.contains(selected);
+    final preset = presets.contains(selected)
+        ? selected : (legacy ? 'all' : 'all_dnsredir');
+    final exclusions = json['excludedApps'] is List
+        ? (json['excludedApps'] as List).whereType<String>().where(
+            (value) => RegExp(r'^[A-Za-z0-9_.]{3,150}$').hasMatch(value),
+          ).take(100).toSet().toList()
+        : <String>[];
+    return AndroidDpiPreferences(
+      enabled: !legacy && json['enabled'] == true,
+      autoStart: json['autoStart'] == true,
+      preset: preset,
+      scope: json['scope'] == 'device' ? 'device' : 'app',
+      excludedApps: exclusions,
+    );
+  }
 }
 
 /// Installed globally on Android to route all Dart HttpClient requests
@@ -129,8 +157,7 @@ class AndroidDpiManager extends ChangeNotifier {
         _status(AndroidDpiPhase.unavailable, 'webview-proxy-unsupported');
         return;
       }
-      if (preferences.enabled &&
-          (status?['running'] == true || preferences.autoStart)) {
+      if (preferences.enabled && preferences.autoStart) {
         await start();
       } else if (status?['running'] == true && !preferences.enabled) {
         await _channel.invokeMethod<void>('stop');
@@ -165,6 +192,17 @@ class AndroidDpiManager extends ChangeNotifier {
         throw const FormatException('Proxy did not report a listening port');
       }
       AndroidDpiHttpOverrides.setLocalPort(port);
+      if (preferences.scope == 'device') {
+        final vpn = await _channel.invokeMapMethod<String, dynamic>(
+          'vpnStart', {
+            'preset': preferences.preset,
+            'excluded': preferences.excludedApps,
+          },
+        ).timeout(const Duration(seconds: 35));
+        if (vpn?['running'] != true) {
+          throw const FormatException('Android VPN did not become active');
+        }
+      }
       preferences = preferences.copyWith(enabled: true);
       await _save();
       _status(AndroidDpiPhase.running);
@@ -174,7 +212,10 @@ class AndroidDpiManager extends ChangeNotifier {
       });
     } catch (error) {
       AndroidDpiHttpOverrides.setLocalPort(null);
+      try { await _channel.invokeMethod<void>('vpnStop'); } catch (_) {}
       try { await _channel.invokeMethod<void>('stop'); } catch (_) {}
+      preferences = preferences.copyWith(enabled: false);
+      try { await _save(); } catch (_) {}
       _status(AndroidDpiPhase.failed, error is PlatformException
           ? error.code : 'engine-start-failed');
     }
@@ -186,6 +227,10 @@ class AndroidDpiManager extends ChangeNotifier {
     _monitor = null;
     _status(AndroidDpiPhase.stopping);
     try {
+      if (preferences.scope == 'device') {
+        await _channel.invokeMethod<void>('vpnStop')
+            .timeout(const Duration(seconds: 10));
+      }
       await _channel.invokeMethod<void>('stop')
           .timeout(const Duration(seconds: 8));
       AndroidDpiHttpOverrides.setLocalPort(null);
@@ -222,6 +267,93 @@ class AndroidDpiManager extends ChangeNotifier {
       if (phase != AndroidDpiPhase.stopped) return;
     }
     preferences = preferences.copyWith(preset: preset);
+    await _save();
+    notifyListeners();
+    if (wasRunning) await start();
+  }
+
+  Future<void> setScope(String scope) async {
+    if (scope != 'app' && scope != 'device') {
+      throw ArgumentError.value(scope, 'scope');
+    }
+    if (scope == preferences.scope) return;
+    final wasRunning = phase == AndroidDpiPhase.running;
+    if (wasRunning) {
+      await stop();
+      if (phase != AndroidDpiPhase.stopped) return;
+    }
+    preferences = preferences.copyWith(scope: scope);
+    await _save();
+    notifyListeners();
+    if (wasRunning) await start();
+  }
+
+  Future<List<Map<String, String>>> availableVpnApps() async {
+    if (!Platform.isAndroid) return const [];
+    final raw = await _channel.invokeListMethod<dynamic>('vpnApps');
+    if (raw == null) return const [];
+    return raw.whereType<Map>().map((entry) => <String, String>{
+      'package': entry['package']?.toString() ?? '',
+      'name': entry['name']?.toString() ?? '',
+    }).where((item) => item['package']!.isNotEmpty).toList();
+  }
+
+  Future<void> setExcludedApps(List<String> packages) async {
+    if (packages.length > 100 || packages.any((p) =>
+        !RegExp(r'^[A-Za-z0-9_.]{3,150}
+    if (!Platform.isAndroid || phase != AndroidDpiPhase.running) return;
+    try {
+      final actual = await _channel.invokeMapMethod<String, dynamic>('status');
+      final vpn = preferences.scope == 'device'
+          ? await _channel.invokeMapMethod<String, dynamic>('vpnStatus')
+          : null;
+      if (actual?['running'] != true ||
+          actual?['port'] != AndroidDpiHttpOverrides.port ||
+          (preferences.scope == 'device' && vpn?['running'] != true)) {
+        _monitor?.cancel();
+        _monitor = null;
+        // A dead proxy must produce a visible error, never a silent bypass.
+        _status(AndroidDpiPhase.failed, 'proxy-disconnected');
+      }
+    } catch (_) {
+      _status(AndroidDpiPhase.failed, 'status-check-failed');
+    }
+  }
+
+  Future<bool> checkSite() async {
+    if (!Platform.isAndroid || phase != AndroidDpiPhase.running) return false;
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 8);
+    try {
+      final request = await client.getUrl(Uri.https('hitomi.la', '/'))
+          .timeout(const Duration(seconds: 10));
+      final response = await request.close()
+          .timeout(const Duration(seconds: 10));
+      await response.drain<void>().timeout(const Duration(seconds: 10));
+      return response.statusCode >= 200 && response.statusCode < 500;
+    } catch (_) {
+      return false;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<void> _serialize(Future<void> Function() work) {
+    final next = _pending.then((_) => work());
+    _pending = next.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return next;
+  }
+}
+).hasMatch(p))) {
+      throw const FormatException('Invalid excluded package');
+    }
+    final wasRunning = phase == AndroidDpiPhase.running &&
+        preferences.scope == 'device';
+    if (wasRunning) {
+      await stop();
+      if (phase != AndroidDpiPhase.stopped) return;
+    }
+    preferences = preferences.copyWith(excludedApps: packages.toSet().toList());
     await _save();
     notifyListeners();
     if (wasRunning) await start();

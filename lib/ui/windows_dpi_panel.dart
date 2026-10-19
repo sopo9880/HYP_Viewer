@@ -96,7 +96,8 @@ class _WindowsDpiSettingsPanelState extends State<WindowsDpiSettingsPanel> {
         items: [
           for (final mode in WindowsDpiPreferences.presets)
             DropdownMenuItem(value: mode, child: Text(
-              mode == 'recommended' ? 'Standard (-9)' :
+              mode == 'all_dnsredir' ? AppLocalizations.of(context)!.androidDpiRecommendedPreset :
+                  mode == 'recommended' ? 'Standard (-9) (legacy)' :
               mode == 'all' ? 'all (legacy -1)' :
               mode == 'custom' ? l.dpiCustom : mode,
               overflow: TextOverflow.ellipsis)),

@@ -127,10 +127,18 @@ jobs:
         run: python3 scripts/configure_android_ocr.py
       - name: Stage pinned MIT ByeDPI native engine for Android
         run: python3 scripts/prepare_android_byedpi.py
+      - name: Verify and package Android DPI host blacklist
+        run: python3 scripts/prepare_android_dpi_blacklist.py
+      - name: Install pinned Android NDK for VPN bridge
+        run: sdkmanager --install "ndk;27.2.12479018"
+      - name: Build pinned MIT tun2socks JNI for device VPN
+        run: python3 scripts/prepare_android_vpn_tunnel.py
       - name: Configure Android NDK ByeDPI and WebView proxy
         run: python3 scripts/configure_android_dpi.py
       - name: Validate Android DPI engine sources and Gradle wiring
         run: python3 -m unittest discover -s scripts -p test_android_dpi_prepare.py
+      - name: Validate staged Android VPN native libraries and JNI
+        run: python3 -m unittest discover -s scripts -p test_android_vpn_build.py
       - run: flutter pub get
       - name: Patch WebView Android ProGuard compatibility
         run: python3 scripts/patch_webview_proguard.py
@@ -214,6 +222,24 @@ jobs:
             with cache bypass and expose the numeric returned gallery ID.
             Always reject cross-gallery responses after revalidation.
           - Preserve v0.4.16 user library, reading history and app settings.
+
+          Changes in v0.4.20:
+          - Unify the five displayed Windows/Android DPI presets, retaining
+            legacy settings and warning that ByeDPI's low-level split strategy
+            differs from GoodbyeDPI's WinDivert packet implementation.
+          - Add an explicitly approved Android VpnService device-wide mode
+            using pinned MIT hev-socks5-tunnel and an on-device SOCKS5 ByeDPI
+            service; route TCP/UDP without a remote VPN server or root.
+          - Exclude the HYP package from the VPN to prevent connection loops;
+            support selection of other apps to bypass the VPN.
+          - Provide Android alternative DNS in VPN mode via 77.88.8.8:53.
+            Explain that this cannot reproduce Windows DNS port 1253 exactly;
+            app-only mode does not redirect DNS.
+          - Default public website search to ON, load only when a search
+            stabilizes, capture gallery links from a bounded WebView, merge
+            by ID without replacing API results, cache and allow opt-out.
+          - Preserve library, reading progress, downloaded archives and
+            existing independent Windows DPI execution lifecycle.
 
           Changes in v0.4.19:
           - Fix Windows GoodbyeDPI startup supervision: forward the original

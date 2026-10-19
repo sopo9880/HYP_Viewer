@@ -8,24 +8,36 @@ void main() {
     const pref = AndroidDpiPreferences();
     expect(pref.enabled, isFalse);
     expect(pref.autoStart, isFalse);
-    expect(pref.preset, 'standard');
+    expect(pref.preset, 'all_dnsredir');
+    expect(pref.scope, 'app');
     expect(AndroidDpiHttpOverrides.enabled, isFalse);
     expect(AndroidDpiHttpOverrides.port, isNull);
   });
 
   test('persisted presets are strictly allowlisted', () {
     final safe = AndroidDpiPreferences.fromJson({
-      'enabled': true, 'autoStart': true, 'preset': 'strong',
+      'enabled': true, 'autoStart': true, 'preset': 'all_dnsredir',
+      'scope': 'device', 'excludedApps': ['com.example.mail'],
     });
     expect(safe.enabled, isTrue);
     expect(safe.autoStart, isTrue);
-    expect(safe.preset, 'strong');
-    expect(AndroidDpiPreferences.options['strong'], '-s 1 -q 1');
+    expect(safe.preset, 'all_dnsredir');
+    expect(safe.scope, 'device');
+    expect(safe.excludedApps, ['com.example.mail']);
+    expect(AndroidDpiPreferences.options['all'], '-s 1');
     final invalid = AndroidDpiPreferences.fromJson({
       'enabled': false, 'preset': '../exec --daemon',
     });
-    expect(invalid.preset, 'standard');
-    expect(AndroidDpiPreferences.presets, containsAll(['standard', 'sni']));
+    expect(invalid.preset, 'all_dnsredir');
+    expect(AndroidDpiPreferences.presets, containsAll([
+      'russia_blacklist', 'russia_blacklist_dnsredir', 'all',
+      'all_dnsredir', 'all_dnsredir_hardcore',
+    ]));
+    final legacy = AndroidDpiPreferences.fromJson({
+      'enabled': true, 'preset': 'strong',
+    });
+    expect(legacy.enabled, isFalse); // Cannot silently migrate DPI mode.
+    expect(legacy.scope, 'app');
   });
 
   test('Dart local HTTP CONNECT state validates ports and can be disabled', () {
@@ -57,7 +69,8 @@ void main() {
     expect(manifest, contains('android:process=":dpi"'));
     expect(manifest, contains('android:foregroundServiceType="specialUse"'));
     expect(native, contains('native.run(args.toTypedArray())'));
-    expect(native, contains('http://127.0.0.1'));
+    expect(native, contains('"socks5"'));
+    expect(native, contains('AndroidDpiPresets.proxyOptions'));
     expect(activity, contains('ProxyController.getInstance().setProxyOverride'));
     expect(activity, contains('ProxyController.getInstance().clearProxyOverride'));
     expect(activity, contains('"hyp_viewer/android_dpi"'));

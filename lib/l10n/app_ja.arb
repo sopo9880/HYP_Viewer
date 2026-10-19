@@ -814,5 +814,15 @@
   "androidDpiStandard": "標準TLS分割 (-s 1)",
   "androidDpiStrong": "強化分割＋OOB (-s 1 -q 1)",
   "androidDpiSni": "SNI分割 (-s 0+sm)",
-  "dpiShowDiagnostics": "DPI診断の詳細を表示"
+  "dpiShowDiagnostics": "DPI診断の詳細を表示",
+  "androidDpiScope": "DPIの適用範囲",
+  "androidDpiScopeApp": "HYP Viewerのみ",
+  "androidDpiScopeDevice": "端末全体（VPN承認が必要）",
+  "androidDpiVpnNotice": "端末全体モードにはAndroidのVPN承認が必要です。他のアプリにも影響し、既存のVPNと競合します。通信ループ防止のためHYP Viewer自身はVPNから除外します。",
+  "androidDpiExcludeApps": "VPNから除外するアプリ",
+  "androidDpiRecommendedPreset": "all_dnsredir（推奨）",
+  "androidDpiDnsNotice": "VPNのDNS設定は77.88.8.8:53です。Windows GoodbyeDPIの77.88.8.8:1253とは異なります。アプリ専用モードではDNSリダイレクトは適用されません。",
+  "autoWebSearchEnable": "Webサイトの自動検索（初期設定ON）",
+  "autoWebSearchDescription": "オンラインAPI検索と同時に公開Webサイトを検索し、ギャラリーのリンクを自動収集・統合します。ライブラリのみの検索や入力中は実行しません。",
+  "autoWebSearchWorking": "Webサイトから検索結果を収集中…"
 }

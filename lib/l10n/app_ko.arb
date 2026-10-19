@@ -814,5 +814,15 @@
   "androidDpiStandard": "기본 · TLS 분할 (-s 1)",
   "androidDpiStrong": "강화 · 분할 및 OOB (-s 1 -q 1)",
   "androidDpiSni": "SNI 중심 분할 (-s 0+sm)",
-  "dpiShowDiagnostics": "DPI 진단 상세 보기"
+  "dpiShowDiagnostics": "DPI 진단 상세 보기",
+  "androidDpiScope": "DPI 적용 범위",
+  "androidDpiScopeApp": "HYP Viewer 앱만",
+  "androidDpiScopeDevice": "휴대폰 전체 (VPN 권한 필요)",
+  "androidDpiVpnNotice": "전체 모드는 Android VPN 승인이 필요합니다. 다른 앱의 네트워크에도 영향을 줄 수 있으며 기존 VPN과 동시에 사용할 수 없습니다. HYP Viewer 자체는 VPN 경로에서 제외됩니다.",
+  "androidDpiExcludeApps": "VPN에서 제외할 앱",
+  "androidDpiRecommendedPreset": "all_dnsredir (추천)",
+  "androidDpiDnsNotice": "DNS 리디렉션은 전체 VPN 모드에서 77.88.8.8:53을 사용합니다. Windows GoodbyeDPI의 77.88.8.8:1253과 동일하지 않습니다. 앱 전용 모드에서는 DNS 리디렉션이 적용되지 않습니다.",
+  "autoWebSearchEnable": "웹으로 검색하기 자동 실행 (기본 ON)",
+  "autoWebSearchDescription": "온라인 검색 시 공개 웹페이지를 함께 검색하고 작품 번호를 자동 수집·통합합니다. 검색 입력 중이나 내 서재 검색에서는 실행하지 않습니다.",
+  "autoWebSearchWorking": "웹사이트 검색 결과 수집 중…"
 }

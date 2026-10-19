@@ -27,7 +27,10 @@ gradle.write_text(source, encoding="utf-8")
 # R8 must not rename JNI entrypoints in permanently signed release builds.
 rules = root / "android/app/proguard-rules.pro"
 keep = "-keep class com.sopo9880.hyp_viewer.DpiNativeBridge { *; }"
+keep_tunnel = "-keep class hev.htproxy.TProxyService { *; }"
 current = rules.read_text(encoding="utf-8") if rules.exists() else ""
-if keep not in current:
-    rules.write_text(current.rstrip() + "\n" + keep + "\n", encoding="utf-8")
+for rule in (keep, keep_tunnel):
+    if rule not in current:
+        current = current.rstrip() + "\n" + rule + "\n"
+rules.write_text(current, encoding="utf-8")
 print("Android native ByeDPI and WebView override configured.")
