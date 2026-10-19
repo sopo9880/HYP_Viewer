@@ -60,6 +60,7 @@ import 'core/update_prompt.dart';
 import 'core/release_version.dart';
 import 'core/background_download_runtime.dart';
 import 'core/download_queue_store.dart';
+import 'core/download_failure_store.dart';
 import 'core/finder_reset_policy.dart';
 
 void main() async {
@@ -131,6 +132,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   bool isReaderTransferPaused = false;
   final Queue<WorkEntry> _downloadQueue = Queue<WorkEntry>();
   final DownloadQueueStore _downloadJobs = DownloadQueueStore();
+  final DownloadFailureStore _downloadFailures = DownloadFailureStore();
+  final Completer<void> _initialFailedDownloadsRead = Completer<void>();
+  bool _downloadFailuresReadFailed = false;
+  Map<String, FailedDownload> _failedDownloads = {};
   final BackgroundDownloadRuntime _backgroundDownloads =
       BackgroundDownloadRuntime.instance;
   final Map<String, String> _downloadSourceById = {};
@@ -280,6 +285,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _loadReadingHistory();
     _loadBlacklist();
+    unawaited(_loadFailedDownloads());
     _load();
     _loadOnlineSource();
     _settingsLoad = _loadReaderSettings();
@@ -922,6 +928,78 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _loadFailedDownloads() async {
+    try {
+      final loaded = await _downloadFailures.load();
+      if (mounted) setState(() => _failedDownloads = loaded);
+    } catch (error) {
+      _downloadFailuresReadFailed = true;
+      _status('다운로드 실패 기록을 읽지 못했어: $error');
+    } finally {
+      _initialFailedDownloadsRead.complete();
+    }
+  }
+
+  String _safeDownloadCode(Object error) {
+    if (error is OnlineReaderFailure) return error.code;
+    if (error is TimeoutException) return 'DOWNLOAD_TIMEOUT';
+    if (error is SocketException || error is HttpException ||
+        error is http.ClientException) return 'DOWNLOAD_NETWORK_FAILED';
+    return 'DOWNLOAD_FAILED';
+  }
+
+  Future<void> _recordFailedDownload(String workId, Object error, {
+    String? source,
+  }) async {
+    final code = _safeDownloadCode(error);
+    final origin = source ?? _downloadSourceById[workId] ?? 'hitomi';
+    await _initialFailedDownloadsRead.future;
+    if (!_downloadFailuresReadFailed) {
+      try {
+        await _downloadFailures.record(workId, source: origin, code: code);
+      } catch (failure) {
+        _status('작품 $workId 실패 기록 저장 오류: $failure');
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _failedDownloads = {
+          ..._failedDownloads,
+          workId: FailedDownload(workId, origin, code),
+        };
+      });
+    }
+  }
+
+  Future<void> _clearFailedDownload(String workId) async {
+    await _initialFailedDownloadsRead.future;
+    if (_downloadFailuresReadFailed) {
+      throw StateError('손상된 실패 기록을 복구해야 재시도할 수 있어.');
+    }
+    await _downloadFailures.remove(workId);
+    if (mounted) setState(() {
+      _failedDownloads = {..._failedDownloads}..remove(workId);
+    });
+  }
+
+  Future<void> _retryFailedDownload(String workId) async {
+    if (_downloadQueueRunning || galleryDownloadToken != null) {
+      _status('진행 중인 다운로드가 끝난 후 재시도해줘.');
+      return;
+    }
+    final match = library.works.where((w) => w.workId == workId);
+    if (match.isEmpty) return;
+    final failure = _failedDownloads[workId];
+    if (failure == null) return;
+    try {
+      await _clearFailedDownload(workId);
+      _downloadSourceById[workId] = failure.source;
+      await _enqueueDownloads([match.first]);
+    } catch (error) {
+      _status('재시도 준비 실패: $error');
+    }
+  }
+
   Future<void> _restoreDownloadQueue() async {
     if (_restoringDownloads || _downloadQueueRunning ||
         _downloadQueueCancelled || galleryDownloadToken != null) return;
@@ -930,12 +1008,18 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       // A resume event may arrive before LibraryStorage has finished loading.
       // Do not clear approved jobs merely because the in-memory shelf is empty.
       await _initialLibraryRead.future;
+      await _initialFailedDownloadsRead.future;
       if (!mounted || _libraryReadFailed || _downloadQueueRunning ||
           galleryDownloadToken != null) return;
       final pending = await _downloadJobs.load();
       if (pending.isEmpty || !mounted) return;
+      // Heal legacy/recovered queues: terminal failures cannot resume.
+      for (final id in pending.keys.where(_failedDownloads.containsKey)) {
+        await _downloadJobs.remove(id);
+      }
       final found = library.works.where((work) =>
           pending.containsKey(work.workId) &&
+          !_failedDownloads.containsKey(work.workId) &&
           work.workId != activeDownloadWorkId &&
           !_queuedDownloadIds.contains(work.workId)).toList();
       if (found.isEmpty) return;
@@ -2533,10 +2617,23 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   Future<void> _enqueueDownloads(Iterable<WorkEntry> works,
       {bool restored = false}) async {
-    final queued = works.toList();
-    // Commit user-approved intent before starting a network request.
+    await _initialFailedDownloadsRead.future;
+    // Bulk/automatic downloads never retry terminal failures. User Retry
+    // removes the failure record explicitly before entering this method.
+    final queued = works.where((work) =>
+        !_failedDownloads.containsKey(work.workId)).toList();
+    if (queued.isEmpty) {
+      _status('자동 재시도가 중지된 작품은 다운로드 화면에서 직접 재시도해줘.');
+      return;
+    }
+    // Persist approved jobs with their original download source.
     if (!restored) {
-      await _downloadJobs.addAll(queued.map((work) => work.workId));
+      await _downloadJobs.addAll(queued.where((work) =>
+          _downloadSourceById[work.workId] != 'json')
+          .map((work) => work.workId));
+      await _downloadJobs.addAll(queued.where((work) =>
+          _downloadSourceById[work.workId] == 'json')
+          .map((work) => work.workId), source: 'json');
     }
     _downloadQueueCancelled = false;
     for (final work in queued) {
@@ -2589,9 +2686,19 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             final saved = json
                 ? await _downloadJsonSourceInternal(work, rightsApproved: true)
                 : await _downloadOnlineInternal(work, rightsApproved: true);
-            if (saved) await _downloadJobs.remove(work.workId);
+            if (!saved && !_downloadQueueCancelled &&
+                !_failedDownloads.containsKey(work.workId)) {
+              await _recordFailedDownload(work.workId,
+                  StateError('다운로드 완료 실패'));
+            }
           } catch (error) {
+            if (!_downloadQueueCancelled) {
+              await _recordFailedDownload(work.workId, error);
+            }
             _status('작품 ${work.workId} 다운로드 실패: $error');
+          } finally {
+            // Remove only this terminal job, preserve the remaining queue.
+            await _downloadJobs.remove(work.workId);
           }
         }
       });
@@ -2720,6 +2827,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         },
       );
       await _downloadJobs.remove(work.workId);
+      if (_failedDownloads.containsKey(work.workId)) {
+        await _clearFailedDownload(work.workId);
+      }
       completedSuccessfully = true;
       _backgroundDownloads.markDownloadCompleted(work.workId);
       if (mounted) setState(() => coverEpoch++);
@@ -2732,6 +2842,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _status('다운로드가 취소됐어. 기존 오프라인 파일은 유지했어.');
       return false;
     } catch (e) {
+      await _recordFailedDownload(work.workId, e, source: 'hitomi');
       _status('오프라인 저장 실패: ' + e.toString());
       return false;
     } finally {
@@ -3072,6 +3183,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         },
       );
       await _downloadJobs.remove(work.workId);
+      if (_failedDownloads.containsKey(work.workId)) {
+        await _clearFailedDownload(work.workId);
+      }
       completedSuccessfully = true;
       _backgroundDownloads.markDownloadCompleted(work.workId);
       if (mounted) setState(() => coverEpoch++);
@@ -3084,6 +3198,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       await _downloadJobs.remove(work.workId);
       return false;
     } catch (e) {
+      await _recordFailedDownload(work.workId, e, source: 'json');
       _status('다운로드 실패: ' + e.toString());
       return false;
     } finally {
@@ -3508,6 +3623,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     onDownloadAll: _downloadAllLibrary,
     onSetAutoDownload: _setAutoDownload,
     queuedDownloadCount: _downloadQueue.length,
+    failedDownloads: _failedDownloads,
+    onRetryFailedDownload: _retryFailedDownload,
     onDownloadJsonSource: _downloadJsonSource,
     onDeleteOffline: _deleteOffline,
     onDeleteWork: _deleteWork,

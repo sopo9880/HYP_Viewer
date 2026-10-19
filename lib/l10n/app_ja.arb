@@ -802,5 +802,10 @@
   "@inspectorLocalCount": {"placeholders":{"count":{"type":"int"}}},
   "inspectorLocalEmpty": "本棚に一致する作品がありません",
   "inspectorLocalEmptyHint": "先に本棚画像インデックスを作成してください。全ページは対象外です。",
-  "inspectorCandidateNotConfirmed": "候補は画像やタイトル・作者の手掛かりによるものです。確認後に取り込んでください。"
+  "inspectorCandidateNotConfirmed": "候補は画像やタイトル・作者の手掛かりによるものです。確認後に取り込んでください。",
+  "downloadFailedHeading": "自動再試行を停止した作品",
+  "downloadFailedHelp": "エラーが起きた作品は自動で再試行しません。他の作品は続行します。ここから作品ごとに再試行できます。",
+  "downloadFailedDetail": "#{id} · {code}",
+  "@downloadFailedDetail": {"placeholders":{"id":{"type":"String"},"code":{"type":"String"}}},
+  "downloadFailedRetry": "再試行"
 }

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import '../core/download_failure_store.dart';
 import '../core/hitomi_gallery.dart';
 import '../core/hitomi_popularity.dart';
 
@@ -141,6 +142,8 @@ class HypDashboard extends StatefulWidget {
   final Future<void> Function() onDownloadAll;
   final Future<void> Function(bool enabled) onSetAutoDownload;
   final int queuedDownloadCount;
+  final Map<String, FailedDownload> failedDownloads;
+  final Future<void> Function(String workId)? onRetryFailedDownload;
   final Future<void> Function(WorkEntry) onDownloadJsonSource;
   final Future<void> Function(WorkEntry) onDeleteOffline;
   final Future<void> Function(WorkEntry) onDeleteWork;
@@ -244,6 +247,8 @@ class HypDashboard extends StatefulWidget {
     required this.onDownloadAll,
     required this.onSetAutoDownload,
     required this.queuedDownloadCount,
+    this.failedDownloads = const {},
+    this.onRetryFailedDownload,
     required this.onDownloadJsonSource,
     required this.onDeleteOffline,
     required this.onDeleteWork,
@@ -3085,6 +3090,40 @@ class _HypDashboardState extends State<HypDashboard> {
             label: const HypText('대기열 취소'),
           ),
         ])),
+        const SizedBox(height: 12),
+      ],
+      if (widget.failedDownloads.isNotEmpty) ...[
+        HypPanel(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            HypText(
+              AppLocalizations.of(context)!.downloadFailedHeading,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            HypText(AppLocalizations.of(context)!.downloadFailedHelp),
+            const SizedBox(height: 8),
+            for (final failed in widget.failedDownloads.values.toList().reversed.take(25))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(children: [
+                  Expanded(child: HypText(
+                    AppLocalizations.of(context)!.downloadFailedDetail(
+                        failed.workId, failed.code),
+                    key: Key('failed-download-' + failed.workId),
+                  )),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    key: Key('retry-failed-' + failed.workId),
+                    onPressed: widget.onRetryFailedDownload == null ? null :
+                        () => widget.onRetryFailedDownload!(failed.workId),
+                    child: HypText(
+                      AppLocalizations.of(context)!.downloadFailedRetry),
+                  ),
+                ]),
+              ),
+          ],
+        )),
         const SizedBox(height: 12),
       ],
       if (widget.downloadingGalleryKey != null) ...[

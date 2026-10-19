@@ -802,5 +802,10 @@
   "@inspectorLocalCount": {"placeholders":{"count":{"type":"int"}}},
   "inspectorLocalEmpty": "No matching works in your library",
   "inspectorLocalEmptyHint": "Build the local image index first. Not every page is indexed.",
-  "inspectorCandidateNotConfirmed": "Candidates come from image or metadata clues. Confirm the work before importing."
+  "inspectorCandidateNotConfirmed": "Candidates come from image or metadata clues. Confirm the work before importing.",
+  "downloadFailedHeading": "Downloads stopped after failures",
+  "downloadFailedHelp": "Failed works will not retry automatically. Other downloads continue, and you can retry each work here.",
+  "downloadFailedDetail": "#{id} · {code}",
+  "@downloadFailedDetail": {"placeholders":{"id":{"type":"String"},"code":{"type":"String"}}},
+  "downloadFailedRetry": "Retry"
 }
