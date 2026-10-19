@@ -40,10 +40,33 @@ jobs:
         run: python3 scripts/configure_android_ocr.py
       - name: Stage pinned MIT ByeDPI native engine for Android
         run: python3 scripts/prepare_android_byedpi.py
+      - name: Verify and package Android DPI host blacklist
+        run: python3 scripts/prepare_android_dpi_blacklist.py
+      - name: Install pinned Android NDK for VPN bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?Android SDK root missing}}"
+          manager="$sdk/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$manager" ]]; then
+            manager="$(find "$sdk/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -print -quit)"
+          fi
+          if [[ -z "$manager" || ! -x "$manager" ]]; then
+            echo "::error::Android SDK cmdline-tools/sdkmanager unavailable"
+            exit 1
+          fi
+          set +o pipefail
+          yes | "$manager" --sdk_root="$sdk" --install "ndk;27.2.12479018"
+          set -o pipefail
+          test -x "$sdk/ndk/27.2.12479018/ndk-build"
+      - name: Build pinned MIT tun2socks JNI for device VPN
+        run: python3 scripts/prepare_android_vpn_tunnel.py
       - name: Configure Android NDK ByeDPI and WebView proxy
         run: python3 scripts/configure_android_dpi.py
       - name: Validate Android DPI engine sources and Gradle wiring
         run: python3 -m unittest discover -s scripts -p test_android_dpi_prepare.py
+      - name: Validate staged Android VPN native libraries and JNI
+        run: python3 -m unittest discover -s scripts -p test_android_vpn_build.py
       - run: flutter pub get
       - name: Patch WebView Android ProGuard compatibility
         run: python3 scripts/patch_webview_proguard.py

@@ -8,7 +8,7 @@ void main() {
     const prefs = WindowsDpiPreferences();
     expect(prefs.enabled, false);
     expect(prefs.autoStart, false);
-    expect(prefs.arguments, ['-9']);
+    expect(prefs.arguments, ['-1', '--dns-addr', '77.88.8.8', '--dns-port', '1253']);
   });
 
   test('presets and preferences persist without changing library schema', () {

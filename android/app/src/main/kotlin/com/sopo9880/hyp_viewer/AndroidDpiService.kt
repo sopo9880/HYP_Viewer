@@ -23,12 +23,13 @@ import kotlin.concurrent.thread
  * process and the C global state is discarded on stop/restart. No root or VPN,
  * no third-party app interception, no TLS interception.
  */
-class AndroidDpiService : Service() {
+open class AndroidDpiService : Service() {
     companion object {
         const val ACTION_START = "com.sopo9880.hyp_viewer.DPI_START"
         const val ACTION_STOP = "com.sopo9880.hyp_viewer.DPI_STOP"
         const val EXTRA_PORT = "port"
         const val EXTRA_PRESET = "preset"
+        const val EXTRA_PROXY_KIND = "proxyKind"
         private const val CHANNEL = "hyp_android_dpi"
         private const val NOTIFICATION_ID = 31719
     }
@@ -37,6 +38,22 @@ class AndroidDpiService : Service() {
     private var stopping = false
     private val handler = Handler(Looper.getMainLooper())
     private val native by lazy { DpiNativeBridge() }
+    private fun verifiedHostList(): String {
+        // Every :dpi / :socks process has access to the same app-private file.
+        val file = java.io.File(filesDir, "hyp_russia_blacklist.txt")
+        if (!file.isFile || file.length() <= 0) {
+            val temp = java.io.File(filesDir, "hyp_russia_blacklist.tmp")
+            assets.open("dpi/russia-blacklist.txt").use { input ->
+                temp.outputStream().use { output -> input.copyTo(output) }
+            }
+            check(temp.length() > 0) { "Verified blacklist asset is empty" }
+            if (!temp.renameTo(file)) {
+                temp.copyTo(file, overwrite = true)
+                temp.delete()
+            }
+        }
+        return file.absolutePath
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -46,21 +63,29 @@ class AndroidDpiService : Service() {
                 if (worker != null) return START_NOT_STICKY
                 val port = intent.getIntExtra(EXTRA_PORT, -1)
                 val preset = intent.getStringExtra(EXTRA_PRESET) ?: ""
+                val kind = intent.getStringExtra(EXTRA_PROXY_KIND) ?: "http"
                 if (port !in 1025..65535 ||
-                    preset !in listOf("standard", "strong", "sni")) {
+                    preset !in AndroidDpiPresets.names ||
+                    kind !in setOf("http", "socks5")) {
                     stopSelf()
                     return START_NOT_STICKY
                 }
                 createForegroundNotification()
-                val args = mutableListOf(
-                    "byedpi", "-i", "http://127.0.0.1",
-                    "-p", port.toString(), "-U"
-                )
-                when (preset) {
-                    "standard" -> args.addAll(listOf("-s", "1"))
-                    "strong" -> args.addAll(listOf("-s", "1", "-q", "1"))
-                    "sni" -> args.addAll(listOf("-s", "0+sm"))
+                val blacklist = try {
+                    if (AndroidDpiPresets.usesBlacklist(preset))
+                        verifiedHostList() else null
+                } catch (error: Exception) {
+                    Log.e("HYP-DPI", "Cannot stage verified blacklist", error)
+                    stopSelf()
+                    return START_NOT_STICKY
                 }
+                val args = mutableListOf(
+                    "byedpi", "-i", kind + "://127.0.0.1",
+                    "-p", port.toString()
+                )
+                // App-local HTTP is only TCP; VPN SOCKS5 forwards DNS/UDP.
+                if (kind == "http") args.add("-U")
+                args.addAll(AndroidDpiPresets.proxyOptions(preset, blacklist))
                 worker = thread(name = "HYP-ByeDPI", isDaemon = true) {
                     try {
                         val code = native.run(args.toTypedArray())
@@ -99,7 +124,7 @@ class AndroidDpiService : Service() {
             Notification.Builder(this)
         }.setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle("HYP Viewer DPI")
-            .setContentText("Local ByeDPI proxy is running")
+            .setContentText("Local ByeDPI " + this.javaClass.simpleName + " is running")
             .setContentIntent(pending)
             .setOngoing(true)
             .build()

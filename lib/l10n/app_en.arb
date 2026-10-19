@@ -814,5 +814,15 @@
   "androidDpiStandard": "Standard TLS split (-s 1)",
   "androidDpiStrong": "Stronger split + OOB (-s 1 -q 1)",
   "androidDpiSni": "SNI-focused split (-s 0+sm)",
-  "dpiShowDiagnostics": "View DPI diagnostics"
+  "dpiShowDiagnostics": "View DPI diagnostics",
+  "androidDpiScope": "DPI routing scope",
+  "androidDpiScopeApp": "HYP Viewer only",
+  "androidDpiScopeDevice": "Entire device (requires VPN consent)",
+  "androidDpiVpnNotice": "Device-wide mode requires explicit Android VPN approval, affects other apps, and may conflict with existing VPNs. HYP Viewer itself is excluded to prevent proxy loops.",
+  "androidDpiExcludeApps": "Exclude applications from VPN",
+  "androidDpiRecommendedPreset": "all_dnsredir (recommended)",
+  "androidDpiDnsNotice": "VPN DNS mode uses 77.88.8.8:53, not Windows GoodbyeDPI's 77.88.8.8:1253. DNS redirection does not apply in app-only mode.",
+  "autoWebSearchEnable": "Automatic website search (ON by default)",
+  "autoWebSearchDescription": "Search the public website alongside online API results and automatically collect and merge gallery links. Disabled for shelf-only search and while typing.",
+  "autoWebSearchWorking": "Collecting public website search results…"
 }

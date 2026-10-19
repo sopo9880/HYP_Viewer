@@ -23,6 +23,7 @@ import '../core/number_extractor.dart';
 import '../core/online_search.dart';
 import '../core/hitomi_web_search.dart';
 import 'hitomi_web_search_page.dart';
+import 'auto_hitomi_web_search.dart';
 import '../core/online_edition_groups.dart';
 import '../core/reading_history.dart';
 import 'reading_insights.dart';
@@ -287,6 +288,11 @@ class HypDashboard extends StatefulWidget {
 class _HypDashboardState extends State<HypDashboard> {
   final TextEditingController _search = TextEditingController();
   Timer? _searchDebounce;
+  Timer? _autoWebSearchDebounce;
+  String _autoWebQuery = '';
+  bool _autoWebBusy = false;
+  String? _autoWebError;
+  final Map<String, (DateTime, List<HitomiWebGallery>)> _autoWebCache = {};
   http.Client? _activeRemoteSearchClient;
   int _searchEpoch = 0;
   String _searchScope = 'all'; // all, local, online
@@ -456,6 +462,8 @@ class _HypDashboardState extends State<HypDashboard> {
     if (oldWidget.readerSettings.librarySort != widget.readerSettings.librarySort ||
         oldWidget.readerSettings.popularityPeriod !=
             widget.readerSettings.popularityPeriod) _syncSortLookup();
+    if (oldWidget.readerSettings.autoWebSearch !=
+        widget.readerSettings.autoWebSearch) _changedSearch();
     if (oldWidget.readerSettings.preloadPages !=
         widget.readerSettings.preloadPages) {
       _preloadInput.text = widget.readerSettings.preloadPages.toString();
@@ -508,6 +516,7 @@ class _HypDashboardState extends State<HypDashboard> {
     _notificationExitTimer?.cancel();
     _preloadInput.dispose();
     _searchDebounce?.cancel();
+    _autoWebSearchDebounce?.cancel();
     _activeRemoteSearchClient?.close();
     _activeRemoteSearchClient = null;
     _search.removeListener(_changedSearch);
@@ -537,6 +546,10 @@ class _HypDashboardState extends State<HypDashboard> {
 
   void _changedSearch() {
     _searchDebounce?.cancel();
+    _autoWebSearchDebounce?.cancel();
+    _autoWebQuery = '';
+    _autoWebBusy = false;
+    _autoWebError = null;
     _activeRemoteSearchClient?.close();
     _activeRemoteSearchClient = null;
     _searchEpoch++;
@@ -567,7 +580,50 @@ class _HypDashboardState extends State<HypDashboard> {
       final epoch = _searchEpoch;
       _searchDebounce = Timer(const Duration(milliseconds: 450),
           () => _fetchOnlineSearch(epoch: epoch));
+      if (AutoWebSearchPolicy.shouldSearch(
+          enabled: widget.readerSettings.autoWebSearch,
+          query: currentQuery, scope: _searchScope)) {
+        _autoWebSearchDebounce = Timer(AutoWebSearchPolicy.debounce, () {
+          if (!mounted || epoch != _searchEpoch) return;
+          final cached = _autoWebCache[currentQuery];
+          if (cached != null && DateTime.now().difference(cached.$1) <
+              AutoWebSearchPolicy.cacheTtl) {
+            setState(() {
+              for (final item in cached.$2) {
+                _webSearchResults[item.workId] = OnlineSearchWork(
+                    workId: item.workId, title: item.title);
+              }
+            });
+          } else {
+            setState(() {
+              _autoWebBusy = true;
+              _autoWebQuery = currentQuery;
+            });
+          }
+        });
+      }
     }
+  }
+
+  void _autoWebSearchFinished(String query, List<HitomiWebGallery> items,
+      String? error) {
+    if (!mounted || query != _search.text.trim() ||
+        _autoWebQuery != query || _searchScope == 'local') return;
+    setState(() {
+      _autoWebQuery = '';
+      _autoWebBusy = false;
+      _autoWebError = error;
+      if (items.isNotEmpty) {
+        _autoWebCache[query] = (DateTime.now(), items);
+        if (_autoWebCache.length > 20) {
+          _autoWebCache.remove(_autoWebCache.keys.first);
+        }
+        for (final item in items) {
+          _webSearchResults[item.workId] = OnlineSearchWork(
+              workId: item.workId, title: item.title);
+        }
+      }
+    });
   }
 
   Future<void> _fetchOnlineSearch({required int epoch, bool next = false}) async {
@@ -1378,6 +1434,24 @@ class _HypDashboardState extends State<HypDashboard> {
           prefixIcon: Icon(Icons.search_rounded, color: HypColors.muted),
         ),
       ),
+      if (_autoWebBusy)
+        Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Text(AppLocalizations.of(context)!.autoWebSearchWorking,
+              style: const TextStyle(fontSize: 11)),
+        ),
+      if (_autoWebError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Text(AppLocalizations.of(context)!.webSearchCaptureFailed,
+              style: const TextStyle(fontSize: 11, color: Colors.orangeAccent)),
+        ),
+      if (_autoWebQuery.isNotEmpty)
+        AutoHitomiWebSearch(
+          key: ValueKey('auto-web-' + _autoWebQuery),
+          query: _autoWebQuery,
+          onFinished: _autoWebSearchFinished,
+        ),
       Align(
         alignment: Alignment.centerRight,
         child: TextButton.icon(
@@ -3783,6 +3857,16 @@ class _HypDashboardState extends State<HypDashboard> {
       _settingsPanel('web', AppLocalizations.of(context)!.settingsWeb, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          SwitchListTile.adaptive(
+            key: const Key('auto-web-search-enabled'),
+            contentPadding: EdgeInsets.zero,
+            title: Text(AppLocalizations.of(context)!.autoWebSearchEnable),
+            subtitle: Text(AppLocalizations.of(context)!.autoWebSearchDescription),
+            value: widget.readerSettings.autoWebSearch,
+            onChanged: (value) => widget.onSaveReaderSettings(
+                widget.readerSettings.copyWith(autoWebSearch: value)),
+          ),
+          const SizedBox(height: 8),
           HypText('기본 웹 리더 (주소 고정)',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 7),

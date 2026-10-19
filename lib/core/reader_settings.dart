@@ -17,6 +17,8 @@ class ReaderSettings {
   final bool showCoverAction;
   final bool showPageControlsAction;
   final bool showWebReaderAction;
+  /// Opt-out setting: automatically capture public website gallery results.
+  final bool autoWebSearch;
   final bool showOrientationAction;
   final int preloadPages; // -1: whole gallery to bounded disk cache
   final bool tapNavigation;
@@ -58,6 +60,7 @@ class ReaderSettings {
     this.showCoverAction = true,
     this.showPageControlsAction = true,
     this.showWebReaderAction = true,
+    this.autoWebSearch = true,
     this.showOrientationAction = true,
     this.preloadPages = -1,
     this.tapNavigation = true,
@@ -99,6 +102,7 @@ class ReaderSettings {
     bool? showCoverAction,
     bool? showPageControlsAction,
     bool? showWebReaderAction,
+    bool? autoWebSearch,
     bool? showOrientationAction,
     int? preloadPages,
     bool? tapNavigation,
@@ -136,6 +140,7 @@ class ReaderSettings {
     showCoverAction: showCoverAction ?? this.showCoverAction,
     showPageControlsAction: showPageControlsAction ?? this.showPageControlsAction,
     showWebReaderAction: showWebReaderAction ?? this.showWebReaderAction,
+    autoWebSearch: autoWebSearch ?? this.autoWebSearch,
     showOrientationAction: showOrientationAction ?? this.showOrientationAction,
     preloadPages: preloadPages ?? this.preloadPages,
     tapNavigation: tapNavigation ?? this.tapNavigation,
@@ -175,6 +180,7 @@ class ReaderSettings {
     'showCoverAction': showCoverAction,
     'showPageControlsAction': showPageControlsAction,
     'showWebReaderAction': showWebReaderAction,
+    'autoWebSearch': autoWebSearch,
     'showOrientationAction': showOrientationAction,
     'preloadPages': preloadPages,
     'tapNavigation': tapNavigation,
@@ -217,6 +223,7 @@ class ReaderSettings {
         showCoverAction: data['showCoverAction'] != false,
         showPageControlsAction: data['showPageControlsAction'] != false,
         showWebReaderAction: data['showWebReaderAction'] != false,
+        autoWebSearch: data['autoWebSearch'] != false,
         showOrientationAction: data['showOrientationAction'] != false,
         startupUpdatePrompt: data['startupUpdatePrompt'] != false,
         snoozedUpdateVersion: data['snoozedUpdateVersion'] is String && (data['snoozedUpdateVersion'] as String).length <= 40 ? data['snoozedUpdateVersion'] as String : '',

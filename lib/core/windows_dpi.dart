@@ -16,7 +16,7 @@ class WindowsDpiPreferences {
   const WindowsDpiPreferences({
     this.enabled = false,
     this.autoStart = false,
-    this.preset = 'recommended',
+    this.preset = 'all_dnsredir',
     this.custom = '-9',
   });
 
@@ -42,7 +42,7 @@ class WindowsDpiPreferences {
   factory WindowsDpiPreferences.fromJson(Map<String, dynamic> data) {
     final selected = data['preset'] is String &&
         presets.contains(data['preset']) ? data['preset'] as String
-        : 'recommended';
+        : 'all_dnsredir';
     final raw = data['custom'] is String &&
         (data['custom'] as String).length <= 240
         ? data['custom'] as String : '-9';
