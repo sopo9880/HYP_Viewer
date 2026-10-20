@@ -8,6 +8,7 @@ import 'package:archive/archive_io.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'gallery.dart';
+import 'gallery_download_limits.dart';
 import 'hitomi_gallery.dart';
 import 'online_gallery.dart';
 
@@ -61,7 +62,10 @@ class ReaderGalleryDownloader {
     GalleryPageSource source, {
     required GalleryTransfer transfer,
     void Function(int completed, int total, int bytes)? onProgress,
+    GalleryDownloadLimits limits = const GalleryDownloadLimits(),
+    bool allowSizeOverride = false,
   }) async {
+    final effective = limits.effective(allowSizeOverride: allowSizeOverride);
     if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
       throw const FormatException('작품 번호가 유효하지 않아.');
     }
@@ -142,20 +146,29 @@ class ReaderGalleryDownloader {
         var size = 0;
         if (await pageFile.exists()) {
           size = await pageFile.length();
-          valid = size > 0 && size <= GalleryArchive.maxSingleImageBytes &&
-              bytesTotal + size <= maxTotalImageBytes;
+          valid = size > 0 && size <= effective.imageBytes &&
+              bytesTotal + size <= effective.totalBytes;
           if (!valid) await pageFile.delete();
         }
         if (!valid) {
           final image = source is OnlineGallery
-              ? await source.loadPage(index, cancellation: transfer)
-              : await source.loadPage(index);
+              ? await source.loadPageWithLimit(
+                  index, effective.imageBytes, cancellation: transfer)
+              : source is HitomiGallery
+                  ? await source.loadPageWithLimit(index, effective.imageBytes)
+                  : await source.loadPage(index);
           transfer.check();
           size = image.length;
-          if (image.isEmpty ||
-              size > GalleryArchive.maxSingleImageBytes ||
-              bytesTotal + size > maxTotalImageBytes) {
-            throw const FormatException('다운로드 이미지 용량 제한을 초과했어.');
+          if (image.isEmpty) {
+            throw const FormatException('비어 있는 이미지 응답이야.');
+          }
+          if (size > effective.imageBytes) {
+            throw GallerySizeLimitException.image(
+                size, effective.imageBytes);
+          }
+          if (bytesTotal + size > effective.totalBytes) {
+            throw GallerySizeLimitException.total(
+                bytesTotal + size, effective.totalBytes);
           }
           // Write to a temporary file and commit by rename only after flush.
           // An interrupted .part can never masquerade as a complete page.
@@ -174,8 +187,10 @@ class ReaderGalleryDownloader {
       await encoder.close();
       opened = false;
       transfer.check();
-      if (await zip.length() > GalleryArchive.maxCompressedBytes) {
-        throw const FormatException('CBZ 파일이 180MB를 초과했어.');
+      final archiveBytes = await zip.length();
+      if (archiveBytes > effective.archiveBytes) {
+        throw GallerySizeLimitException.archive(
+            archiveBytes, effective.archiveBytes);
       }
       final imported = await galleryStore.importFile(workId, zip.path);
       finished = true;
