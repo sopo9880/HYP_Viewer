@@ -77,22 +77,59 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   final TransformationController _webtoonTransform = TransformationController();
   bool _webtoonZoomed = false;
   bool _controlHeld = false;
-  final Map<int, TransformationController> _pageTransforms = {};
-  TransformationController _zoomController(int page) =>
-      _pageTransforms.putIfAbsent(page, TransformationController.new);
-  bool get _zoomed {
-    final begin = _currentUnit * _step;
-    for (var index = begin; index < begin + _step; index++) {
-      if ((_pageTransforms[index]?.value.getMaxScaleOnAxis() ?? 1) > 1.02) {
-        return true;
+  // One transform covers the entire visible unit, including both pages of
+  // a spread. Gestures crossing the middle gutter must never split in two.
+  final TransformationController _pageTransform = TransformationController();
+  bool _pageZoomed = false;
+  bool get _zoomed => _pageZoomed;
+
+  int _pointerCount = 0;
+  bool _multiTouchActive = false;
+  bool _suppressTapAfterPinch = false;
+
+  void _pointerDown(PointerDownEvent event) {
+    if (_pointerCount == 0) _suppressTapAfterPinch = false;
+    _pointerCount++;
+    if (_pointerCount >= 2) {
+      _suppressTapAfterPinch = true;
+      if (!_multiTouchActive && mounted) {
+        setState(() => _multiTouchActive = true);
       }
     }
-    return false;
   }
-  void _resetZoom() {
-    for (final controller in _pageTransforms.values) {
-      controller.value = Matrix4.identity();
+
+  void _pointerUp(PointerEvent event) {
+    if (_pointerCount > 0) _pointerCount--;
+    if (_pointerCount == 0 && _multiTouchActive && mounted) {
+      setState(() => _multiTouchActive = false);
     }
+  }
+
+  void _updatePageZoom() {
+    final zoomed = _pageTransform.value.getMaxScaleOnAxis() > 1.02;
+    if (mounted && zoomed != _pageZoomed) {
+      setState(() => _pageZoomed = zoomed);
+    }
+  }
+
+  void _updateWebtoonZoom() {
+    final zoomed = _webtoonTransform.value.getMaxScaleOnAxis() > 1.02;
+    if (mounted && zoomed != _webtoonZoomed) {
+      setState(() => _webtoonZoomed = zoomed);
+    }
+  }
+
+  void _resetZoom() {
+    _pageTransform.value = Matrix4.identity();
+    _webtoonTransform.value = Matrix4.identity();
+    _pageZoomed = false;
+    _webtoonZoomed = false;
+  }
+
+  void _resetZoomOnDoubleTap() {
+    if (!_zoomed && !_webtoonZoomed) return;
+    _resetZoom();
+    if (mounted) setState(() {});
   }
   void _reportLastFrame(int index) {
     if (index != widget.archive.pageCount - 1) return;
@@ -292,9 +329,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     if (_diskCache != null) unawaited(_diskCache!.dispose());
     unawaited(AndroidReaderControls.deactivate());
     _controller.dispose();
-    for (final controller in _pageTransforms.values) {
-      controller.dispose();
-    }
+    _pageTransform.dispose();
     _webtoonTransform.dispose();
     super.dispose();
   }
@@ -677,23 +712,16 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
           errorBuilder: (context, error, stack) => _failedImage(index, error),
         );
       }
-      return Center(child: InteractiveViewer(
-        transformationController: _zoomController(index),
-        minScale: 1,
-        maxScale: 5,
-        scaleFactor: 200,
-        onInteractionEnd: (_) { if (mounted) setState(() {}); },
-        child: Image.memory(
-          snapshot.data!,
-          fit: BoxFit.contain,
-          gaplessPlayback: true,
-          frameBuilder: (context, child, frame, synchronous) {
-            if (frame != null || synchronous) _reportLastFrame(index);
-            return child;
-          },
-          errorBuilder: (context, error, stack) =>
-              _failedImage(index, error),
-        ),
+      return SizedBox.expand(child: Image.memory(
+        snapshot.data!,
+        fit: BoxFit.contain,
+        gaplessPlayback: true,
+        frameBuilder: (context, child, frame, synchronous) {
+          if (frame != null || synchronous) _reportLastFrame(index);
+          return child;
+        },
+        errorBuilder: (context, error, stack) =>
+            _failedImage(index, error),
       ));
     },
   );
@@ -822,12 +850,19 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
               ),
           ],
         ) : null,
-        body: widget.settings.webtoonMode
+        body: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: _pointerDown,
+          onPointerUp: _pointerUp,
+          onPointerCancel: _pointerUp,
+          child: widget.settings.webtoonMode
           ? GestureDetector(
               behavior: HitTestBehavior.translucent,
+              onDoubleTap: _resetZoomOnDoubleTap,
               onTapUp: (event) {
                 final width = MediaQuery.sizeOf(context).width;
-                if (_webtoonZoomed) return;
+                if (_webtoonZoomed || _multiTouchActive ||
+                    _suppressTapAfterPinch) return;
                 if (!widget.settings.tapNavigation) {
                   _toggleChrome();
                   return;
@@ -850,21 +885,19 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 transformationController: _webtoonTransform,
                 minScale: 1, maxScale: 5, scaleFactor: 200,
                 panEnabled: _webtoonZoomed,
-                // Keep normal desktop wheel scrolling; Ctrl+wheel zooms.
-                scaleEnabled: _controlHeld ||
-                    Theme.of(context).platform == TargetPlatform.android ||
-                    Theme.of(context).platform == TargetPlatform.iOS,
-                onInteractionEnd: (_) {
-                  final scaled = _webtoonTransform.value
-                      .getMaxScaleOnAxis() > 1.02;
-                  if (mounted) setState(() => _webtoonZoomed = scaled);
-                },
+                // Enable touch pinch on every platform, including Windows
+                // tablets and precision trackpads.
+                scaleEnabled: true,
+                onInteractionUpdate: (_) => _updateWebtoonZoom(),
+                onInteractionEnd: (_) => _updateWebtoonZoom(),
                 child: ScrollablePositionedList.builder(
               key: const Key('webtoon-continuous-reader'),
               itemCount: widget.archive.pageCount,
               initialScrollIndex: _currentUnit,
               itemScrollController: _webtoonController,
               itemPositionsListener: _webtoonPositions,
+              physics: _multiTouchActive || _webtoonZoomed
+                  ? const NeverScrollableScrollPhysics() : null,
               scrollDirection: Axis.vertical,
               padding: EdgeInsets.zero,
               itemBuilder: (context, index) =>
@@ -874,8 +907,10 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
           : LayoutBuilder(builder: (context, constraints) => GestureDetector(
               key: const Key('reader-tap-zones'),
               behavior: HitTestBehavior.translucent,
+              onDoubleTap: _resetZoomOnDoubleTap,
               onTapUp: (event) {
-                      if (_zoomed) return;
+                      if (_zoomed || _multiTouchActive ||
+                          _suppressTapAfterPinch) return;
                       if (!widget.settings.tapNavigation) {
                         _toggleChrome();
                         return;
@@ -891,7 +926,19 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                       if (delta == 0) _toggleChrome();
                       else _turn(delta);
                     },
-              child: PageView.builder(
+              child: InteractiveViewer(
+                key: const Key('reader-pinch-zoom'),
+                transformationController: _pageTransform,
+                minScale: 1,
+                maxScale: 5,
+                scaleFactor: 200,
+                panEnabled: _zoomed,
+                scaleEnabled: true,
+                onInteractionUpdate: (_) => _updatePageZoom(),
+                onInteractionEnd: (_) => _updatePageZoom(),
+                child: PageView.builder(
+                physics: _multiTouchActive || _zoomed
+                    ? const NeverScrollableScrollPhysics() : null,
                 key: ValueKey(_vertical.toString() + '-' +
                   widget.settings.reverse.toString() + '-' +
                   _reloadGeneration.toString() + '-' +
@@ -910,7 +957,9 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 },
                 itemBuilder: (context, unit) => _spreadAt(unit),
               ),
+              ),
             )),
+          ),
         bottomNavigationBar: _controlsVisible
             ? SafeArea(top: false, child: SizedBox(
                 height: 64,
