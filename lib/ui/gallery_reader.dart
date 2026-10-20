@@ -87,10 +87,10 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   bool _multiTouchActive = false;
   bool _suppressTapAfterPinch = false;
 
-  // Double-tap detection belongs only to page interactions. A parent
-  // onDoubleTap recognizer also delays taps on nested retry/save buttons.
-  // Instead, distinguish page single/double taps without entering those
-  // buttons' gesture arena.
+  // Recognize double taps in the page zone only while zoomed. At 1x,
+  // double-tap reset is a no-op, so delaying page turns and center toolbar
+  // taps would only degrade responsiveness. Keep retry/save buttons out
+  // of the page gesture recognizer's arena.
   Timer? _readerTapTimer;
   Offset? _readerTapPosition;
   VoidCallback? _readerTapAction;
@@ -113,6 +113,15 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
 
   void _handleReaderTap(Offset position, VoidCallback onSingleTap) {
     if (_multiTouchActive || _suppressTapAfterPinch) return;
+
+    // No double-tap disambiguation is necessary at the original scale.
+    // Execute a page turn / toolbar toggle in this same tap callback
+    // instead of always waiting 310 ms as v0.4.23 did.
+    if (!_zoomed && !_webtoonZoomed) {
+      _cancelPendingReaderTap();
+      onSingleTap();
+      return;
+    }
 
     final pending = _readerTapTimer;
     final lastPosition = _readerTapPosition;
