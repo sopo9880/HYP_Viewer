@@ -23,6 +23,7 @@ import 'core/android_dpi.dart';
 import 'core/i18n.dart';
 import 'l10n/app_localizations.dart';
 import 'core/reader_downloader.dart';
+import 'core/gallery_download_limits.dart';
 import 'core/reader_cache_pruner.dart';
 import 'core/announcements.dart';
 import 'core/android_controls.dart';
@@ -150,6 +151,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   final BackgroundDownloadRuntime _backgroundDownloads =
       BackgroundDownloadRuntime.instance;
   final Map<String, String> _downloadSourceById = {};
+  // Only explicit user retries of recorded size failures can enter here.
+  // Restore persisted approvals for surviving queued jobs on app restart.
+  final Set<String> _sizeOverrideDownloadIds = {};
   final Set<String> _queuedDownloadIds = {};
   final Set<String> _cancellingWorkIds = {};
   bool _downloadQueueRunning = false;
@@ -953,6 +957,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   String _safeDownloadCode(Object error) {
+    if (error is GallerySizeLimitException) return error.code;
     if (error is OnlineReaderFailure) return error.code;
     if (error is TimeoutException) return 'DOWNLOAD_TIMEOUT';
     if (error is SocketException || error is HttpException ||
@@ -1066,8 +1071,18 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       waiting.add(work);
     }
     if (waiting.isEmpty) return;
+    // Manual Retry (and the separately confirmed Retry All) authorizes a
+    // *single-work* soft size-limit exception only for a size-related failure
+    // or a legacy v0.4.22 generic failure code.
+    final sizeApproved = {
+      for (final work in waiting)
+        if (GallerySizeLimitException.allowsExplicitRetry(
+            _failedDownloads[work.workId]!.code))
+          work.workId,
+    };
     try {
-      await _enqueueDownloads(waiting, retryFailed: true);
+      await _enqueueDownloads(waiting, retryFailed: true,
+          sizeOverrideIds: sizeApproved);
       for (final work in waiting) {
         await _clearFailedDownload(work.workId);
       }
@@ -1089,6 +1104,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           galleryDownloadToken != null) return;
       final pending = await _downloadJobs.load();
       if (pending.isEmpty || !mounted) return;
+      final approvedSizeRetries = await _downloadJobs.loadSizeOverrides();
       // Heal legacy/recovered queues: terminal failures cannot resume.
       for (final id in pending.keys.where(_failedDownloads.containsKey)) {
         await _downloadJobs.remove(id);
@@ -1100,6 +1116,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           !_queuedDownloadIds.contains(work.workId)).toList();
       if (found.isEmpty) return;
       _downloadSourceById.addAll(pending);
+      _sizeOverrideDownloadIds.addAll(approvedSizeRetries);
       await _enqueueDownloads(found, restored: true);
       _status('이전 다운로드 ' + found.length.toString() +
           '개를 이어서 진행해.');
@@ -2692,7 +2709,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Future<void> _enqueueDownloads(Iterable<WorkEntry> works,
-      {bool restored = false, bool retryFailed = false}) async {
+      {bool restored = false, bool retryFailed = false,
+      Set<String> sizeOverrideIds = const <String>{}}) async {
     await _initialFailedDownloadsRead.future;
     // Bulk/automatic downloads never retry terminal failures. User Retry
     // removes the failure record explicitly before entering this method.
@@ -2713,12 +2731,20 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
     // Persist approved jobs with their original download source.
     if (!restored) {
-      await _downloadJobs.addAll(queued.where((work) =>
-          _downloadSourceById[work.workId] != 'json')
-          .map((work) => work.workId));
-      await _downloadJobs.addAll(queued.where((work) =>
-          _downloadSourceById[work.workId] == 'json')
-          .map((work) => work.workId), source: 'json');
+      for (final source in ['hitomi', 'json']) {
+        for (final approved in [false, true]) {
+          final ids = queued.where((work) =>
+              (_downloadSourceById[work.workId] == 'json'
+                  ? 'json' : 'hitomi') == source &&
+              sizeOverrideIds.contains(work.workId) == approved)
+              .map((work) => work.workId);
+          if (ids.isNotEmpty) {
+            await _downloadJobs.addAll(ids, source: source,
+                allowSizeOverride: approved);
+          }
+        }
+      }
+      _sizeOverrideDownloadIds.addAll(sizeOverrideIds);
     }
     _downloadQueueCancelled = false;
     for (final work in queued) {
@@ -2786,8 +2812,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             }
             _status('작품 ${work.workId} 다운로드 실패: $error');
           } finally {
-            // Remove only this terminal job, preserve the remaining queue.
+            // Remove only this terminal job and its one-work approval.
             await _downloadJobs.remove(work.workId);
+            _sizeOverrideDownloadIds.remove(work.workId);
           }
         }
       });
@@ -2810,6 +2837,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     galleryDownloadToken?.cancel();
     unawaited(_downloadJobs.clear());
     _downloadSourceById.clear();
+    _sizeOverrideDownloadIds.clear();
     if (mounted) setState(() {});
   }
 
@@ -2906,6 +2934,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       final downloaded = await ReaderGalleryDownloader(galleryStore).download(
         work.workId, remote,
         transfer: transfer,
+        limits: readerSettings.downloadLimits,
+        allowSizeOverride: _sizeOverrideDownloadIds.contains(work.workId),
         onProgress: (completed, total, bytes) {
           if (mounted) {
             setState(() {
@@ -3267,6 +3297,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       final archive = await ReaderGalleryDownloader(galleryStore).download(
         work.workId, remote,
         transfer: transfer,
+        limits: readerSettings.downloadLimits,
+        allowSizeOverride: _sizeOverrideDownloadIds.contains(work.workId),
         onProgress: (completed, total, bytes) {
           if (mounted) {
             setState(() {
