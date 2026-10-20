@@ -160,7 +160,8 @@ jobs:
       - name: Package Setup.exe
         shell: pwsh
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\hyp_viewer.iss"
+          $version = (Get-Content '.github/release-request.txt' -Raw).Trim() -replace '^v', ''
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" "installer\hyp_viewer.iss"
       - name: Stage Windows installer with source proof
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
