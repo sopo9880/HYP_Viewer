@@ -838,5 +838,6 @@
   "downloadRetryAllConfirm": "Queue all failed works for download? Saved works will be skipped.",
   "downloadFailedCollapse": "Collapse failed downloads",
   "downloadFailedExpand": "Expand failed downloads",
-  "downloadConcurrentTitle": "Parallel downloads"
+  "downloadConcurrentTitle": "Parallel downloads",
+  "webAdBlockBlockedLabel": "Blocked"
 }
