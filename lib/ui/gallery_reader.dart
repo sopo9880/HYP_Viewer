@@ -87,6 +87,51 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   bool _multiTouchActive = false;
   bool _suppressTapAfterPinch = false;
 
+  // Double-tap detection belongs only to page interactions. A parent
+  // onDoubleTap recognizer also delays taps on nested retry/save buttons.
+  // Instead, distinguish page single/double taps without entering those
+  // buttons' gesture arena.
+  Timer? _readerTapTimer;
+  Offset? _readerTapPosition;
+  VoidCallback? _readerTapAction;
+
+  void _flushPendingReaderTap() {
+    final action = _readerTapAction;
+    _readerTapTimer?.cancel();
+    _readerTapTimer = null;
+    _readerTapPosition = null;
+    _readerTapAction = null;
+    if (mounted) action?.call();
+  }
+
+  void _cancelPendingReaderTap() {
+    _readerTapTimer?.cancel();
+    _readerTapTimer = null;
+    _readerTapPosition = null;
+    _readerTapAction = null;
+  }
+
+  void _handleReaderTap(Offset position, VoidCallback onSingleTap) {
+    if (_multiTouchActive || _suppressTapAfterPinch) return;
+
+    final pending = _readerTapTimer;
+    final lastPosition = _readerTapPosition;
+    if (pending != null && pending.isActive && lastPosition != null &&
+        (position - lastPosition).distance <= 40) {
+      _cancelPendingReaderTap();
+      _resetZoomOnDoubleTap();
+      return;
+    }
+    if (pending != null && pending.isActive) {
+      _flushPendingReaderTap();
+    }
+
+    _readerTapPosition = position;
+    _readerTapAction = onSingleTap;
+    _readerTapTimer = Timer(const Duration(milliseconds: 310),
+        _flushPendingReaderTap);
+  }
+
   // A passive pointer listener handles only page-level pinch/pan, avoiding
   // InteractiveViewer's scale recognizer stealing taps from retry buttons,
   // page edge navigation and center toolbar toggles.
@@ -137,6 +182,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     _pointerCount++;
     _pointerPositions[event.pointer] = event.localPosition;
     if (_pointerCount >= 2) {
+      _cancelPendingReaderTap();
       _suppressTapAfterPinch = true;
       if (!widget.settings.webtoonMode) _beginPinch();
       if (!_multiTouchActive && mounted) {
@@ -391,6 +437,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     WidgetsBinding.instance.removeObserver(this);
     _webtoonPositions.itemPositions.removeListener(_onWebtoonPosition);
     _jumpReleaseTimer?.cancel();
+    _cancelPendingReaderTap();
     if (_diskCache != null) unawaited(_diskCache!.dispose());
     unawaited(AndroidReaderControls.deactivate());
     _controller.dispose();
@@ -924,28 +971,28 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
           child: widget.settings.webtoonMode
           ? GestureDetector(
               behavior: HitTestBehavior.translucent,
-              onDoubleTap: _resetZoomOnDoubleTap,
               onTapUp: (event) {
-                final width = MediaQuery.sizeOf(context).width;
-                if (_webtoonZoomed || _multiTouchActive ||
-                    _suppressTapAfterPinch) return;
-                if (!widget.settings.tapNavigation) {
-                  _toggleChrome();
-                  return;
-                }
-                final delta = readerTapDelta(
-                  pointX: event.localPosition.dx,
-                  pointY: event.localPosition.dy,
-                  width: width,
-                  height: MediaQuery.sizeOf(context).height,
-                  vertical: true,
-                  reverse: widget.settings.reverse,
-                );
-                if (delta == 0) {
-                  _toggleChrome();
-                } else {
-                  _turn(delta);
-                }
+                final position = event.localPosition;
+                _handleReaderTap(position, () {
+                  if (_webtoonZoomed) return;
+                  if (!widget.settings.tapNavigation) {
+                    _toggleChrome();
+                    return;
+                  }
+                  final delta = readerTapDelta(
+                    pointX: position.dx,
+                    pointY: position.dy,
+                    width: MediaQuery.sizeOf(context).width,
+                    height: MediaQuery.sizeOf(context).height,
+                    vertical: true,
+                    reverse: widget.settings.reverse,
+                  );
+                  if (delta == 0) {
+                    _toggleChrome();
+                  } else {
+                    _turn(delta);
+                  }
+                });
               },
               child: InteractiveViewer(
                 transformationController: _webtoonTransform,
@@ -975,24 +1022,25 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
               return GestureDetector(
               key: const Key('reader-tap-zones'),
               behavior: HitTestBehavior.translucent,
-              onDoubleTap: _resetZoomOnDoubleTap,
               onTapUp: (event) {
-                      if (_zoomed || _multiTouchActive ||
-                          _suppressTapAfterPinch) return;
-                      if (!widget.settings.tapNavigation) {
-                        _toggleChrome();
-                        return;
-                      }
-                      final delta = readerTapDelta(
-                        pointX: event.localPosition.dx,
-                        pointY: event.localPosition.dy,
-                        width: constraints.maxWidth,
-                        height: constraints.maxHeight,
-                        vertical: _vertical,
-                        reverse: !_verticalReading && widget.settings.reverse,
-                      );
-                      if (delta == 0) _toggleChrome();
-                      else _turn(delta);
+                      final position = event.localPosition;
+                      _handleReaderTap(position, () {
+                        if (_zoomed) return;
+                        if (!widget.settings.tapNavigation) {
+                          _toggleChrome();
+                          return;
+                        }
+                        final delta = readerTapDelta(
+                          pointX: position.dx,
+                          pointY: position.dy,
+                          width: constraints.maxWidth,
+                          height: constraints.maxHeight,
+                          vertical: _vertical,
+                          reverse: !_verticalReading && widget.settings.reverse,
+                        );
+                        if (delta == 0) _toggleChrome();
+                        else _turn(delta);
+                      });
                     },
               child: ClipRect(
                 child: Transform(
