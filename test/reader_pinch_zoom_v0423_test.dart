@@ -55,6 +55,21 @@ Future<void> _pinchOut(WidgetTester tester, Rect bounds) async {
   await tester.pump(const Duration(milliseconds: 70));
 }
 
+Future<void> _pinchIn(WidgetTester tester, Rect bounds) async {
+  final center = bounds.center;
+  final left = await tester.startGesture(
+    center + const Offset(-95, 0), pointer: 41);
+  final right = await tester.startGesture(
+    center + const Offset(95, 0), pointer: 42);
+  await tester.pump();
+  await left.moveTo(center + const Offset(-30, 0));
+  await right.moveTo(center + const Offset(30, 0));
+  await tester.pump(const Duration(milliseconds: 70));
+  await left.up();
+  await right.up();
+  await tester.pump(const Duration(milliseconds: 70));
+}
+
 Future<void> _doubleTap(WidgetTester tester, Offset point) async {
   await tester.tapAt(point);
   await tester.pump(const Duration(milliseconds: 55));
@@ -90,6 +105,10 @@ void main() {
           reason: '$mode must zoom with two fingers');
       expect(changed, isEmpty, reason: '$mode must not turn a page during pinch');
 
+      final enlarged = transform.value.getMaxScaleOnAxis();
+      await _pinchIn(tester, rect);
+      expect(transform.value.getMaxScaleOnAxis(), lessThan(enlarged),
+          reason: '$mode must shrink with two fingers');
       await _doubleTap(tester, rect.center);
       expect(transform.value.getMaxScaleOnAxis(), closeTo(1, 0.001),
           reason: '$mode double tap resets zoom');
