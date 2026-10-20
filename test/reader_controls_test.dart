@@ -60,11 +60,10 @@ void main() {
     expect(find.byKey(const Key('reader-next')), findsNothing);
     final zone = tester.getRect(find.byKey(const Key('reader-tap-zones')));
     await tester.tapAt(zone.center);
-    // Reader taps wait briefly to distinguish a single tap from a
-    // double tap that must reset zoom without changing the toolbar.
-    await tester.pump(const Duration(milliseconds: 330));
-    await tester.pumpAndSettle();
+    // No 310 ms double-tap wait when at the original (1x) scale.
+    await tester.pump();
     expect(find.byType(AppBar), findsOneWidget);
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('reader-toggle-spread')), findsOneWidget);
     expect(find.byIcon(Icons.visibility_off), findsNothing);
   });
@@ -219,16 +218,20 @@ void main() {
       final rect = tester.getRect(find.byKey(const Key('reader-tap-zones')));
       await tester.tapAt(Offset(rect.left + rect.width * 0.15,
           rect.top + rect.height * 0.5));
-      await tester.pump(const Duration(milliseconds: 330));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 230));
+      // Before the old 310 ms debounce could fire, the 180 ms page
+      // transition must already have finished.
       // Default LTR: tapping the physical left edge goes backward.
       // RTL reverses the direction, so the left edge advances.
       expect(find.text(rtl ? '4 / 5' : '2 / 5'), findsOneWidget);
+      await tester.pumpAndSettle();
       await tester.tapAt(Offset(rect.left + rect.width * 0.85,
           rect.top + rect.height * 0.5));
-      await tester.pump(const Duration(milliseconds: 330));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 230));
       expect(find.text('3 / 5'), findsOneWidget);
+      await tester.pumpAndSettle();
     }
   });
 
