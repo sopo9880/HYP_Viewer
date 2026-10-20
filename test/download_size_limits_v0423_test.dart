@@ -182,9 +182,11 @@ void main() {
   test('download UI, queue, and both sources wire soft limits', () {
     final ui = File('lib/ui/hyp_dashboard.dart').readAsStringSync();
     final main = File('lib/main.dart').readAsStringSync();
-    for (final key in ['download-limit-image', 'download-limit-total',
-        'download-limit-archive']) {
-      expect(ui, contains(key));
+    // The widget builds stable Keys from a shared prefix and each selector's
+    // keyName; requiring a fully concatenated literal is a false negative.
+    expect(ui, contains("key: Key('download-limit-' + keyName)"));
+    for (final keyName in ['image', 'total', 'archive']) {
+      expect(ui, contains("keyName: '$keyName'"));
     }
     expect(main, contains('readerSettings.downloadLimits'));
     expect(main, contains('sizeOverrideIds: sizeApproved'));
