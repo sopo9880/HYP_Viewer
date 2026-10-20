@@ -151,9 +151,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       BackgroundDownloadRuntime.instance;
   final Map<String, String> _downloadSourceById = {};
   final Set<String> _queuedDownloadIds = {};
-  final Map<String, GalleryTransfer> _activeTransfers = {};
   final Set<String> _cancellingWorkIds = {};
-  final Map<String, Completer<void>> _workDone = {};
   bool _downloadQueueRunning = false;
   bool _downloadQueueCancelled = false;
   bool _restoringDownloads = false;
@@ -1063,7 +1061,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         continue;
       }
       if (_queuedDownloadIds.contains(work.workId) ||
-          _activeTransfers.containsKey(work.workId)) continue;
+          work.workId == activeDownloadWorkId) continue;
       _downloadSourceById[work.workId] = failure.source;
       waiting.add(work);
     }
@@ -2701,7 +2699,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final queued = works.where((work) =>
         (retryFailed || !_failedDownloads.containsKey(work.workId)) &&
         !_queuedDownloadIds.contains(work.workId) &&
-        !_activeTransfers.containsKey(work.workId)).toList();
+        work.workId != activeDownloadWorkId).toList();
     if (queued.isEmpty) {
       // Skip the same terminal failures silently after one informational
       // notice per unchanged blocked set. Never loop or requeue failures.
