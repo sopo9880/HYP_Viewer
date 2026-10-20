@@ -15,6 +15,7 @@ import 'package:flutter/services.dart';
 import '../core/gallery.dart';
 import '../core/cover_store.dart';
 import '../core/reader_settings.dart';
+import '../core/gallery_download_limits.dart';
 import 'windows_dpi_panel.dart';
 import 'android_dpi_panel.dart';
 import '../core/i18n.dart';
@@ -3356,6 +3357,95 @@ class _HypDashboardState extends State<HypDashboard> {
     );
   }
 
+  /// Presets are quick choices. The dialog permits custom MiB values within
+  /// bounded parser/memory safety limits, including up to 1 GiB archives.
+  Future<int?> _askCustomDownloadLimit(String label, int current,
+      int hardMaximum) async {
+    final field = TextEditingController(text: current.toString());
+    try {
+      return await showDialog<int>(
+        context: context,
+        builder: (dialog) {
+          var hasError = false;
+          return StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
+            title: Text(label),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                key: const Key('download-limit-custom-input'),
+                controller: field,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(ctx)!.downloadSizeCustomValue,
+                  suffixText: 'MiB',
+                  helperText: '1–' + hardMaximum.toString() + ' MiB',
+                ),
+              ),
+              if (hasError) Text(
+                AppLocalizations.of(ctx)!.downloadSizeInvalid,
+                style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+              ),
+            ]),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialog),
+                child: Text(MaterialLocalizations.of(ctx).cancelButtonLabel),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final amount = int.tryParse(field.text.trim());
+                  if (amount == null || amount < 1 ||
+                      amount > hardMaximum) {
+                    refresh(() => hasError = true);
+                    return;
+                  }
+                  Navigator.pop(dialog, amount);
+                },
+                child: Text(MaterialLocalizations.of(ctx).okButtonLabel),
+              ),
+            ],
+          ));
+        },
+      );
+    } finally {
+      field.dispose();
+    }
+  }
+
+  Widget _downloadLimitSelector({
+    required String keyName,
+    required String label,
+    required int current,
+    required List<int> presets,
+    required int hardMaximum,
+    required Future<void> Function(int) save,
+  }) {
+    final values = {...presets, current}.toList()..sort();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: Theme.of(context).textTheme.bodyMedium),
+      DropdownButton<int>(
+        key: Key('download-limit-' + keyName),
+        isExpanded: true,
+        value: current,
+        items: [
+          for (final value in values)
+            DropdownMenuItem<int>(
+              value: value, child: Text(value.toString() + ' MiB')),
+          DropdownMenuItem<int>(
+            value: -1,
+            child: Text(AppLocalizations.of(context)!.downloadSizeCustomValue),
+          ),
+        ],
+        onChanged: (chosen) async {
+          if (chosen == null) return;
+          final value = chosen == -1
+              ? await _askCustomDownloadLimit(label, current, hardMaximum)
+              : chosen;
+          if (value != null && mounted) await save(value);
+        },
+      ),
+    ]);
+  }
+
   Widget _settingsContent() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -3864,6 +3954,48 @@ class _HypDashboardState extends State<HypDashboard> {
           ),
         ],
       )),
+      const SizedBox(height: 13),
+      _settingsPanel(
+        'downloadLimits',
+        AppLocalizations.of(context)!.downloadSizeSettingsTitle,
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(AppLocalizations.of(context)!.downloadSizeSettingsHelp,
+              style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 10),
+          _downloadLimitSelector(
+            keyName: 'image',
+            label: AppLocalizations.of(context)!.downloadSizeImageTitle,
+            current: widget.readerSettings.downloadImageLimitMiB,
+            presets: const [35, 100],
+            hardMaximum: GalleryDownloadLimits.hardImageMiB,
+            save: (value) => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(downloadImageLimitMiB: value)),
+          ),
+          const SizedBox(height: 6),
+          _downloadLimitSelector(
+            keyName: 'total',
+            label: AppLocalizations.of(context)!.downloadSizeTotalTitle,
+            current: widget.readerSettings.downloadTotalLimitMiB,
+            presets: const [165, 512, 1024],
+            hardMaximum: GalleryDownloadLimits.hardTotalMiB,
+            save: (value) => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(downloadTotalLimitMiB: value)),
+          ),
+          const SizedBox(height: 6),
+          _downloadLimitSelector(
+            keyName: 'archive',
+            label: AppLocalizations.of(context)!.downloadSizeArchiveTitle,
+            current: widget.readerSettings.downloadArchiveLimitMiB,
+            presets: const [180, 512, 1024],
+            hardMaximum: GalleryDownloadLimits.hardArchiveMiB,
+            save: (value) => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(downloadArchiveLimitMiB: value)),
+          ),
+          const SizedBox(height: 7),
+          Text(AppLocalizations.of(context)!.downloadSizeRetryHelp,
+              style: Theme.of(context).textTheme.bodySmall),
+        ]),
+      ),
       const SizedBox(height: 13),
       _settingsPanel('web', AppLocalizations.of(context)!.settingsWeb, Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

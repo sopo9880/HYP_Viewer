@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../core/hitomi_web_search.dart';
 import '../core/web_search_ad_block.dart';
+import '../core/web_search_ad_rule_store.dart';
 
 /// One-shot, bounded public website search. It is created only after the
 /// user stops typing; no browser runs while search is empty or disabled.
@@ -37,6 +39,9 @@ class _AutoHitomiWebSearchState extends State<AutoHitomiWebSearch> {
   @override
   void initState() {
     super.initState();
+    if (widget.adBlockMode != 'off') {
+      WebSearchAdRuleStore.instance.ensureStarted();
+    }
     _timeout = Timer(const Duration(seconds: 12), () {
       _finish(const [], _loadError ?? 'web-search-timeout');
     });
@@ -102,14 +107,28 @@ class _AutoHitomiWebSearchState extends State<AutoHitomiWebSearch> {
       width: 2,
       height: 2,
       child: InAppWebView(
+        initialUserScripts: UnmodifiableListView<UserScript>(
+          widget.adBlockMode == 'off'
+              ? <UserScript>[]
+              : [UserScript(
+                  source: WebSearchAdBlock.cleanPageJavaScript,
+                  injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START)],
+        ),
         initialUrlRequest: URLRequest(
           url: WebUri(HitomiWebSearch.searchUri(widget.query).toString()),
         ),
         initialSettings: InAppWebViewSettings(
           javaScriptEnabled: true, useShouldOverrideUrlLoading: true,
+          useShouldInterceptRequest: true,
+          supportMultipleWindows: true,
+          javaScriptCanOpenWindowsAutomatically: false,
           contentBlockers: WebSearchAdBlock.contentBlockers(widget.adBlockMode),
         ),
         onWebViewCreated: (controller) => _controller = controller,
+        shouldInterceptRequest: (controller, request) async =>
+            WebSearchAdBlock.intercept(request, widget.adBlockMode),
+        // Never let a background search create ad tabs or off-site windows.
+        onCreateWindow: (controller, action) async => false,
         shouldOverrideUrlLoading: (controller, action) async {
           final url = Uri.tryParse(action.request.url?.toString() ?? '');
           return HitomiWebSearch.allowedOrigin(url)
@@ -123,6 +142,10 @@ class _AutoHitomiWebSearchState extends State<AutoHitomiWebSearch> {
         onLoadStop: (controller, url) {
           if (!mounted || _done) return;
           _loaded = true;
+          if (widget.adBlockMode != 'off') {
+            unawaited(controller.evaluateJavascript(
+                source: WebSearchAdBlock.cleanPageJavaScript));
+          }
           _scheduleCapture();
         },
         onReceivedError: (controller, request, error) {

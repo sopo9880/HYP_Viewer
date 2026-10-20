@@ -4,13 +4,21 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+/// A persisted queue entry may carry a user-approved, one-work size retry.
+/// This affects configurable *soft* limits only, not absolute safety bounds.
+class DownloadJob {
+  final String source;
+  final bool allowSizeOverride;
+  const DownloadJob(this.source, {this.allowSizeOverride = false});
+}
+
 /// Persistent, user-authorized downloads. Library JSON never stores job state.
 /// The queue is independent of the current screen and survives app restarts.
 class DownloadQueueStore {
   final Directory? baseDirectory;
   DownloadQueueStore({this.baseDirectory});
 
-  Future<Map<String, String>>? _loaded;
+  Future<Map<String, DownloadJob>>? _loaded;
   Future<void> _pendingWrite = Future<void>.value();
 
   Future<File> get _file async {
@@ -19,10 +27,21 @@ class DownloadQueueStore {
     return File(root.path + Platform.pathSeparator + 'hyp_download_jobs.json');
   }
 
-  Future<Map<String, String>> load() async =>
-      Map<String, String>.from(await (_loaded ??= _read()));
+  /// Backward compatible caller API: work ID to provider source.
+  Future<Map<String, String>> load() async {
+    final jobs = await (_loaded ??= _read());
+    return {for (final entry in jobs.entries) entry.key: entry.value.source};
+  }
 
-  Future<Map<String, String>> _read() async {
+  Future<Set<String>> loadSizeOverrides() async {
+    final jobs = await (_loaded ??= _read());
+    return jobs.entries
+        .where((entry) => entry.value.allowSizeOverride)
+        .map((entry) => entry.key)
+        .toSet();
+  }
+
+  Future<Map<String, DownloadJob>> _read() async {
     final file = await _file;
     var found = false;
     Object? lastError;
@@ -36,14 +55,15 @@ class DownloadQueueStore {
             parsed['jobs'] is! List) {
           throw const FormatException('다운로드 대기열이 손상됐어.');
         }
-        final pending = <String, String>{};
+        final pending = <String, DownloadJob>{};
         for (final item in (parsed['jobs'] as List).take(5000)) {
           if (item is! Map) continue;
           final id = item['id'];
           final source = item['source'];
           if (id is String && RegExp(r'^\d{1,12}$').hasMatch(id) &&
               (source == 'hitomi' || source == 'json')) {
-            pending[id] = source as String;
+            pending[id] = DownloadJob(source as String,
+                allowSizeOverride: item['allowSizeOverride'] == true);
           }
         }
         return pending;
@@ -54,7 +74,7 @@ class DownloadQueueStore {
     if (found) {
       throw StateError('다운로드 대기열 복구 실패: ' + lastError.toString());
     }
-    return <String, String>{};
+    return <String, DownloadJob>{};
   }
 
   static void _checkId(String workId) {
@@ -63,22 +83,37 @@ class DownloadQueueStore {
     }
   }
 
-  Future<void> add(String workId, {String source = 'hitomi'}) {
-    _checkId(workId);
+  static void _checkSource(String source) {
     if (source != 'hitomi' && source != 'json') {
       throw ArgumentError.value(source, 'source');
     }
-    return _mutate((jobs) => jobs[workId] = source);
   }
 
-  Future<void> addAll(Iterable<String> workIds, {String source = 'hitomi'}) {
+  /// Subsequent add() calls during transfer must never revoke an existing
+  /// size exemption granted by the user on Retry.
+  Future<void> add(String workId, {String source = 'hitomi',
+      bool allowSizeOverride = false}) {
+    _checkId(workId);
+    _checkSource(source);
+    return _mutate((jobs) {
+      final existing = jobs[workId];
+      jobs[workId] = DownloadJob(source, allowSizeOverride:
+          allowSizeOverride || (existing?.allowSizeOverride ?? false));
+    });
+  }
+
+  Future<void> addAll(Iterable<String> workIds, {String source = 'hitomi',
+      bool allowSizeOverride = false}) {
     final ids = workIds.toSet();
     for (final id in ids) { _checkId(id); }
-    if (source != 'hitomi' && source != 'json') {
-      throw ArgumentError.value(source, 'source');
-    }
+    _checkSource(source);
     return _mutate((jobs) {
-      for (final id in ids) { jobs.putIfAbsent(id, () => source); }
+      for (final id in ids) {
+        final existing = jobs[id];
+        jobs[id] = DownloadJob(existing?.source ?? source,
+            allowSizeOverride:
+                allowSizeOverride || (existing?.allowSizeOverride ?? false));
+      }
     });
   }
 
@@ -89,10 +124,10 @@ class DownloadQueueStore {
 
   Future<void> clear() => _mutate((jobs) => jobs.clear());
 
-  Future<void> _mutate(void Function(Map<String, String>) edit) {
+  Future<void> _mutate(void Function(Map<String, DownloadJob>) edit) {
     final write = _pendingWrite.then((_) async {
       final current = await (_loaded ??= _read());
-      final updated = Map<String, String>.from(current);
+      final updated = Map<String, DownloadJob>.from(current);
       edit(updated);
       final file = await _file;
       final staged = File(file.path + '.tmp');
@@ -101,7 +136,11 @@ class DownloadQueueStore {
         'version': 1,
         'jobs': [
           for (final entry in updated.entries)
-            {'id': entry.key, 'source': entry.value}
+            {
+              'id': entry.key,
+              'source': entry.value.source,
+              'allowSizeOverride': entry.value.allowSizeOverride,
+            },
         ],
       }), flush: true);
       var moved = false;
@@ -122,7 +161,8 @@ class DownloadQueueStore {
       }
       _loaded = Future.value(updated);
     });
-    _pendingWrite = write.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    _pendingWrite = write.then<void>((_) {},
+        onError: (Object _, StackTrace __) {});
     return write;
   }
 }

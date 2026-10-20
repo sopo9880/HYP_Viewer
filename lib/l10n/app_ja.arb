@@ -838,5 +838,14 @@
   "downloadRetryAllConfirm": "失敗した作品をすべてダウンロード待機列に追加しますか？保存済みの作品はスキップします。",
   "downloadFailedCollapse": "失敗一覧を閉じる",
   "downloadFailedExpand": "失敗一覧を開く",
-  "downloadConcurrentTitle": "同時ダウンロード"
+  "downloadConcurrentTitle": "同時ダウンロード",
+  "webAdBlockBlockedLabel": "ブロック",
+  "downloadSizeSettingsTitle": "ダウンロード容量制限",
+  "downloadSizeSettingsHelp": "新しい作品のダウンロードに適用する容量上限を選択してください。最初に超過した上限で停止します。",
+  "downloadSizeImageTitle": "画像1枚の最大容量",
+  "downloadSizeTotalTitle": "作品全体の画像合計容量",
+  "downloadSizeArchiveTitle": "完成したCBZファイルの最大容量",
+  "downloadSizeCustomValue": "直接入力",
+  "downloadSizeInvalid": "許容範囲内の整数を入力してください。",
+  "downloadSizeRetryHelp": "容量超過で失敗した作品を手動で再試行すると、その作品に限り設定上限を一度超えることを許可します。安全上限や保存権限の確認は維持されます。"
 }

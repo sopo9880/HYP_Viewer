@@ -77,22 +77,170 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   final TransformationController _webtoonTransform = TransformationController();
   bool _webtoonZoomed = false;
   bool _controlHeld = false;
-  final Map<int, TransformationController> _pageTransforms = {};
-  TransformationController _zoomController(int page) =>
-      _pageTransforms.putIfAbsent(page, TransformationController.new);
-  bool get _zoomed {
-    final begin = _currentUnit * _step;
-    for (var index = begin; index < begin + _step; index++) {
-      if ((_pageTransforms[index]?.value.getMaxScaleOnAxis() ?? 1) > 1.02) {
-        return true;
+  // One transform covers the entire visible unit, including both pages of
+  // a spread. Gestures crossing the middle gutter must never split in two.
+  final TransformationController _pageTransform = TransformationController();
+  bool _pageZoomed = false;
+  bool get _zoomed => _pageZoomed;
+
+  int _pointerCount = 0;
+  bool _multiTouchActive = false;
+  bool _suppressTapAfterPinch = false;
+
+  // Double-tap detection belongs only to page interactions. A parent
+  // onDoubleTap recognizer also delays taps on nested retry/save buttons.
+  // Instead, distinguish page single/double taps without entering those
+  // buttons' gesture arena.
+  Timer? _readerTapTimer;
+  Offset? _readerTapPosition;
+  VoidCallback? _readerTapAction;
+
+  void _flushPendingReaderTap() {
+    final action = _readerTapAction;
+    _readerTapTimer?.cancel();
+    _readerTapTimer = null;
+    _readerTapPosition = null;
+    _readerTapAction = null;
+    if (mounted) action?.call();
+  }
+
+  void _cancelPendingReaderTap() {
+    _readerTapTimer?.cancel();
+    _readerTapTimer = null;
+    _readerTapPosition = null;
+    _readerTapAction = null;
+  }
+
+  void _handleReaderTap(Offset position, VoidCallback onSingleTap) {
+    if (_multiTouchActive || _suppressTapAfterPinch) return;
+
+    final pending = _readerTapTimer;
+    final lastPosition = _readerTapPosition;
+    if (pending != null && pending.isActive && lastPosition != null &&
+        (position - lastPosition).distance <= 40) {
+      _cancelPendingReaderTap();
+      _resetZoomOnDoubleTap();
+      return;
+    }
+    if (pending != null && pending.isActive) {
+      _flushPendingReaderTap();
+    }
+
+    _readerTapPosition = position;
+    _readerTapAction = onSingleTap;
+    _readerTapTimer = Timer(const Duration(milliseconds: 310),
+        _flushPendingReaderTap);
+  }
+
+  // A passive pointer listener handles only page-level pinch/pan, avoiding
+  // InteractiveViewer's scale recognizer stealing taps from retry buttons,
+  // page edge navigation and center toolbar toggles.
+  final Map<int, Offset> _pointerPositions = <int, Offset>{};
+  Size _gestureViewport = Size.zero;
+  double _pinchStartDistance = 0;
+  double _pinchStartScale = 1;
+  Offset _pinchStartFocal = Offset.zero;
+  Offset _pinchStartTranslation = Offset.zero;
+
+  double get _pageScale => _pageTransform.value.getMaxScaleOnAxis();
+  Offset get _pageTranslation {
+    final t = _pageTransform.value.getTranslation();
+    return Offset(t.x, t.y);
+  }
+
+  void _beginPinch() {
+    if (_pointerPositions.length < 2) return;
+    final points = _pointerPositions.values.take(2).toList();
+    _pinchStartDistance = (points[0] - points[1]).distance;
+    _pinchStartFocal = (points[0] + points[1]) / 2;
+    _pinchStartScale = _pageScale;
+    _pinchStartTranslation = _pageTranslation;
+  }
+
+  void _applyManualZoom(double newScale, Offset translation) {
+    final scale = newScale.clamp(1.0, 5.0).toDouble();
+    final Offset offset;
+    if (scale < 1.02) {
+      offset = Offset.zero;
+    } else {
+      offset = Offset(
+        translation.dx.clamp(
+            _gestureViewport.width * (1 - scale), 0.0).toDouble(),
+        translation.dy.clamp(
+            _gestureViewport.height * (1 - scale), 0.0).toDouble(),
+      );
+    }
+    _pageTransform.value = Matrix4.identity()
+      ..translate(offset.dx, offset.dy)
+      ..scale(scale < 1.02 ? 1.0 : scale);
+    _pageZoomed = scale >= 1.02;
+    if (mounted) setState(() {});
+  }
+
+  void _pointerDown(PointerDownEvent event) {
+    if (_pointerCount == 0) _suppressTapAfterPinch = false;
+    _pointerCount++;
+    _pointerPositions[event.pointer] = event.localPosition;
+    if (_pointerCount >= 2) {
+      _cancelPendingReaderTap();
+      _suppressTapAfterPinch = true;
+      if (!widget.settings.webtoonMode) _beginPinch();
+      if (!_multiTouchActive && mounted) {
+        setState(() => _multiTouchActive = true);
       }
     }
-    return false;
   }
-  void _resetZoom() {
-    for (final controller in _pageTransforms.values) {
-      controller.value = Matrix4.identity();
+
+  void _pointerMove(PointerMoveEvent event) {
+    final old = _pointerPositions[event.pointer];
+    if (old == null) return;
+    _pointerPositions[event.pointer] = event.localPosition;
+    if (widget.settings.webtoonMode) return;
+    if (_pointerPositions.length >= 2 && _pinchStartDistance > 1) {
+      final points = _pointerPositions.values.take(2).toList();
+      final currentFocal = (points[0] + points[1]) / 2;
+      final currentDistance = (points[0] - points[1]).distance;
+      final scale = (_pinchStartScale *
+          currentDistance / _pinchStartDistance).clamp(1.0, 5.0).toDouble();
+      // Keep the original image point under the moving pinch focal point.
+      final ratio = scale / _pinchStartScale;
+      final translation = currentFocal +
+          (_pinchStartTranslation - _pinchStartFocal) * ratio;
+      _applyManualZoom(scale, translation);
+    } else if (_pointerPositions.length == 1 &&
+        _pageZoomed && !_multiTouchActive) {
+      _applyManualZoom(_pageScale, _pageTranslation +
+          (event.localPosition - old));
     }
+  }
+
+  void _pointerUp(PointerEvent event) {
+    _pointerPositions.remove(event.pointer);
+    if (_pointerCount > 0) _pointerCount--;
+    if (_pointerCount < 2) _pinchStartDistance = 0;
+    if (_pointerCount == 0 && _multiTouchActive && mounted) {
+      setState(() => _multiTouchActive = false);
+    }
+  }
+
+  void _updateWebtoonZoom() {
+    final zoomed = _webtoonTransform.value.getMaxScaleOnAxis() > 1.02;
+    if (mounted && zoomed != _webtoonZoomed) {
+      setState(() => _webtoonZoomed = zoomed);
+    }
+  }
+
+  void _resetZoom() {
+    _pageTransform.value = Matrix4.identity();
+    _webtoonTransform.value = Matrix4.identity();
+    _pageZoomed = false;
+    _webtoonZoomed = false;
+  }
+
+  void _resetZoomOnDoubleTap() {
+    if (!_zoomed && !_webtoonZoomed) return;
+    _resetZoom();
+    if (mounted) setState(() {});
   }
   void _reportLastFrame(int index) {
     if (index != widget.archive.pageCount - 1) return;
@@ -289,12 +437,11 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
     WidgetsBinding.instance.removeObserver(this);
     _webtoonPositions.itemPositions.removeListener(_onWebtoonPosition);
     _jumpReleaseTimer?.cancel();
+    _cancelPendingReaderTap();
     if (_diskCache != null) unawaited(_diskCache!.dispose());
     unawaited(AndroidReaderControls.deactivate());
     _controller.dispose();
-    for (final controller in _pageTransforms.values) {
-      controller.dispose();
-    }
+    _pageTransform.dispose();
     _webtoonTransform.dispose();
     super.dispose();
   }
@@ -677,23 +824,16 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
           errorBuilder: (context, error, stack) => _failedImage(index, error),
         );
       }
-      return Center(child: InteractiveViewer(
-        transformationController: _zoomController(index),
-        minScale: 1,
-        maxScale: 5,
-        scaleFactor: 200,
-        onInteractionEnd: (_) { if (mounted) setState(() {}); },
-        child: Image.memory(
-          snapshot.data!,
-          fit: BoxFit.contain,
-          gaplessPlayback: true,
-          frameBuilder: (context, child, frame, synchronous) {
-            if (frame != null || synchronous) _reportLastFrame(index);
-            return child;
-          },
-          errorBuilder: (context, error, stack) =>
-              _failedImage(index, error),
-        ),
+      return SizedBox.expand(child: Image.memory(
+        snapshot.data!,
+        fit: BoxFit.contain,
+        gaplessPlayback: true,
+        frameBuilder: (context, child, frame, synchronous) {
+          if (frame != null || synchronous) _reportLastFrame(index);
+          return child;
+        },
+        errorBuilder: (context, error, stack) =>
+            _failedImage(index, error),
       ));
     },
   );
@@ -822,76 +962,93 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
               ),
           ],
         ) : null,
-        body: widget.settings.webtoonMode
+        body: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: _pointerDown,
+          onPointerMove: _pointerMove,
+          onPointerUp: _pointerUp,
+          onPointerCancel: _pointerUp,
+          child: widget.settings.webtoonMode
           ? GestureDetector(
               behavior: HitTestBehavior.translucent,
               onTapUp: (event) {
-                final width = MediaQuery.sizeOf(context).width;
-                if (_webtoonZoomed) return;
-                if (!widget.settings.tapNavigation) {
-                  _toggleChrome();
-                  return;
-                }
-                final delta = readerTapDelta(
-                  pointX: event.localPosition.dx,
-                  pointY: event.localPosition.dy,
-                  width: width,
-                  height: MediaQuery.sizeOf(context).height,
-                  vertical: true,
-                  reverse: widget.settings.reverse,
-                );
-                if (delta == 0) {
-                  _toggleChrome();
-                } else {
-                  _turn(delta);
-                }
+                final position = event.localPosition;
+                _handleReaderTap(position, () {
+                  if (_webtoonZoomed) return;
+                  if (!widget.settings.tapNavigation) {
+                    _toggleChrome();
+                    return;
+                  }
+                  final delta = readerTapDelta(
+                    pointX: position.dx,
+                    pointY: position.dy,
+                    width: MediaQuery.sizeOf(context).width,
+                    height: MediaQuery.sizeOf(context).height,
+                    vertical: true,
+                    reverse: widget.settings.reverse,
+                  );
+                  if (delta == 0) {
+                    _toggleChrome();
+                  } else {
+                    _turn(delta);
+                  }
+                });
               },
               child: InteractiveViewer(
                 transformationController: _webtoonTransform,
                 minScale: 1, maxScale: 5, scaleFactor: 200,
                 panEnabled: _webtoonZoomed,
-                // Keep normal desktop wheel scrolling; Ctrl+wheel zooms.
-                scaleEnabled: _controlHeld ||
-                    Theme.of(context).platform == TargetPlatform.android ||
-                    Theme.of(context).platform == TargetPlatform.iOS,
-                onInteractionEnd: (_) {
-                  final scaled = _webtoonTransform.value
-                      .getMaxScaleOnAxis() > 1.02;
-                  if (mounted) setState(() => _webtoonZoomed = scaled);
-                },
+                // Enable touch pinch on every platform, including Windows
+                // tablets and precision trackpads.
+                scaleEnabled: true,
+                onInteractionUpdate: (_) => _updateWebtoonZoom(),
+                onInteractionEnd: (_) => _updateWebtoonZoom(),
                 child: ScrollablePositionedList.builder(
               key: const Key('webtoon-continuous-reader'),
               itemCount: widget.archive.pageCount,
               initialScrollIndex: _currentUnit,
               itemScrollController: _webtoonController,
               itemPositionsListener: _webtoonPositions,
+              physics: _multiTouchActive || _webtoonZoomed
+                  ? const NeverScrollableScrollPhysics() : null,
               scrollDirection: Axis.vertical,
               padding: EdgeInsets.zero,
               itemBuilder: (context, index) =>
                   _pageAt(index, webtoon: true),
                 ),
               ))
-          : LayoutBuilder(builder: (context, constraints) => GestureDetector(
+          : LayoutBuilder(builder: (context, constraints) {
+              _gestureViewport = constraints.biggest;
+              return GestureDetector(
               key: const Key('reader-tap-zones'),
               behavior: HitTestBehavior.translucent,
               onTapUp: (event) {
-                      if (_zoomed) return;
-                      if (!widget.settings.tapNavigation) {
-                        _toggleChrome();
-                        return;
-                      }
-                      final delta = readerTapDelta(
-                        pointX: event.localPosition.dx,
-                        pointY: event.localPosition.dy,
-                        width: constraints.maxWidth,
-                        height: constraints.maxHeight,
-                        vertical: _vertical,
-                        reverse: !_verticalReading && widget.settings.reverse,
-                      );
-                      if (delta == 0) _toggleChrome();
-                      else _turn(delta);
+                      final position = event.localPosition;
+                      _handleReaderTap(position, () {
+                        if (_zoomed) return;
+                        if (!widget.settings.tapNavigation) {
+                          _toggleChrome();
+                          return;
+                        }
+                        final delta = readerTapDelta(
+                          pointX: position.dx,
+                          pointY: position.dy,
+                          width: constraints.maxWidth,
+                          height: constraints.maxHeight,
+                          vertical: _vertical,
+                          reverse: !_verticalReading && widget.settings.reverse,
+                        );
+                        if (delta == 0) _toggleChrome();
+                        else _turn(delta);
+                      });
                     },
-              child: PageView.builder(
+              child: ClipRect(
+                child: Transform(
+                  key: const Key('reader-pinch-zoom'),
+                  transform: _pageTransform.value,
+                  child: PageView.builder(
+                physics: _multiTouchActive || _zoomed
+                    ? const NeverScrollableScrollPhysics() : null,
                 key: ValueKey(_vertical.toString() + '-' +
                   widget.settings.reverse.toString() + '-' +
                   _reloadGeneration.toString() + '-' +
@@ -910,7 +1067,11 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 },
                 itemBuilder: (context, unit) => _spreadAt(unit),
               ),
-            )),
+              ),
+              ),
+            );
+          }),
+          ),
         bottomNavigationBar: _controlsVisible
             ? SafeArea(top: false, child: SizedBox(
                 height: 64,

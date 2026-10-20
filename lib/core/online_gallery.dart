@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import 'gallery.dart';
+import 'gallery_download_limits.dart';
 
 /// A remote gallery is opt-in and must be supplied by a source the user is
 /// authorized to access. The source manifest explicitly grants downloads.
@@ -36,14 +37,19 @@ class OnlineGallery implements GalleryPageSource {
     return 'page_' + (index + 1).toString().padLeft(5, '0') + '.' + ext;
   }
 
-  Future<Uint8List> loadPage(int index, {CancelDownload? cancellation}) async {
+  Future<Uint8List> loadPage(int index, {CancelDownload? cancellation}) =>
+      loadPageWithLimit(index,
+          GalleryDownloadLimits.defaultImageMiB * GalleryDownloadLimits.mib,
+          cancellation: cancellation);
+
+  Future<Uint8List> loadPageWithLimit(int index, int maxBytes,
+      {CancelDownload? cancellation}) async {
     if (index < 0 || index >= pageUrls.length) {
       throw RangeError.index(index, pageUrls);
     }
     return BoundedWebImages.load(
-      _client,
-      pageUrls[index],
-      maxBytes: GalleryArchive.maxSingleImageBytes,
+      _client, pageUrls[index],
+      maxBytes: maxBytes,
       cancellation: cancellation,
     );
   }
@@ -139,6 +145,9 @@ class BoundedWebImages {
           response.statusCode.toString(), uri: url);
     }
     if (response.contentLength != null && response.contentLength! > maxBytes) {
+      if (image) {
+        throw GallerySizeLimitException.image(response.contentLength, maxBytes);
+      }
       throw const FormatException('원격 파일이 너무 커.');
     }
     final contentType = (response.headers['content-type'] ?? '')
@@ -161,6 +170,7 @@ class BoundedWebImages {
       cancellation?.check();
       received += chunk.length;
       if (received > maxBytes) {
+        if (image) throw GallerySizeLimitException.image(received, maxBytes);
         throw const FormatException('응답이 허용 크기를 초과했어.');
       }
       builder.add(chunk);
@@ -249,7 +259,10 @@ class OnlineGalleryDownloader {
     OnlineGallery remote, {
     required CancelDownload cancellation,
     void Function(int completed, int total, int bytes)? onProgress,
+    GalleryDownloadLimits limits = const GalleryDownloadLimits(),
+    bool allowSizeOverride = false,
   }) async {
+    final effective = limits.effective(allowSizeOverride: allowSizeOverride);
     if (!remote.downloadAllowed) {
       throw const FormatException('이 소스는 다운로드를 허용하지 않아.');
     }
@@ -269,10 +282,12 @@ class OnlineGalleryDownloader {
       opened = true;
       for (var i = 0; i < remote.pageCount; i++) {
         cancellation.check();
-        final image = await remote.loadPage(i, cancellation: cancellation);
+        final image = await remote.loadPageWithLimit(
+            i, effective.imageBytes, cancellation: cancellation);
         totalBytes += image.length;
-        if (totalBytes > maxTotalImageBytes) {
-          throw const FormatException('작품 다운로드 크기 제한(165MB)을 초과했어.');
+        if (totalBytes > effective.totalBytes) {
+          throw GallerySizeLimitException.total(
+              totalBytes, effective.totalBytes);
         }
         final name = remote.filename(i);
         final pageFile = File(staging.path + Platform.pathSeparator + name);
@@ -286,8 +301,10 @@ class OnlineGalleryDownloader {
       await encoder.close();
       opened = false;
       cancellation.check();
-      if (await zipFile.length() > GalleryArchive.maxCompressedBytes) {
-        throw const FormatException('완성된 ZIP 파일이 너무 커.');
+      final archiveBytes = await zipFile.length();
+      if (archiveBytes > effective.archiveBytes) {
+        throw GallerySizeLimitException.archive(
+            archiveBytes, effective.archiveBytes);
       }
       return await galleryStore.importFile(remote.workId, zipFile.path);
     } finally {
