@@ -7,6 +7,7 @@ import 'package:hyp_viewer/core/gallery.dart';
 import 'package:hyp_viewer/core/gallery_download_limits.dart';
 import 'package:hyp_viewer/core/reader_downloader.dart';
 import 'package:hyp_viewer/core/reader_settings.dart';
+import 'package:hyp_viewer/core/online_reader_failure.dart';
 
 class _Pages implements GalleryPageSource {
   final List<int> sizes;
@@ -128,6 +129,21 @@ void main() {
     expect(archive.pageCount, 1);
     expect(source.loaded, 1);
     expect((await store.read('3456')).pageCount, 1);
+  });
+
+  test('remote image size error survives OnlineReaderFailure classification',
+      () {
+    final error = OnlineReaderFailure.classify(
+      GallerySizeLimitException.image(
+          50000000, GalleryDownloadLimits.defaultImageMiB *
+              GalleryDownloadLimits.mib),
+      workId: '1234',
+      stage: OnlineReaderStage.image,
+      page: 3,
+    );
+    expect(error.code, 'IMAGE_SIZE_LIMIT');
+    expect(error.page, 3);
+    expect(GallerySizeLimitException.allowsExplicitRetry(error.code), isTrue);
   });
 
   test('per-work approval survives restart and is removed on completion',
