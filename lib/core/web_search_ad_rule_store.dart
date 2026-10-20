@@ -19,6 +19,7 @@ class WebSearchAdRuleStore {
   Set<String> _domains = <String>{};
   bool _started = false;
   int get domainCount => _domains.length;
+  Set<String> get domains => _domains;
 
   static Set<String> parseDomains(String source) {
     final result = <String>{};
