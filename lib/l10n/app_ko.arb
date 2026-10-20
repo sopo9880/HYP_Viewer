@@ -839,5 +839,13 @@
   "downloadFailedCollapse": "실패 목록 접기",
   "downloadFailedExpand": "실패 목록 펼치기",
   "downloadConcurrentTitle": "동시 다운로드",
-  "webAdBlockBlockedLabel": "차단"
+  "webAdBlockBlockedLabel": "차단",
+  "downloadSizeSettingsTitle": "다운로드 용량 제한",
+  "downloadSizeSettingsHelp": "신규 작품 다운로드에 적용할 용량 제한을 선택하세요. 실제 파일 크기에 따라 한도가 먼저 도달할 수 있습니다.",
+  "downloadSizeImageTitle": "이미지 한 장 최대 용량",
+  "downloadSizeTotalTitle": "작품 전체 이미지 합계",
+  "downloadSizeArchiveTitle": "완성된 CBZ 파일 최대 용량",
+  "downloadSizeCustomValue": "직접 입력",
+  "downloadSizeInvalid": "허용 범위 안의 정수를 입력하세요.",
+  "downloadSizeRetryHelp": "용량 초과로 실패한 작품을 직접 재시도하면 해당 작품의 설정 한도를 한 번 초과하도록 허용합니다. 앱의 안전 상한과 저장 권한 검사는 해제되지 않습니다."
 }
