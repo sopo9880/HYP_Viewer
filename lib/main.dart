@@ -2750,7 +2750,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               '다운로드는 계속 시도할게. Android 설정에서 알림을 허용해줘.');
         }
         while (_downloadQueue.isNotEmpty && !_downloadQueueCancelled) {
-          if (_activeTransfers.length >= readerSettings.maxConcurrentDownloads) {
+          if (galleryDownloadToken != null) {
             await Future<void>.delayed(const Duration(milliseconds: 200));
             continue;
           }
