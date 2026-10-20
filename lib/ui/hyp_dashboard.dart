@@ -1426,7 +1426,8 @@ class _HypDashboardState extends State<HypDashboard> {
       isMounted: () => mounted,
       openRoute: () => Navigator.of(context)
           .push<List<HitomiWebGallery>>(MaterialPageRoute(
-        builder: (_) => HitomiWebSearchPage(query: query),
+        builder: (_) => HitomiWebSearchPage(query: query,
+            adBlockMode: widget.readerSettings.webSearchAdBlockMode),
       )),
     );
     if (!mounted || epoch != _searchEpoch ||
@@ -1467,6 +1468,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ),
       if (_autoWebQuery.isNotEmpty)
         AutoHitomiWebSearch(
+          adBlockMode: widget.readerSettings.webSearchAdBlockMode,
           key: ValueKey('auto-web-' + _autoWebQuery),
           query: _autoWebQuery,
           onFinished: _autoWebSearchFinished,
@@ -3871,6 +3873,18 @@ class _HypDashboardState extends State<HypDashboard> {
             value: widget.readerSettings.autoWebSearch,
             onChanged: (value) => widget.onSaveReaderSettings(
                 widget.readerSettings.copyWith(autoWebSearch: value)),
+          ),
+          const SizedBox(height: 8),
+          Text(AppLocalizations.of(context)!.webAdBlockTitle),
+          SegmentedButton<String>(
+            segments: [
+              ButtonSegment(value: 'off', label: Text(AppLocalizations.of(context)!.webAdBlockOff)),
+              ButtonSegment(value: 'standard', label: Text(AppLocalizations.of(context)!.webAdBlockStandard)),
+              ButtonSegment(value: 'strong', label: Text(AppLocalizations.of(context)!.webAdBlockStrong)),
+            ],
+            selected: {widget.readerSettings.webSearchAdBlockMode},
+            onSelectionChanged: (mode) => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(webSearchAdBlockMode: mode.first)),
           ),
           const SizedBox(height: 8),
           HypText('기본 웹 리더 (주소 고정)',
