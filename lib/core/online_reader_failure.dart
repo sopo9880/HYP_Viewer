@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'gallery_download_limits.dart';
+
 /// A stage and safe error code for diagnostics, independent of site wording.
 enum OnlineReaderStage { metadata, routing, image, reader }
 
@@ -76,6 +78,13 @@ class OnlineReaderFailure extends FormatException {
         code: prefix + '_HTTP_ERROR', stage: stage, workId: workId,
         httpStatus: status, host: host, page: page,
         description: '서버가 오류 응답을 반환했어.');
+    }
+    if (error is GallerySizeLimitException) {
+      return OnlineReaderFailure(
+        code: prefix + '_SIZE_LIMIT', stage: stage,
+        workId: workId, host: host, page: page,
+        description: error.message,
+      );
     }
     if (error is FormatException) {
       final text = error.message;
