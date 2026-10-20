@@ -838,5 +838,6 @@
   "downloadRetryAllConfirm": "失敗した作品をすべてダウンロード待機列に追加しますか？保存済みの作品はスキップします。",
   "downloadFailedCollapse": "失敗一覧を閉じる",
   "downloadFailedExpand": "失敗一覧を開く",
-  "downloadConcurrentTitle": "同時ダウンロード"
+  "downloadConcurrentTitle": "同時ダウンロード",
+  "webAdBlockBlockedLabel": "ブロック"
 }
