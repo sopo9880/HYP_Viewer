@@ -839,5 +839,13 @@
   "downloadFailedCollapse": "Collapse failed downloads",
   "downloadFailedExpand": "Expand failed downloads",
   "downloadConcurrentTitle": "Parallel downloads",
-  "webAdBlockBlockedLabel": "Blocked"
+  "webAdBlockBlockedLabel": "Blocked",
+  "downloadSizeSettingsTitle": "Download size limits",
+  "downloadSizeSettingsHelp": "Select the limits for new gallery downloads. The first limit reached stops the download.",
+  "downloadSizeImageTitle": "Maximum per image",
+  "downloadSizeTotalTitle": "Maximum combined images per gallery",
+  "downloadSizeArchiveTitle": "Maximum completed CBZ file",
+  "downloadSizeCustomValue": "Custom value",
+  "downloadSizeInvalid": "Enter a whole number within the permitted range.",
+  "downloadSizeRetryHelp": "Explicitly retrying a gallery that failed for size reasons permits that gallery to exceed the configured limits once. Absolute safety caps and content permissions remain enforced."
 }
