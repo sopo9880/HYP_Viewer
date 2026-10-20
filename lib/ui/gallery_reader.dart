@@ -87,28 +87,93 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
   bool _multiTouchActive = false;
   bool _suppressTapAfterPinch = false;
 
+  // A passive pointer listener handles only page-level pinch/pan, avoiding
+  // InteractiveViewer's scale recognizer stealing taps from retry buttons,
+  // page edge navigation and center toolbar toggles.
+  final Map<int, Offset> _pointerPositions = <int, Offset>{};
+  Size _gestureViewport = Size.zero;
+  double _pinchStartDistance = 0;
+  double _pinchStartScale = 1;
+  Offset _pinchStartFocal = Offset.zero;
+  Offset _pinchStartTranslation = Offset.zero;
+
+  double get _pageScale => _pageTransform.value.getMaxScaleOnAxis();
+  Offset get _pageTranslation {
+    final t = _pageTransform.value.getTranslation();
+    return Offset(t.x, t.y);
+  }
+
+  void _beginPinch() {
+    if (_pointerPositions.length < 2) return;
+    final points = _pointerPositions.values.take(2).toList();
+    _pinchStartDistance = (points[0] - points[1]).distance;
+    _pinchStartFocal = (points[0] + points[1]) / 2;
+    _pinchStartScale = _pageScale;
+    _pinchStartTranslation = _pageTranslation;
+  }
+
+  void _applyManualZoom(double newScale, Offset translation) {
+    final scale = newScale.clamp(1.0, 5.0).toDouble();
+    final Offset offset;
+    if (scale < 1.02) {
+      offset = Offset.zero;
+    } else {
+      offset = Offset(
+        translation.dx.clamp(
+            _gestureViewport.width * (1 - scale), 0.0).toDouble(),
+        translation.dy.clamp(
+            _gestureViewport.height * (1 - scale), 0.0).toDouble(),
+      );
+    }
+    _pageTransform.value = Matrix4.identity()
+      ..translate(offset.dx, offset.dy)
+      ..scale(scale < 1.02 ? 1.0 : scale);
+    _pageZoomed = scale >= 1.02;
+    if (mounted) setState(() {});
+  }
+
   void _pointerDown(PointerDownEvent event) {
     if (_pointerCount == 0) _suppressTapAfterPinch = false;
     _pointerCount++;
+    _pointerPositions[event.pointer] = event.localPosition;
     if (_pointerCount >= 2) {
       _suppressTapAfterPinch = true;
+      if (!widget.settings.webtoonMode) _beginPinch();
       if (!_multiTouchActive && mounted) {
         setState(() => _multiTouchActive = true);
       }
     }
   }
 
-  void _pointerUp(PointerEvent event) {
-    if (_pointerCount > 0) _pointerCount--;
-    if (_pointerCount == 0 && _multiTouchActive && mounted) {
-      setState(() => _multiTouchActive = false);
+  void _pointerMove(PointerMoveEvent event) {
+    final old = _pointerPositions[event.pointer];
+    if (old == null) return;
+    _pointerPositions[event.pointer] = event.localPosition;
+    if (widget.settings.webtoonMode) return;
+    if (_pointerPositions.length >= 2 && _pinchStartDistance > 1) {
+      final points = _pointerPositions.values.take(2).toList();
+      final currentFocal = (points[0] + points[1]) / 2;
+      final currentDistance = (points[0] - points[1]).distance;
+      final scale = (_pinchStartScale *
+          currentDistance / _pinchStartDistance).clamp(1.0, 5.0).toDouble();
+      // Keep the original image point under the moving pinch focal point.
+      final ratio = scale / _pinchStartScale;
+      final translation = currentFocal +
+          (_pinchStartTranslation - _pinchStartFocal) * ratio;
+      _applyManualZoom(scale, translation);
+    } else if (_pointerPositions.length == 1 &&
+        _pageZoomed && !_multiTouchActive) {
+      _applyManualZoom(_pageScale, _pageTranslation +
+          (event.localPosition - old));
     }
   }
 
-  void _updatePageZoom() {
-    final zoomed = _pageTransform.value.getMaxScaleOnAxis() > 1.02;
-    if (mounted && zoomed != _pageZoomed) {
-      setState(() => _pageZoomed = zoomed);
+  void _pointerUp(PointerEvent event) {
+    _pointerPositions.remove(event.pointer);
+    if (_pointerCount > 0) _pointerCount--;
+    if (_pointerCount < 2) _pinchStartDistance = 0;
+    if (_pointerCount == 0 && _multiTouchActive && mounted) {
+      setState(() => _multiTouchActive = false);
     }
   }
 
@@ -853,6 +918,7 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
         body: Listener(
           behavior: HitTestBehavior.translucent,
           onPointerDown: _pointerDown,
+          onPointerMove: _pointerMove,
           onPointerUp: _pointerUp,
           onPointerCancel: _pointerUp,
           child: widget.settings.webtoonMode
@@ -904,7 +970,9 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                   _pageAt(index, webtoon: true),
                 ),
               ))
-          : LayoutBuilder(builder: (context, constraints) => GestureDetector(
+          : LayoutBuilder(builder: (context, constraints) {
+              _gestureViewport = constraints.biggest;
+              return GestureDetector(
               key: const Key('reader-tap-zones'),
               behavior: HitTestBehavior.translucent,
               onDoubleTap: _resetZoomOnDoubleTap,
@@ -926,17 +994,11 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                       if (delta == 0) _toggleChrome();
                       else _turn(delta);
                     },
-              child: InteractiveViewer(
-                key: const Key('reader-pinch-zoom'),
-                transformationController: _pageTransform,
-                minScale: 1,
-                maxScale: 5,
-                scaleFactor: 200,
-                panEnabled: _zoomed,
-                scaleEnabled: true,
-                onInteractionUpdate: (_) => _updatePageZoom(),
-                onInteractionEnd: (_) => _updatePageZoom(),
-                child: PageView.builder(
+              child: ClipRect(
+                child: Transform(
+                  key: const Key('reader-pinch-zoom'),
+                  transform: _pageTransform.value,
+                  child: PageView.builder(
                 physics: _multiTouchActive || _zoomed
                     ? const NeverScrollableScrollPhysics() : null,
                 key: ValueKey(_vertical.toString() + '-' +
@@ -958,7 +1020,9 @@ class _GalleryReaderState extends State<GalleryReader> with WidgetsBindingObserv
                 itemBuilder: (context, unit) => _spreadAt(unit),
               ),
               ),
-            )),
+              ),
+            );
+          }),
           ),
         bottomNavigationBar: _controlsVisible
             ? SafeArea(top: false, child: SizedBox(
