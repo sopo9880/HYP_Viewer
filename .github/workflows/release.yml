@@ -43,170 +43,86 @@ jobs:
             echo "Persistent Android signing is configured."
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Android signing secrets are missing: only Windows Setup.exe can be published for now."
+            echo "::error::Persistent Android signing is required for full release."
           fi
+          if [[ "$SIGNING_B64" == "" || "$SIGNING_STORE" == "" || "$SIGNING_ALIAS" == "" || "$SIGNING_KEY" == "" ]]; then exit 1; fi
 
-  windows:
-    name: Build Windows Setup.exe
+  artifacts:
+    name: Retrieve verified CI artifacts (no rebuild)
     needs: preflight
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - name: Generate Windows host project
-        run: flutter create --platforms=windows --org com.sopo9880 --project-name hyp_viewer .
-      - name: Apply approved Windows launcher, tray and installer icons
-        run: |
-          python -m pip install --disable-pip-version-check pillow
-          python scripts/apply_app_icons.py --platform windows
-      - name: Prevent duplicate Windows app processes
-        run: python scripts/patch_windows_single_instance.py
-      - name: Install WebView2 NuGet CLI
-        shell: pwsh
-        run: choco install nuget.commandline -y --no-progress
-      - run: flutter pub get
-      - run: flutter test
-      - run: flutter build windows --release
-      - name: Validate GoodbyeDPI supervisor syntax
-        shell: pwsh
-        run: |
-          $tokens = $null
-          $errors = $null
-          [void][System.Management.Automation.Language.Parser]::ParseFile(
-            'scripts/windows_dpi_supervisor.ps1',
-            [ref]$tokens, [ref]$errors)
-          if ($errors.Count -gt 0) { throw ($errors | Out-String) }
-      - name: Smoke-test Windows DPI supervisor path and startup acknowledgment
-        shell: pwsh
-        run: pwsh -NoProfile -File scripts/test_windows_dpi_supervisor.ps1
-      - name: Bundle verified official GoodbyeDPI for Windows
-        shell: pwsh
-        run: |
-          python -m unittest discover -s scripts -p test_prepare_goodbyedpi.py
-          python scripts/prepare_goodbyedpi.py --destination build/windows/x64/runner/Release/tools
-      - name: Install Inno Setup
-        shell: pwsh
-        run: choco install innosetup -y --no-progress
-      - name: Package Setup.exe
-        shell: pwsh
-        env:
-          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
-        run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$env:RELEASE_VERSION" "installer\hyp_viewer.iss"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-release
-          path: installer/Output/HYP_Viewer_Setup_*.exe
-          if-no-files-found: error
-
-  android:
-    name: Build persistently signed Android APK
-    needs: preflight
-    if: ${{ needs.preflight.outputs.android_ready == 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - name: Generate Android host project
-        run: flutter create --platforms=android --org com.sopo9880 --project-name hyp_viewer .
-      - name: Apply approved Android launcher icon
-        run: |
-          python3 -m pip install --disable-pip-version-check pillow
-          python3 scripts/apply_app_icons.py --platform android
-      - name: Configure Japanese/Korean offline OCR models
-        run: python3 scripts/configure_android_ocr.py
-      - name: Stage pinned MIT ByeDPI native engine for Android
-        run: python3 scripts/prepare_android_byedpi.py
-      - name: Verify and package Android DPI host blacklist
-        run: python3 scripts/prepare_android_dpi_blacklist.py
-      - name: Install pinned Android NDK for VPN bridge
+      - name: Locate successful main CI for the exact source commit
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?Android SDK root missing}}"
-          manager="$sdk/cmdline-tools/latest/bin/sdkmanager"
-          if [[ ! -x "$manager" ]]; then
-            manager="$(find "$sdk/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -print -quit)"
-          fi
-          if [[ -z "$manager" || ! -x "$manager" ]]; then
-            echo "::error::Android SDK cmdline-tools/sdkmanager unavailable"
+          run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/verify.yml/runs?head_sha=$GITHUB_SHA&event=push&status=success&per_page=30" --jq '.workflow_runs[] | select(.head_sha == env.GITHUB_SHA and .head_branch == "main" and .conclusion == "success") | .id' | head -n 1)
+          if [[ -z "$run_id" ]]; then
+            echo "::error::No successful CI for exact commit $GITHUB_SHA; release refused."
             exit 1
           fi
-          set +o pipefail
-          yes | "$manager" --sdk_root="$sdk" --install "ndk;27.2.12479018"
-          set -o pipefail
-          test -x "$sdk/ndk/27.2.12479018/ndk-build"
-      - name: Build pinned MIT tun2socks JNI for device VPN
-        run: python3 scripts/prepare_android_vpn_tunnel.py
-      - name: Configure Android NDK ByeDPI and WebView proxy
-        run: python3 scripts/configure_android_dpi.py
-      - name: Validate Android DPI engine sources and Gradle wiring
-        run: python3 -m unittest discover -s scripts -p test_android_dpi_prepare.py
-      - name: Validate staged Android VPN native libraries and JNI
-        run: python3 -m unittest discover -s scripts -p test_android_vpn_build.py
-      - run: flutter pub get
-      - name: Patch WebView Android ProGuard compatibility
-        run: python3 scripts/patch_webview_proguard.py
-      - run: flutter test
-      - name: Configure persistent APK signing
-        env:
-          HYP_ANDROID_KEYSTORE_BASE64: ${{ secrets.HYP_ANDROID_KEYSTORE_BASE64 }}
-          HYP_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.HYP_ANDROID_KEYSTORE_PASSWORD }}
-          HYP_ANDROID_KEY_ALIAS: ${{ secrets.HYP_ANDROID_KEY_ALIAS }}
-          HYP_ANDROID_KEY_PASSWORD: ${{ secrets.HYP_ANDROID_KEY_PASSWORD }}
-        run: python3 scripts/prepare_android_signing.py
-      - run: flutter build apk --release
-      - name: Name signed APK
-        env:
-          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-windows-${{ github.sha }}
+          run-id: ${{ steps.lookup.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: dist/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-android-${{ github.sha }}
+          run-id: ${{ steps.lookup.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: dist/android
+      - name: Verify provenance, checksums and preserve exact bytes
         shell: bash
         run: |
-          mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk "dist/HYP_Viewer_$RELEASE_TAG.apk"
+          set -euo pipefail
+          test "$(cat dist/windows/COMMIT_SHA.txt)" = "$GITHUB_SHA"
+          test "$(cat dist/android/COMMIT_SHA.txt)" = "$GITHUB_SHA"
+          (cd dist/windows && sha256sum -c SHA256SUMS.txt)
+          (cd dist/android && sha256sum -c SHA256SUMS.txt)
+          mkdir -p final
+          cp dist/windows/*.exe final/
+          cp dist/android/*.apk final/HYP_Viewer_${{ needs.preflight.outputs.tag }}.apk
+          (cd final && sha256sum *.exe *.apk > SHA256SUMS.txt)
+          printf '%s\n' "$GITHUB_SHA" > final/COMMIT_SHA.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: android-release
-          path: dist/HYP_Viewer_*.apk
+          name: exact-ci-release-${{ github.sha }}
+          path: final/
           if-no-files-found: error
 
   publish:
     name: Publish or safely complete a v0.x GitHub Release
     runs-on: ubuntu-latest
-    needs: [preflight, windows, android]
-    if: ${{ always() && needs.preflight.result == 'success' && needs.windows.result == 'success' && (needs.android.result == 'success' || needs.android.result == 'skipped') }}
+    needs: [preflight, artifacts]
+    if: ${{ needs.preflight.result == 'success' && needs.artifacts.result == 'success' }}
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: windows-release
+          name: exact-ci-release-${{ github.sha }}
           path: dist
-      - uses: actions/download-artifact@v4
-        if: ${{ needs.preflight.outputs.android_ready == 'true' }}
-        with:
-          name: android-release
-          path: dist
-      - name: Generate checksums and transparent release notes
+      - name: Verify CI checksums and prepare release notes
         env:
           RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
           ANDROID_READY: ${{ needs.preflight.outputs.android_ready }}
         shell: bash
         run: |
           set -euo pipefail
-          (cd dist && sha256sum HYP_Viewer_Setup_*.exe > SHA256SUMS.txt)
+          test "$(cat dist/COMMIT_SHA.txt)" = "$GITHUB_SHA"
+          (cd dist && sha256sum -c SHA256SUMS.txt)
           if [[ "$ANDROID_READY" == "true" ]]; then
-            (cd dist && sha256sum HYP_Viewer_v*.apk >> SHA256SUMS.txt)
             ANDROID_NOTE="Permanently signed APK included."
           else
             ANDROID_NOTE="Signed APK pending. A persistent Android keystore must be configured before it can be attached. Do not use ephemeral debug APKs for normal updating."
@@ -709,7 +625,7 @@ jobs:
               echo "::error::The existing tag targets a different commit. Refusing to overwrite."
               exit 1
             fi
-            gh release upload "$RELEASE_TAG" dist/* --clobber
+            echo '::error::Release already exists; refusing to overwrite immutable assets.'; exit 1
             gh release edit "$RELEASE_TAG" --notes-file release-notes.md
           else
             if [[ -n "$tag_sha" && "$tag_sha" != "$GITHUB_SHA" ]]; then
