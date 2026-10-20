@@ -85,7 +85,22 @@ class WebSearchAdRuleStore {
       final tmp = File(file.path + '.tmp');
       final sorted = updated.toList()..sort();
       await tmp.writeAsString(sorted.join('\n') + '\n', flush: true);
-      await tmp.rename(file.path);
+      if (await file.exists()) {
+        // Windows cannot atomically rename on top of an existing file.
+        // Preserve the previous list until the replacement is in place.
+        final backup = File(file.path + '.backup');
+        if (await backup.exists()) await backup.delete();
+        await file.rename(backup.path);
+        try {
+          await tmp.rename(file.path);
+          await backup.delete();
+        } catch (_) {
+          await backup.rename(file.path);
+          rethrow;
+        }
+      } else {
+        await tmp.rename(file.path);
+      }
       _domains = updated;
     } catch (_) {
       // No permissions, network access or path-provider plugin are required
