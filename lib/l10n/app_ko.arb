@@ -838,5 +838,6 @@
   "downloadRetryAllConfirm": "실패한 작품을 모두 다운로드 대기열에 추가할까요? 이미 저장된 작품은 건너뜁니다.",
   "downloadFailedCollapse": "실패 목록 접기",
   "downloadFailedExpand": "실패 목록 펼치기",
-  "downloadConcurrentTitle": "동시 다운로드"
+  "downloadConcurrentTitle": "동시 다운로드",
+  "webAdBlockBlockedLabel": "차단"
 }
