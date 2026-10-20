@@ -1,647 +1,142 @@
 name: Publish HYP Viewer 0.x Releases
 
-# Publish only after the exact main-branch signed CI run succeeds.
-# Manual replay reuses artifacts; neither path recompiles an APK or installer.
+# Release uses the exact signed APK and Windows installer from a successful
+# main-branch CI run. This workflow never builds, compiles, or signs binaries.
 on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release.yml
   workflow_run:
     workflows: ["Build and verify"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: "Exact successful main-branch CI commit SHA"
+        required: false
+        type: string
 
 permissions:
-  contents: read
+  contents: write
+  actions: read
 
 concurrency:
   group: hyp-publish-release
   cancel-in-progress: false
 
 jobs:
-  preflight:
-    name: Enforce 0.x version and check Android signing
-    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
+  publish:
+    name: Verify and publish existing signed CI artifacts
+    # One-time repair push for v0.4.22, plus normal future successful CI.
+    if: ${{ (github.event_name == 'push' && github.event.before == '9037002c682c0303cd37bce79478e1161853507c') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main') || (github.event_name == 'workflow_dispatch' && inputs.source_sha != '') }}
     runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
-      version: ${{ steps.version.outputs.version }}
-      android_ready: ${{ steps.signing.outputs.ready }}
+    env:
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha || inputs.source_sha || '9037002c682c0303cd37bce79478e1161853507c' }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the exact previously built source commit
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - name: Validate the release request and pubspec
-        id: version
-        run: python3 scripts/check_release_version.py
-      - name: Check signing key presence without printing secrets
-        id: signing
-        env:
-          SIGNING_B64: ${{ secrets.HYP_ANDROID_KEYSTORE_BASE64 }}
-          SIGNING_STORE: ${{ secrets.HYP_ANDROID_KEYSTORE_PASSWORD }}
-          SIGNING_ALIAS: ${{ secrets.HYP_ANDROID_KEY_ALIAS }}
-          SIGNING_KEY: ${{ secrets.HYP_ANDROID_KEY_PASSWORD }}
-        shell: bash
-        run: |
-          if [[ -n "$SIGNING_B64" && -n "$SIGNING_STORE" && -n "$SIGNING_ALIAS" && -n "$SIGNING_KEY" ]]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-            echo "Persistent Android signing is configured."
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::error::Persistent Android signing is required for full release."
-          fi
-          if [[ "$SIGNING_B64" == "" || "$SIGNING_STORE" == "" || "$SIGNING_ALIAS" == "" || "$SIGNING_KEY" == "" ]]; then exit 1; fi
-
-  artifacts:
-    name: Retrieve verified CI artifacts (no rebuild)
-    needs: preflight
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - name: Locate successful main CI for the exact source commit
-        id: lookup
+          ref: ${{ env.SOURCE_SHA }}
+      - name: Validate 0.x version and find the exact successful CI run
+        id: source
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          source_sha="${{ github.event.workflow_run.head_sha || github.sha }}"
-          run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/verify.yml/runs?head_sha=$source_sha&event=push&status=success&per_page=30" --jq '.workflow_runs[] | select(.head_branch == "main" and .conclusion == "success") | .id' | head -n 1)
-          if [[ -z "$run_id" ]]; then
-            echo "::error::No successful CI for exact source commit $source_sha; release refused."
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid source SHA"; exit 1; }
+          python3 scripts/check_release_version.py
+          TAG="$(tr -d '\r\n' < .github/release-request.txt)"
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/verify.yml/runs?head_sha=$SOURCE_SHA&event=push&status=success&per_page=30" > ci-runs.json
+          CI_RUN="$(jq -r --arg sha "$SOURCE_SHA" '.workflow_runs | map(select(.head_sha == $sha and .head_branch == "main" and .event == "push" and .conclusion == "success")) | .[0].id // empty' ci-runs.json)"
+          if [[ -z "$CI_RUN" ]]; then
+            echo "::error::No successful main CI for exact source commit $SOURCE_SHA"
             exit 1
           fi
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v4
+          echo "run_id=$CI_RUN" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Reusing CI run $CI_RUN for $TAG at $SOURCE_SHA"
+      - name: Download original CI Windows installer
+        uses: actions/download-artifact@v4
         with:
-          name: release-windows-${{ github.event.workflow_run.head_sha || github.sha }}
-          run-id: ${{ steps.lookup.outputs.run_id }}
+          name: release-windows-${{ env.SOURCE_SHA }}
+          run-id: ${{ steps.source.outputs.run_id }}
           github-token: ${{ github.token }}
           path: dist/windows
-      - uses: actions/download-artifact@v4
+      - name: Download original CI signed Android APK
+        uses: actions/download-artifact@v4
         with:
-          name: release-android-${{ github.event.workflow_run.head_sha || github.sha }}
-          run-id: ${{ steps.lookup.outputs.run_id }}
+          name: release-android-${{ env.SOURCE_SHA }}
+          run-id: ${{ steps.source.outputs.run_id }}
           github-token: ${{ github.token }}
           path: dist/android
-      - name: Verify provenance, checksums and preserve exact bytes
+      - name: Verify checksums, build provenance, and APK signing
+        env:
+          TAG: ${{ steps.source.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          test "$(cat dist/windows/COMMIT_SHA.txt)" = "${{ github.event.workflow_run.head_sha || github.sha }}"
-          test "$(cat dist/android/COMMIT_SHA.txt)" = "${{ github.event.workflow_run.head_sha || github.sha }}"
+          test "$(cat dist/windows/COMMIT_SHA.txt)" = "$SOURCE_SHA"
+          test "$(cat dist/android/COMMIT_SHA.txt)" = "$SOURCE_SHA"
           (cd dist/windows && sha256sum -c SHA256SUMS.txt)
           (cd dist/android && sha256sum -c SHA256SUMS.txt)
-          mkdir -p final
-          cp dist/windows/*.exe final/
-          cp dist/android/*.apk final/HYP_Viewer_${{ needs.preflight.outputs.tag }}.apk
-          (cd final && sha256sum *.exe *.apk > SHA256SUMS.txt)
-          printf '%s\n' '${{ github.event.workflow_run.head_sha || github.sha }}' > final/COMMIT_SHA.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: exact-ci-release-${{ github.event.workflow_run.head_sha || github.sha }}
-          path: final/
-          if-no-files-found: error
-
-  publish:
-    name: Publish or safely complete a v0.x GitHub Release
-    runs-on: ubuntu-latest
-    needs: [preflight, artifacts]
-    if: ${{ needs.preflight.result == 'success' && needs.artifacts.result == 'success' }}
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - uses: actions/download-artifact@v4
-        with:
-          name: exact-ci-release-${{ github.event.workflow_run.head_sha || github.sha }}
-          path: dist
-      - name: Verify CI checksums and prepare release notes
-        env:
-          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
-          ANDROID_READY: ${{ needs.preflight.outputs.android_ready }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(cat dist/COMMIT_SHA.txt)" = "${{ github.event.workflow_run.head_sha || github.sha }}"
-          (cd dist && sha256sum -c SHA256SUMS.txt)
-          if [[ "$ANDROID_READY" == "true" ]]; then
-            ANDROID_NOTE="Permanently signed APK included."
-          else
-            ANDROID_NOTE="Signed APK pending. A persistent Android keystore must be configured before it can be attached. Do not use ephemeral debug APKs for normal updating."
+          test -f "dist/windows/HYP_Viewer_Setup_$TAG.exe"
+          test -f "dist/android/HYP_Viewer_$SOURCE_SHA.apk"
+          SDK="$(printenv ANDROID_SDK_ROOT || true)"
+          if [[ -z "$SDK" ]]; then SDK="$(printenv ANDROID_HOME || true)"; fi
+          APK_SIGNER=""
+          if [[ -n "$SDK" && -d "$SDK/build-tools" ]]; then
+            APK_SIGNER="$(find "$SDK/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)"
           fi
-          cat > release-notes.md <<EOF
-          # HYP Viewer $RELEASE_TAG (0.x preview)
-
-          Experimental 0.x update. Install over the previous release to test
-          the new functionality; back up your library to JSON first.
-
-          - Windows: Setup.exe included (unsigned publisher; SmartScreen may warn).
-          - Android: $ANDROID_NOTE
-
-          Changes in v0.4.17:
-          - Add optional, embedded Windows GoodbyeDPI and WinDivert components
-            to the installer. The official x64 release is pinned and verified
-            by SHA-256; upstream licenses and blacklist are included.
-          - Windows settings: opt-in switch, user-selectable presets including
-            the pictured blacklist/DNS modes, safe custom arguments, optional
-            autostart, status, restart and a site connectivity test.
-          - The elevated engine is supervised and stopped when HYP Viewer fully
-            exits. UAC permission is required; no system security bypass is
-            silently activated and the entire machine may be affected.
-          - Fix Hitomi website search import assigning a shared ancestor title
-            to unrelated galleries; deduplicate per gallery ID, preserve real
-            titles and mark web-imported results distinctly.
-          - Improve online metadata verification: retry ID mismatches once
-            with cache bypass and expose the numeric returned gallery ID.
-            Always reject cross-gallery responses after revalidation.
-          - Preserve v0.4.16 user library, reading history and app settings.
-
-          Changes in v0.4.21:
-          - Fix Android local ByeDPI startup rejecting the five new DPI preset
-            names as invalid_preset. Share the native preset allowlist with
-            the existing device-wide VPN entry point.
-          - Keep the 'Search on website' action enabled with an empty search
-            field. Open https://hitomi.la/ when no query is provided; preserve
-            the existing encoded site search for nonempty queries.
-          - Allow manual Collect/Apply from the site home page without a
-            query and display those imported gallery results in the app;
-            clear them when navigating elsewhere or dismissing with Back.
-          - Keep search text and results but prevent unwanted search-field
-            focus and Android keyboard reopening after public web search
-            or online gallery/edition result sheets close.
-          - Add Flutter regression coverage for native presets, blank-query
-            browsing and focus-safe Cancel/Apply/back navigation.
-          - Add dismiss (X) for individual stopped-download failure records
-            and a confirmation-protected Clear All action.
-          - Persist failure-record removal across restarts using the existing
-            atomic journal; never delete CBZ files, library entries, reading
-            history or active/pending download jobs.
-          - Suppress repeated identical 'auto retry stopped' notifications
-            while keeping explicit future user-requested retries available.
-          - Add KO/EN/JA strings and UI/serialization regression tests for
-            single dismissal, Clear All, confirmation and restart safety.
-
-          Changes in v0.4.20:
-          - Unify the five displayed Windows/Android DPI presets, retaining
-            legacy settings and warning that ByeDPI's low-level split strategy
-            differs from GoodbyeDPI's WinDivert packet implementation.
-          - Add an explicitly approved Android VpnService device-wide mode
-            using pinned MIT hev-socks5-tunnel and an on-device SOCKS5 ByeDPI
-            service; route TCP/UDP without a remote VPN server or root.
-          - Exclude the HYP package from the VPN to prevent connection loops;
-            support selection of other apps to bypass the VPN.
-          - Provide Android alternative DNS in VPN mode via 77.88.8.8:53.
-            Explain that this cannot reproduce Windows DNS port 1253 exactly;
-            app-only mode does not redirect DNS.
-          - Default public website search to ON, load only when a search
-            stabilizes, capture gallery links from a bounded WebView, merge
-            by ID without replacing API results, cache and allow opt-out.
-          - Preserve library, reading progress, downloaded archives and
-            existing independent Windows DPI execution lifecycle.
-
-          Changes in v0.4.19:
-          - Fix Windows GoodbyeDPI startup supervision: forward the original
-            user's absolute session path across UAC boundaries, record real
-            bootstrap exit codes and local stderr, and expose detailed steps
-            and diagnostics instead of reporting every failure as UAC timeout.
-          - Smoke-test Windows PowerShell supervisor session acknowledgment
-            and invalid paths without requesting elevation or starting driver.
-          - Implement Android app-local ByeDPI using the MIT native engine
-            compiled from a verified pinned source revision into the APK.
-          - Route Android WebView plus Dart HTTP(S) metadata, online search,
-            images and authorized downloads through the same local proxy.
-          - Provide opt-in Android DPI ON/OFF, preset selection, restart,
-            startup preference, status diagnostics and a connectivity test.
-          - Keep Windows DPI separate and preserve user libraries, downloaded
-            CBZ archives, reading progress and existing app settings.
-          - This is app-scoped; no root or system VPN takeover. Real-device
-            DPI bypass requires additional on-device network validation.
-
-          Changes in v0.4.18:
-          - Use two independent Heliotrope metadata mirrors when the primary
-            Hitomi CDN returns another gallery ID or invalid metadata.
-            Accept metadata only after checking the requested ID and files.
-          - Stop auto-retrying only a failed work after all metadata sources
-            are exhausted. Preserve the rest of the download queue and existing
-            CBZ files. Failed works appear in Downloads with a manual Retry.
-          - Save terminal failures independently from pending jobs, preventing
-            repeated attempts on app relaunch/resume without losing the
-            user's library, offline archives, or reader progress.
-
-          Changes in v0.4.17:
-          - Bundle the verified official GoodbyeDPI engine in the Windows
-            installer with opt-in UAC-managed control and safe presets.
-          - Correct Hitomi website search title extraction by work ID and
-            preserve metadata ID mismatch diagnostics without using images
-            belonging to another work.
-
-          Changes in v0.4.16:
-          - Add Hitomi direct website search: collect visible gallery links
-            in an embedded browser and merge verified work IDs into existing
-            local/online results without replacing or disabling mirror search.
-          - Introduce the approved neon HYP Viewer icon for Android launchers,
-            Windows EXE/taskbar, installer and system tray; generated after
-            each flutter create to prevent default icons from returning.
-          - Replace generic in-app online reader errors with structured
-            diagnostic codes for mismatched gallery IDs, missing/wrong/empty
-            image lists, malformed metadata JSON, CDN failures, DNS errors,
-            timeouts, image hash and gg.js routing changes.
-          - Present localized Korean, English and Japanese failure dialogs
-            with copyable safe diagnostics, retry and web-reader fallback.
-          - Show detailed failure codes and copy action for in-reader image
-            loading errors without leaking raw responses or signed URLs.
-          - Add regression coverage for metadata errors, routing, HTTP/CDN
-            failures, localization and dialog actions.
-          - Existing library, progress, downloads and settings are preserved.
-
-          Changes in v0.4.15:
-          - Broaden reviewed Auto grouping using title similarity even when
-            author and circle metadata are unavailable.
-          - Recognize abbreviated names, special editions and extended works.
-            Include borderline pairs supported by shared creator, series or
-            multiple meaningful shared title words.
-          - Distinguish strong, similar and broad candidates in the wizard;
-            do not automatically merge or alter existing library records.
-          - Add a localized "Back to Start" option above "Keep Reading" in
-            the final-page dialog. Jump to page 1 in single, spread, and webtoon
-            modes without marking completed or closing the viewer.
-          - Preserve independent language editions and block simple
-            transitive chains between unrelated works.
-
-          Changes in v0.4.14:
-          - Merge complete existing series groups and standalone library works
-            into a single flat group after reviewing its members and order.
-            Preserve existing read progress, offline downloads, covers and
-            language-edition relationships; reject partial group merges.
-          - Improve reviewed Auto grouping diagnostics and avoid turning
-            different-language versions of the same unnumbered chapter into
-            an unrelated series.
-          - Preview public galleries from online search, candidate validation
-            and manual IDs without saving, writing reading history, marking
-            completion or modifying offline downloads. Save explicitly.
-          - Add a separate local blacklist by work ID, artist, circle, tag
-            or title, with management and JSON import/export. Skip blocked
-            candidates during verification and saving, and filter search.
-          - Always display category search tabs. Execute artist, group,
-            series and tag lookups, keep query failures distinct from empty
-            results, and fix server page-size pagination with metadata fallback.
-          - Maintain the existing 0.x library backup format and app data.
-          - Remote search source availability and device behavior still
-            require real-world verification after release.
-
-          Changes in v0.4.13:
-          - Improve unified online search reliability: validate translated
-            aliases independently, retry alternate metadata mirrors when
-            usable results are empty, and look up exact gallery IDs directly.
-          - Reduce unnecessary field searches while preserving scoped
-            artist, group, series and tag discovery for sparse results.
-          - Derive online search field chips from fetched unique work metadata
-            instead of overlapping provider totals; allow a selected facet
-            to fetch additional results without discarding previous results.
-          - Use compact horizontally scrollable filters on Android with an
-            option to reveal zero-result categories. Distinguish saved works,
-            newly discovered works and visible language-edition cards.
-          - Extend reviewed Auto grouping suggestions to recognize collected
-            episode ranges, extras, revised and expanded versions; prevent
-            transitive grouping of unrelated titles and preserve chapter/
-            language-edition boundaries. Do not automatically merge progress.
-          - Keep existing library backups, work IDs, downloaded CBZ files,
-            edition links and independent reading progress unchanged.
-          - Public metadata mirrors may return incomplete results; verify
-            uncertain candidates before confirming grouped editions.
-
-          Changes in v0.4.12:
-          - Fix Windows system-tray right click: explicitly pop up the
-            prepared native context menu; report plugin errors to diagnostics.
-          - Add reusable measured overflow-title animation across shelf
-            cards, search, reading history, language stacks, series stacks,
-            dialogs, visual candidate results and reader toolbar.
-          - Long work titles scroll once when tapped; cover taps still read
-            or open the group; title taps do not unexpectedly open a viewer.
-          - Verified-number candidate titles scroll automatically while
-            present if too long; short titles remain still. Honor reduced
-            motion and avoid animating whole lists by default.
-          - Preserve explicit language selection and selection/reordering
-            actions. No changes to Android reading data or persisted settings.
-          - Windows tray shell behavior still requires Windows EXE
-            verification even if GitHub Actions compilation succeeds.
-
-          Changes in v0.4.11:
-          - Reduce Windows X-to-quit latency: idle complete-exit uses native
-            window closing, while active transfers still require confirmation.
-          - Make the Windows tray useful: left-click show/hide, double-click
-            restore, right-click download status, pause/resume, cancel with
-            confirmation, recent reading, update checks and complete exit.
-          - Add best-effort Windows notifications for successful hidden
-            download batches and Korean/English/Japanese tray labels.
-          - Repair Windows installer download lifecycle flags, add phase
-            diagnostics for unexpected process exits, and offer the official
-            GitHub EXE browser download as the recommended Windows fallback.
-          - Preserve existing Android background transfers and library data.
-            Windows shell timing and actual crash reproduction still require
-            manual installation tests.
-
-          Changes in v0.4.10:
-          - Parse user-visible desktop and Android Instagram comment DOM with
-            a shared safe parser. Exclude timestamps, like counters and
-            image-only placeholders from work-number candidates.
-
-          Changes in v0.4.6:
-          - Inspect visible public Instagram/YouTube captions, comments,
-            images and user-accessible video frames using in-app WebView.
-          - Support Android image shares, local on-device OCR and opt-in
-            perceptual image matching against saved covers/offline pages.
-          - Require user confirmation of work IDs, never auto-save a
-            visual-only match; preserve private library/backup data.
-          - Keep Android foreground downloads active through the entire
-            approved work queue and report actual page progress.
-          - Decode numeric HTML entities in Instagram share text.
-
-          Changes in v0.4.5:
-          - Clear link-finder inputs and analysed candidates only after a
-            successful shelf save and a switch away from Home. Preserve
-            unsaved edits, new pasted links, user metadata and API keys.
-          - Confirm explicit next-page navigation after the final rendered
-            page: finish and exit, exit without changing the completion flag,
-            or continue. The confirmation can be disabled in settings to
-            retain the prior auto-completion behavior.
-          - Support Android long-press volume-key paging with a 500ms hold
-            threshold and user-selectable 700/400/200ms repeat intervals.
-            Release stops immediately and repeats stop at book boundaries.
-          - Update the active Android foreground download notification with
-            real completed-page progress, pause state, work ID and percentage;
-            completed/failed/cancelled results link back to Downloads.
-          - Repair dynamic Home recent counts, Downloads counts, work-card
-            creator/page/completion fields, finished filters and Favorites
-            subtitles in Korean, English and Japanese.
-          - Preserve 0.x backups, reading history, offline CBZ files and the
-            existing resumable download queue. Device smoke testing of
-            background notification behavior is recommended after CI.
-
-          Changes in v0.4.4:
-          - Audit UI translations across Korean, English and Japanese screens,
-            reader controls, settings, dialogs, tooltips and status messages.
-            Expand language-switch regression and static checks.
-          - Open other-language discovery immediately, show progress while
-            public results arrive, support Back to cancel, and allow selected
-            editions to join in one validated batch without losing progress.
-          - Resume the most recently read language edition when its cover is
-            tapped; tap the stack title to choose a different edition.
-          - Start the reader with controls hidden by default (configurable),
-            with an on-screen single/two-page toggle preserving the page.
-          - Stream online search results as sources finish; improve original
-            and translated title queries, relevance, language filtering and
-            deduplicated metadata across fields.
-          - Expand bounded public YouTube comment pagination and preserve
-            accessible metadata when comments are restricted. Instagram
-            remains public-preview-only; private access is never bypassed.
-          - Keep v0.x library backups, CBZ, covers, download resumes,
-            grouping decisions, and independent edition reading positions.
-
-          Changes in v0.4.3.1:
-          - Run approved downloads with Android background notification
-            or Windows tray, and recover persisted unfinished pages on restart.
-          - Preserve existing CBZ and library records during retries.
-          - User force-stop and OS power policies may interrupt downloads;
-            resume after reopening the app.
-
-          Changes in v0.4.3:
-          - Store verified multilingual title aliases and multiple HTTPS
-            discovery URLs per work. Preserve original titles, read positions,
-            favorites, completion, local covers and CBZ identifiers.
-          - Expand unified and edition-specific search through known translated
-            titles, artist, circle, series and tags, showing progress,
-            relevance, individual field failures and bounded pagination.
-          - Display safe online-to-shelf language-edition associations and
-            review metadata with bounded cover-similarity evidence.
-            Similar covers alone never authorize an automatic merger.
-          - Browse more public YouTube playlist/channel videos on demand;
-            report when comment content is incomplete or inaccessible and
-            keep accessible public descriptions.
-          - Retry only a failed/corrupt reader page without removing valid
-            page caches; preserve existing transient-HTTP backoff behavior.
-          - Improve Korean/English/Japanese translations across reader
-            controls, source editor, work information, and reading reports.
-          - Add regression cases for translated title discovery, source URL
-            editing/JSON recovery, 1,000-work library search, safe edition
-            unlinking, image cache eviction and YouTube continuations.
-          - Remote metadata providers and public social-network content may
-            be unavailable or incomplete; the application cannot bypass
-            authentication requirements.
-
-          Changes in v0.4.1:
-          - Safe HTTP-to-HTTPS upgrades for trusted YouTube, Instagram and
-            Hitomi links, including native Android community-post shares.
-          - Parse full publicly embedded YouTube community post text when
-            available; explicitly warn if only a clipped preview was loaded.
-          - Public YouTube playlist/channel video-selection support,
-            with limited user-selected video/comment analysis.
-          - Unified metadata search now fans out across supported title,
-            artist, circle and tag fields, and deduplicates fetched IDs.
-            Category counts may overlap and are labeled accordingly.
-          - Enhanced other-language edition search with alternate titles,
-            two-page searches, supporting metadata, optional bounded cover
-            similarity, and an explicit last-read edition choice.
-          - Translated settings accordion headings and A-L Reading Insights
-            into formal Korean/English/Japanese locale bundles, including
-            dynamic metrics and report labels.
-          - Aligned completed hiding with the original policy: finishing
-            any edition hides its logical work from the shelf, while search
-            and each edition's own reading progress remain independent.
-          - Added an opt-in review of legacy last-page records without
-            silently rewriting existing completed flags.
-          - Existing v0.4.0 functionality retained:
-          - Fixed page-edge tapping to use physical left=previous and
-            right=next by default, with the reverse setting mirrored; verified
-            keyboard and two-page navigation expectations.
-          - Fixed final-page completion detection for pre-rendered webtoon
-            pages, added manual complete/uncomplete actions and coherent
-            completed hiding in language-edition stacks.
-          - Library sorting now applies inside series, with optional
-            explicit chapter ordering and edition cover stacks inside series.
-          - Added conservative multilingual-edition matching by original
-            title, creator/circle and chapter. User-confirmed alternate
-            titles may be linked or unlinked without losing each edition's
-            independent work ID, reading progress or offline files.
-          - Expanded source detection to YouTube videos, live links and
-            community posts; Instagram posts/reels/stories, Hitomi URLs,
-            and arbitrary HTTPS links. Supported public metadata previews
-            never require third-party login; inaccessible or private
-            content is handled with an explicit paste-text fallback.
-          - Added link-finder Clear, reliable collapse even with candidates,
-            native Android URL share support and original source-link retention.
-          - Extended live Korean/English/Japanese UI translations, including
-            reader settings, reading insights, series and edition dialogs.
-          - Startup update prompts can be disabled or snoozed per version
-            for seven days; a newer release may prompt immediately, and
-            manual update checks always remain available.
-          - Existing 0.3 data, CBZ downloads, progress, covers, JSON backups,
-            notification behavior and safe signed updates are preserved.
-          - Note: public remote searches, Instagram metadata, and community
-            posts can be unavailable; a link is always recognisable even
-            when its comments cannot be fetched without permission.
-
-          Previous v0.3.0 changes retained:
-          - Reader side taps now follow the physical left/right direction
-            of the chosen reading mode, including two-page spreads.
-          - Auto grouping compares original multilingual titles independently
-            of translated subtitles, recognizes trailing sequel numerals,
-            and can optionally refresh missing metadata after reporting
-            that no suggestions were found. All grouping remains opt-in.
-          - App notifications dismiss after five seconds (ten for errors),
-            fade out, pause during mouse hover, and keep a manual close.
-          - Network handover while downloading installers now resumes
-            using SHA-256-checked persistent partials, HTTP Range responses
-            and bounded retries. The installer is verified before opening.
-            Successful installation is confirmed on next app start from
-            the running app version, not from merely showing system setup.
-          - Library now uses balanced two-button action rows for sorting,
-            selection/Auto grouping, and download/completed visibility.
-            The completed hide/show toggle persists without deleting work.
-          - Home random covers are clickable and open the displayed work,
-            including its saved reading progress. Custom banners stay art.
-          - Unified library and online metadata search includes paging,
-            language and scope filters, on-device duplicate elimination,
-            details and save/read actions. Remote mirror availability varies.
-          - Favorites remain preserved under My Reading, which adds A-L
-            on-device insights: totals, tag combinations, top works,
-            creators, dated reading activity, series completion, summaries,
-            unread suggestions, heatmaps, cleanup tools, month/year reports
-            with PNG export, and filtering/opt-out/delete controls.
-            New reading sessions are time-stamped and included in optional
-            JSON library backups. Old undated open counts are not fabricated.
-          - YouTube Shorts support remains; Instagram integration excluded.
-
-          Previous v0.2.2 changes retained:
-          - Auto grouping now reads each work's title/episode instead of the
-            same batch-wide Shorts comment, which previously made different
-            episodes all look like "Part 1".
-          - The wizard shows suggested groups with individual member covers,
-            titles, IDs, review reasons and a heuristic confidence tier.
-            Users may expand, exclude works, edit group titles and reorder
-            chapters before approving; nothing is silently grouped.
-          - Similar series titles can match across different Shorts, even
-            without numbered chapters. Existing groups can receive new
-            chapters without resetting previous order, history or covers.
-          - Reader tap zones were first introduced in v0.2.2; v0.3.0
-            corrects their physical left/right behavior to respect the
-            selected reading direction. Webtoon retains scrolling and a
-            separate center tap to toggle reader controls.
-          - Tap navigation defaults to ON for new installations, while
-            existing explicit user settings are preserved.
-          - Gallery IDs are gathered from all contiguous digit windows on
-            each line, while separating explicitly numbered episodes.
-            Duplicates are removed and up to 160 candidates are verified in
-            bounded batches (up to 3 simultaneous metadata requests).
-          - Only when the first pass definitely finds no existing gallery
-            may an optional second pass combine adjacent lines in one
-            comment. Blank lines separate imported commenters. Network
-            outages never masquerade as "no matches".
-
-          Previous v0.2.1 features retained:
-          - Published-date sorting and site popularity ranks with daily,
-            weekly, monthly and yearly periods; unknown ranks remain unknown.
-          - Series displayed as stacked covers in the same grid as singles;
-            chapter numbers precede date/ID when suggesting an order.
-          - Full-cover fit without cropping the library art or title footer.
-          - Space hides/restores the PC viewer chrome; center taps toggle the
-            immersive UI on touch screens, while side taps turn pages.
-          - Pinch or wheel zoom within a five-fold limit. Webtoon retains
-            ordinary wheel scroll and supports Ctrl+wheel zoom.
-          - Last-page progress now reaches 100 percent; completed status is
-            persisted only after the final image has rendered successfully.
-          - Data saver requests smaller site thumbnails, falling back to
-            original images when unavailable; other modes favor full quality.
-          - Foreground image requests receive priority over background
-            prefetch. Nearby pages are decoded ahead of display and reusable
-            persistent caches are pruned by age and storage budget.
-
-          Previous v0.2.0 features retained:
-          - Consolidated webtoon and regular reader image loading in one
-            2-concurrent-request priority queue; 503/429 transient
-            errors retry with bounded exponential backoff and cooldown.
-            Unloaded webtoon panels reserve space to avoid request floods.
-          - Far-page jumps take precedence over full prefetch. Slider
-            commits only on drag-end so scrubbing does not fetch 100 pages.
-            Vertical pages ALWAYS move down, ignoring horizontal RTL.
-          - New installation default preload is -1 (whole work cached to
-            temporary disk with bounded concurrent reads). Existing user
-            values stay intact. Data saver reduces to 1 request and
-            suspends full-preload while enabled.
-          - Android Back exits a viewer to its parent; non-Home root
-            tabs return Home; a second Back at Home within two seconds
-            exits after an explicit snackbar. Selection closes first.
-          - Mobile bottom tabs: Favorites / Library / HOME / Downloads /
-            Settings. Mobile top-right notifications replaced with Update.
-            Menu reduced to Settings / Reading History / Backup Settings.
-          - Taller cover cards with completion percentage beside pages.
-            Home recent section shows up to four items, is collapsible,
-            and no longer mislabels favorites as recommendations.
-          - Persistent collapsible settings with backup deep-link.
-            Library supports added-date, local read-popularity, title
-            and numeric-ID sorting; never invent remote views.
-          - Explicit multi-work series grouping (manual and Auto wizard),
-            expandable chapters, rename/reorder/ungroup without deleting
-            progress; already grouped works never altered by Auto.
-          - Work Info displays genuine available remote gallery metadata:
-            artist, tags, series, type, language, dates, page count,
-            local reading history. Remote view counts show unavailable.
-            Simplified work menus remove CBZ/ZIP bind and JSON download
-            entries and rename original Shorts to Intro Shorts.
-          - Downloads adds library-style selection and read-only export
-            to user-chosen folders as individual .cbz ZIP-compatible
-            archives; Android folder export uses native SAF.
-          - JSON portable backups and existing signed upgrades preserved.
-            New optional per-work metadata/series fields migrate safely.
-
-          Known limitations: Automated tests use mocked images and notices;
-          actual remote sites, Android devices and Samsung firmware may
-          behave differently. The web reader may fail if network or source
-          access is restricted. Automatic downloads are not permitted
-          without user confirmation of rights. Pause is between pages, not
-          a resumable network transfer after restarting the app.
-          Downloaded CBZ archives stay local and are not included in JSON.
-          Optional PNG cover previews and banner art may be included in
-          portable JSON backups within their existing size limits.
-          Administrator notices are in-app only, not FCM/system background
-          push notifications. Installing an APK can be blocked by Android
-          security policies, which cannot be bypassed by HYP Viewer.
-
-          Verify assets using SHA256SUMS.txt. Only download from sources
-          you have permission to access and retain.
-          EOF
-      - name: Publish v0.x only and never replace assets from a different commit
+          if [[ -z "$APK_SIGNER" ]]; then APK_SIGNER="$(command -v apksigner || true)"; fi
+          if [[ -z "$APK_SIGNER" || ! -x "$APK_SIGNER" ]]; then
+            echo "::error::apksigner unavailable; refusing unverifiable Android release"
+            exit 1
+          fi
+          "$APK_SIGNER" verify --verbose "dist/android/HYP_Viewer_$SOURCE_SHA.apk"
+          mkdir -p public
+          cp "dist/windows/HYP_Viewer_Setup_$TAG.exe" public/
+          cp "dist/android/HYP_Viewer_$SOURCE_SHA.apk" "public/HYP_Viewer_$TAG.apk"
+          (cd public && sha256sum *.apk *.exe > SHA256SUMS.txt)
+          printf '%s\n' "$SOURCE_SHA" > public/BUILD_COMMIT.txt
+      - name: Publish immutable 0.x release without rebuilding
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
+          TAG: ${{ steps.source.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          # The single-ref endpoint returns 404 for a missing tag; piping that error
-          # through jq can produce "null", incorrectly treated as an existing SHA.
-          # Matching refs returns [] instead. Filter the exact tag name so prefix
-          # matches cannot be mistaken for the intended release.
-          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_TAG" --jq ".[] | select(.ref == \"refs/tags/$RELEASE_TAG\") | .object.sha")
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            if [[ "$tag_sha" != "${{ github.event.workflow_run.head_sha || github.sha }}" ]]; then
-              echo "::error::The existing tag targets a different commit. Refusing to overwrite."
-              exit 1
-            fi
-            echo '::error::Release already exists; refusing to overwrite immutable assets.'; exit 1
+          TAG_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" --jq ".[] | select(.ref == \"refs/tags/$TAG\") | .object.sha")"
+          if [[ -n "$TAG_SHA" && "$TAG_SHA" != "$SOURCE_SHA" ]]; then
+            echo "::error::Tag points to a different build commit; refusing release"
+            exit 1
+          fi
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "::notice::Release already exists; not replacing immutable assets"
+            exit 0
+          fi
+          cat > release-notes.md <<EOF
+          # HYP Viewer $TAG
+
+          CI source commit: $SOURCE_SHA
+
+          - Add optional Standard / Strong / Off web-search ad blocking.
+          - Fold stopped-download failures, with an explicit retry-all option.
+          - Allow new downloads to enter the persistent queue during a transfer.
+          - Preserve offline files and backups; retain the 0.x version scheme.
+          - Android APK: signed once in main CI using persistent release signing.
+          - Windows: installer built once in that same CI run.
+          - Release reuses the original artifacts and verifies their checksums.
+
+          Note: Fully independent parallel downloads and per-work cancel/delete
+          remain incomplete; device behavior must be tested after release.
+
+          Check SHA256SUMS.txt and BUILD_COMMIT.txt before installation.
+          EOF
+          if [[ -n "$TAG_SHA" ]]; then
+            gh release create "$TAG" public/* --verify-tag --title "HYP Viewer $TAG" --notes-file release-notes.md
           else
-            if [[ -n "$tag_sha" && "$tag_sha" != "${{ github.event.workflow_run.head_sha || github.sha }}" ]]; then
-              echo "::error::Tag exists at a different commit."
-              exit 1
-            fi
-            if [[ -n "$tag_sha" ]]; then
-              gh release create "$RELEASE_TAG" dist/* --verify-tag --title "HYP Viewer $RELEASE_TAG" --notes-file release-notes.md
-            else
-              gh release create "$RELEASE_TAG" dist/* --target "${{ github.event.workflow_run.head_sha || github.sha }}" --title "HYP Viewer $RELEASE_TAG" --notes-file release-notes.md
-            fi
+            gh release create "$TAG" public/* --target "$SOURCE_SHA" --title "HYP Viewer $TAG" --notes-file release-notes.md
           fi
