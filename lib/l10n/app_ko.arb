@@ -827,5 +827,16 @@
   "autoWebSearchWorking": "웹사이트 검색 결과 수집 중…",
   "downloadFailedDismiss": "실패 기록 지우기",
   "downloadFailedClearAll": "전체 삭제",
-  "downloadFailedClearAllConfirm": "자동 재시도 중지된 작품의 실패 기록을 전부 지울까요? 서재·다운로드 파일·진행 중인 작업은 삭제되지 않습니다. 이후 전체 다운로드를 다시 요청하면 해당 작품도 재시도될 수 있습니다."
+  "downloadFailedClearAllConfirm": "자동 재시도 중지된 작품의 실패 기록을 전부 지울까요? 서재·다운로드 파일·진행 중인 작업은 삭제되지 않습니다. 이후 전체 다운로드를 다시 요청하면 해당 작품도 재시도될 수 있습니다.",
+  "webAdBlockTitle": "웹 검색 광고 차단",
+  "webAdBlockOff": "끄기",
+  "webAdBlockStandard": "표준",
+  "webAdBlockStrong": "강력",
+  "webAdBlockPause": "이 페이지에서 광고 차단 일시 해제",
+  "webAdBlockResume": "광고 차단 다시 켜기",
+  "downloadRetryAll": "전체 재시도",
+  "downloadRetryAllConfirm": "실패한 작품을 모두 다운로드 대기열에 추가할까요? 이미 저장된 작품은 건너뜁니다.",
+  "downloadFailedCollapse": "실패 목록 접기",
+  "downloadFailedExpand": "실패 목록 펼치기",
+  "downloadConcurrentTitle": "동시 다운로드"
 }

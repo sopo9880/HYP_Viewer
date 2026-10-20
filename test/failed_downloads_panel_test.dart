@@ -33,6 +33,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const Key('toggle-failed-downloads')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('failed-download-3538281')), findsOneWidget);
     expect(find.byKey(const Key('failed-download-2711759')), findsOneWidget);
     await tester.tap(find.byKey(const Key('retry-failed-3538281')));
@@ -71,6 +73,9 @@ void main() {
         ),
       ))),
     ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('failed-download-3538281')), findsNothing);
+    await tester.tap(find.byKey(const Key('toggle-failed-downloads')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('failed-download-3538281')), findsOneWidget);
 

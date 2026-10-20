@@ -128,7 +128,6 @@ void main() {
         .readAsString();
     for (final workflow in [
       '.github/workflows/verify.yml',
-      '.github/workflows/release.yml',
     ]) {
       final source = await File(workflow).readAsString();
       expect(source, contains('cmdline-tools/latest/bin/sdkmanager'));

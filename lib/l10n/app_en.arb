@@ -827,5 +827,16 @@
   "autoWebSearchWorking": "Collecting public website search results…",
   "downloadFailedDismiss": "Dismiss failure record",
   "downloadFailedClearAll": "Clear all",
-  "downloadFailedClearAllConfirm": "Clear all stopped-download failure records? Library entries, downloaded files and active jobs are preserved. A future bulk download request may retry these works."
+  "downloadFailedClearAllConfirm": "Clear all stopped-download failure records? Library entries, downloaded files and active jobs are preserved. A future bulk download request may retry these works.",
+  "webAdBlockTitle": "Block ads in web search",
+  "webAdBlockOff": "Off",
+  "webAdBlockStandard": "Standard",
+  "webAdBlockStrong": "Strong",
+  "webAdBlockPause": "Pause ad blocking for this page",
+  "webAdBlockResume": "Resume ad blocking",
+  "downloadRetryAll": "Retry all",
+  "downloadRetryAllConfirm": "Queue all failed works for download? Saved works will be skipped.",
+  "downloadFailedCollapse": "Collapse failed downloads",
+  "downloadFailedExpand": "Expand failed downloads",
+  "downloadConcurrentTitle": "Parallel downloads"
 }

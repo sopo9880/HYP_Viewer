@@ -147,6 +147,7 @@ class HypDashboard extends StatefulWidget {
   final int queuedDownloadCount;
   final Map<String, FailedDownload> failedDownloads;
   final Future<void> Function(String workId)? onRetryFailedDownload;
+  final Future<void> Function()? onRetryAllFailedDownloads;
   final Future<void> Function(String workId)? onDismissFailedDownload;
   final Future<void> Function()? onClearFailedDownloads;
   final Future<void> Function(WorkEntry) onDownloadJsonSource;
@@ -254,6 +255,7 @@ class HypDashboard extends StatefulWidget {
     required this.queuedDownloadCount,
     this.failedDownloads = const {},
     this.onRetryFailedDownload,
+    this.onRetryAllFailedDownloads,
     this.onDismissFailedDownload,
     this.onClearFailedDownloads,
     required this.onDownloadJsonSource,
@@ -1426,7 +1428,8 @@ class _HypDashboardState extends State<HypDashboard> {
       isMounted: () => mounted,
       openRoute: () => Navigator.of(context)
           .push<List<HitomiWebGallery>>(MaterialPageRoute(
-        builder: (_) => HitomiWebSearchPage(query: query),
+        builder: (_) => HitomiWebSearchPage(query: query,
+            adBlockMode: widget.readerSettings.webSearchAdBlockMode),
       )),
     );
     if (!mounted || epoch != _searchEpoch ||
@@ -1467,6 +1470,7 @@ class _HypDashboardState extends State<HypDashboard> {
         ),
       if (_autoWebQuery.isNotEmpty)
         AutoHitomiWebSearch(
+          adBlockMode: widget.readerSettings.webSearchAdBlockMode,
           key: ValueKey('auto-web-' + _autoWebQuery),
           query: _autoWebQuery,
           onFinished: _autoWebSearchFinished,
@@ -3202,6 +3206,7 @@ class _HypDashboardState extends State<HypDashboard> {
         FailedDownloadsPanel(
           failedDownloads: widget.failedDownloads,
           onRetry: widget.onRetryFailedDownload,
+          onRetryAll: widget.onRetryAllFailedDownloads,
           onDismiss: widget.onDismissFailedDownload,
           onClearAll: widget.onClearFailedDownloads,
         ),
@@ -3871,6 +3876,30 @@ class _HypDashboardState extends State<HypDashboard> {
             value: widget.readerSettings.autoWebSearch,
             onChanged: (value) => widget.onSaveReaderSettings(
                 widget.readerSettings.copyWith(autoWebSearch: value)),
+          ),
+          const SizedBox(height: 8),
+          Text(AppLocalizations.of(context)!.downloadConcurrentTitle),
+          SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(value: 1, label: Text('1')),
+              ButtonSegment(value: 2, label: Text('2')),
+              ButtonSegment(value: 3, label: Text('3')),
+            ],
+            selected: {widget.readerSettings.maxConcurrentDownloads},
+            onSelectionChanged: (values) => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(maxConcurrentDownloads: values.first)),
+          ),
+          const SizedBox(height: 8),
+          Text(AppLocalizations.of(context)!.webAdBlockTitle),
+          SegmentedButton<String>(
+            segments: [
+              ButtonSegment(value: 'off', label: Text(AppLocalizations.of(context)!.webAdBlockOff)),
+              ButtonSegment(value: 'standard', label: Text(AppLocalizations.of(context)!.webAdBlockStandard)),
+              ButtonSegment(value: 'strong', label: Text(AppLocalizations.of(context)!.webAdBlockStrong)),
+            ],
+            selected: {widget.readerSettings.webSearchAdBlockMode},
+            onSelectionChanged: (mode) => widget.onSaveReaderSettings(
+              widget.readerSettings.copyWith(webSearchAdBlockMode: mode.first)),
           ),
           const SizedBox(height: 8),
           HypText('기본 웹 리더 (주소 고정)',

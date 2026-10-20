@@ -19,6 +19,10 @@ class ReaderSettings {
   final bool showWebReaderAction;
   /// Opt-out setting: automatically capture public website gallery results.
   final bool autoWebSearch;
+  /// Web search WebView only: off, standard, strong.
+  final String webSearchAdBlockMode;
+  /// Number of simultaneous gallery downloads, 1..3.
+  final int maxConcurrentDownloads;
   final bool showOrientationAction;
   final int preloadPages; // -1: whole gallery to bounded disk cache
   final bool tapNavigation;
@@ -61,6 +65,8 @@ class ReaderSettings {
     this.showPageControlsAction = true,
     this.showWebReaderAction = true,
     this.autoWebSearch = true,
+    this.webSearchAdBlockMode = 'standard',
+    this.maxConcurrentDownloads = 2,
     this.showOrientationAction = true,
     this.preloadPages = -1,
     this.tapNavigation = true,
@@ -103,6 +109,8 @@ class ReaderSettings {
     bool? showPageControlsAction,
     bool? showWebReaderAction,
     bool? autoWebSearch,
+    String? webSearchAdBlockMode,
+    int? maxConcurrentDownloads,
     bool? showOrientationAction,
     int? preloadPages,
     bool? tapNavigation,
@@ -141,6 +149,8 @@ class ReaderSettings {
     showPageControlsAction: showPageControlsAction ?? this.showPageControlsAction,
     showWebReaderAction: showWebReaderAction ?? this.showWebReaderAction,
     autoWebSearch: autoWebSearch ?? this.autoWebSearch,
+    webSearchAdBlockMode: webSearchAdBlockMode ?? this.webSearchAdBlockMode,
+    maxConcurrentDownloads: maxConcurrentDownloads ?? this.maxConcurrentDownloads,
     showOrientationAction: showOrientationAction ?? this.showOrientationAction,
     preloadPages: preloadPages ?? this.preloadPages,
     tapNavigation: tapNavigation ?? this.tapNavigation,
@@ -181,6 +191,8 @@ class ReaderSettings {
     'showPageControlsAction': showPageControlsAction,
     'showWebReaderAction': showWebReaderAction,
     'autoWebSearch': autoWebSearch,
+    'webSearchAdBlockMode': webSearchAdBlockMode,
+    'maxConcurrentDownloads': maxConcurrentDownloads,
     'showOrientationAction': showOrientationAction,
     'preloadPages': preloadPages,
     'tapNavigation': tapNavigation,
@@ -224,6 +236,8 @@ class ReaderSettings {
         showPageControlsAction: data['showPageControlsAction'] != false,
         showWebReaderAction: data['showWebReaderAction'] != false,
         autoWebSearch: data['autoWebSearch'] != false,
+        webSearchAdBlockMode: const {'off', 'standard', 'strong'}.contains(data['webSearchAdBlockMode']) ? data['webSearchAdBlockMode'] as String : 'standard',
+        maxConcurrentDownloads: data['maxConcurrentDownloads'] is int && const {1, 2, 3}.contains(data['maxConcurrentDownloads']) ? data['maxConcurrentDownloads'] as int : 2,
         showOrientationAction: data['showOrientationAction'] != false,
         startupUpdatePrompt: data['startupUpdatePrompt'] != false,
         snoozedUpdateVersion: data['snoozedUpdateVersion'] is String && (data['snoozedUpdateVersion'] as String).length <= 40 ? data['snoozedUpdateVersion'] as String : '',
