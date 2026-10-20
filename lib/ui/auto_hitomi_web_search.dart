@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../core/hitomi_web_search.dart';
+import '../core/web_search_ad_block.dart';
 
 /// One-shot, bounded public website search. It is created only after the
 /// user stops typing; no browser runs while search is empty or disabled.
@@ -12,11 +13,13 @@ import '../core/hitomi_web_search.dart';
 /// Login/cookies are never exported and there is no off-site navigation.
 class AutoHitomiWebSearch extends StatefulWidget {
   final String query;
+  final String adBlockMode;
   final void Function(String query, List<HitomiWebGallery> results,
       String? failure) onFinished;
 
   const AutoHitomiWebSearch({
     super.key, required this.query, required this.onFinished,
+    this.adBlockMode = 'standard',
   });
 
   @override
@@ -104,6 +107,7 @@ class _AutoHitomiWebSearchState extends State<AutoHitomiWebSearch> {
         ),
         initialSettings: InAppWebViewSettings(
           javaScriptEnabled: true, useShouldOverrideUrlLoading: true,
+          contentBlockers: WebSearchAdBlock.contentBlockers(widget.adBlockMode),
         ),
         onWebViewCreated: (controller) => _controller = controller,
         shouldOverrideUrlLoading: (controller, action) async {
