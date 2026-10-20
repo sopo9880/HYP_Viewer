@@ -96,23 +96,22 @@ void main() {
 
       final zoom = find.byKey(const Key('reader-pinch-zoom'));
       expect(zoom, findsOneWidget, reason: mode);
-      final view = tester.widget<InteractiveViewer>(zoom);
-      final transform = view.transformationController!;
+      Matrix4 transform() => tester.widget<Transform>(zoom).transform;
       final rect = tester.getRect(zoom);
 
       await _pinchOut(tester, rect);
-      expect(transform.value.getMaxScaleOnAxis(), greaterThan(1.05),
+      expect(transform().getMaxScaleOnAxis(), greaterThan(1.05),
           reason: '$mode must zoom with two fingers');
       expect(changed, isEmpty, reason: '$mode must not turn a page during pinch');
 
-      final enlarged = transform.value.getMaxScaleOnAxis();
+      final enlarged = transform().getMaxScaleOnAxis();
       await _pinchIn(tester, rect);
-      expect(transform.value.getMaxScaleOnAxis(), lessThan(enlarged),
+      expect(transform().getMaxScaleOnAxis(), lessThan(enlarged),
           reason: '$mode must shrink with two fingers');
       await _doubleTap(tester, rect.center);
-      expect(transform.value.getMaxScaleOnAxis(), closeTo(1, 0.001),
+      expect(transform().getMaxScaleOnAxis(), closeTo(1, 0.001),
           reason: '$mode double tap resets zoom');
-      expect(transform.value.getTranslation().length, lessThan(0.001),
+      expect(transform().getTranslation().length, lessThan(0.001),
           reason: '$mode double tap resets pan');
       expect(changed, isEmpty);
     }
