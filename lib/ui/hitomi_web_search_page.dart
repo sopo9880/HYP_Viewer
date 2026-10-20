@@ -75,7 +75,6 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
             await _web?.setSettings(settings: InAppWebViewSettings(
               javaScriptEnabled: true,
               useShouldOverrideUrlLoading: true,
-                   contentBlockers: WebSearchAdBlock.contentBlockers(widget.adBlockMode),
               contentBlockers: WebSearchAdBlock.contentBlockers(
                   _adsTemporarilyOff ? 'off' : widget.adBlockMode),
             ));
@@ -98,6 +97,7 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
                 initialSettings: InAppWebViewSettings(
                   javaScriptEnabled: true,
                   useShouldOverrideUrlLoading: true,
+                  contentBlockers: WebSearchAdBlock.contentBlockers(widget.adBlockMode),
                 ),
                 onWebViewCreated: (controller) => _web = controller,
                 shouldOverrideUrlLoading: (controller, action) async {
