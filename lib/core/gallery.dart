@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'gallery_download_limits.dart';
+
 /// A shared page interface for local archives and authorized online galleries.
 abstract class GalleryPageSource {
   int get pageCount;
@@ -14,9 +16,13 @@ abstract class GalleryPageSource {
 /// A local, user-selected CBZ/ZIP gallery. No archive entry is extracted to
 /// the filesystem, avoiding ZIP path traversal and other path overwrite bugs.
 class GalleryArchive implements GalleryPageSource {
-  static const int maxCompressedBytes = 180 * 1024 * 1024;
-  static const int maxUncompressedBytes = 750 * 1024 * 1024;
-  static const int maxSingleImageBytes = 35 * 1024 * 1024;
+  // Absolute safety boundaries, NOT the user-configured download limits.
+  static const int maxCompressedBytes =
+      GalleryDownloadLimits.hardArchiveMiB * GalleryDownloadLimits.mib;
+  static const int maxUncompressedBytes =
+      GalleryDownloadLimits.hardUncompressedMiB * GalleryDownloadLimits.mib;
+  static const int maxSingleImageBytes =
+      GalleryDownloadLimits.hardImageMiB * GalleryDownloadLimits.mib;
   static const int maxPages = 1500;
 
   final List<ArchiveFile> _pages;
@@ -26,7 +32,7 @@ class GalleryArchive implements GalleryPageSource {
 
   static GalleryArchive decode(Uint8List bytes) {
     if (bytes.isEmpty || bytes.length > maxCompressedBytes) {
-      throw const FormatException('압축 파일 크기는 최대 180MB까지 지원해.');
+      throw const FormatException('압축 파일 크기는 안전 상한(1GiB)을 초과했어.');
     }
     final decoded = ZipDecoder().decodeBytes(bytes);
     final pages = decoded
@@ -45,7 +51,7 @@ class GalleryArchive implements GalleryPageSource {
     var total = 0;
     for (final page in pages) {
       if (page.size < 1 || page.size > maxSingleImageBytes) {
-        throw const FormatException('이미지 한 장은 최대 35MB까지 지원해.');
+        throw const FormatException('이미지 한 장은 안전 상한(128MiB)을 초과했어.');
       }
       total += page.size;
       if (total > maxUncompressedBytes) {
@@ -145,7 +151,7 @@ class GalleryStore {
       throw const FileSystemException('선택한 파일을 찾지 못했어.');
     }
     if (await src.length() > GalleryArchive.maxCompressedBytes) {
-      throw const FormatException('파일이 180MB를 초과했어.');
+      throw const FormatException('파일이 안전 상한(1GiB)을 초과했어.');
     }
     final bytes = await src.readAsBytes();
     final archive = GalleryArchive.decode(bytes); // Validate BEFORE replacing.
