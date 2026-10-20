@@ -1,12 +1,12 @@
 name: Publish HYP Viewer 0.x Releases
 
-# Releases begin only when the reviewed release-request file changes on main.
-# A manual re-run on that same commit may later attach a permanently signed APK.
+# Publish only after the exact main-branch signed CI run succeeds.
+# Manual replay reuses artifacts; neither path recompiles an APK or installer.
 on:
-  push:
+  workflow_run:
+    workflows: ["Build and verify"]
+    types: [completed]
     branches: [main]
-    paths:
-      - .github/release-request.txt
   workflow_dispatch:
 
 permissions:
@@ -19,6 +19,7 @@ concurrency:
 jobs:
   preflight:
     name: Enforce 0.x version and check Android signing
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.version.outputs.tag }}
@@ -26,6 +27,8 @@ jobs:
       android_ready: ${{ steps.signing.outputs.ready }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - name: Validate the release request and pubspec
         id: version
         run: python3 scripts/check_release_version.py
@@ -56,6 +59,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - name: Locate successful main CI for the exact source commit
         id: lookup
         env:
@@ -63,7 +68,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/verify.yml/runs?head_sha=$GITHUB_SHA&event=push&status=success&per_page=30" --jq '.workflow_runs[] | select(.head_sha == env.GITHUB_SHA and .head_branch == "main" and .conclusion == "success") | .id' | head -n 1)
+          source_sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+          run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/verify.yml/runs?head_sha=$source_sha&event=push&status=success&per_page=30" --jq '.workflow_runs[] | select(.head_branch == "main" and .conclusion == "success") | .id' | head -n 1)
           if [[ -z "$run_id" ]]; then
             echo "::error::No successful CI for exact commit $GITHUB_SHA; release refused."
             exit 1
@@ -71,13 +77,13 @@ jobs:
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
-          name: release-windows-${{ github.sha }}
+          name: release-windows-${{ github.event.workflow_run.head_sha || github.sha }}
           run-id: ${{ steps.lookup.outputs.run_id }}
           github-token: ${{ github.token }}
           path: dist/windows
       - uses: actions/download-artifact@v4
         with:
-          name: release-android-${{ github.sha }}
+          name: release-android-${{ github.event.workflow_run.head_sha || github.sha }}
           run-id: ${{ steps.lookup.outputs.run_id }}
           github-token: ${{ github.token }}
           path: dist/android
@@ -85,18 +91,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(cat dist/windows/COMMIT_SHA.txt)" = "$GITHUB_SHA"
-          test "$(cat dist/android/COMMIT_SHA.txt)" = "$GITHUB_SHA"
+          test "$(cat dist/windows/COMMIT_SHA.txt)" = "${{ github.event.workflow_run.head_sha || github.sha }}"
+          test "$(cat dist/android/COMMIT_SHA.txt)" = "${{ github.event.workflow_run.head_sha || github.sha }}"
           (cd dist/windows && sha256sum -c SHA256SUMS.txt)
           (cd dist/android && sha256sum -c SHA256SUMS.txt)
           mkdir -p final
           cp dist/windows/*.exe final/
           cp dist/android/*.apk final/HYP_Viewer_${{ needs.preflight.outputs.tag }}.apk
           (cd final && sha256sum *.exe *.apk > SHA256SUMS.txt)
-          printf '%s\n' "$GITHUB_SHA" > final/COMMIT_SHA.txt
+          printf '%s\n' '${{ github.event.workflow_run.head_sha || github.sha }}' > final/COMMIT_SHA.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: exact-ci-release-${{ github.sha }}
+          name: exact-ci-release-${{ github.event.workflow_run.head_sha || github.sha }}
           path: final/
           if-no-files-found: error
 
@@ -109,6 +115,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/download-artifact@v4
         with:
           name: exact-ci-release-${{ github.sha }}
@@ -120,7 +128,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(cat dist/COMMIT_SHA.txt)" = "$GITHUB_SHA"
+          test "$(cat dist/COMMIT_SHA.txt)" = "${{ github.event.workflow_run.head_sha || github.sha }}"
           (cd dist && sha256sum -c SHA256SUMS.txt)
           if [[ "$ANDROID_READY" == "true" ]]; then
             ANDROID_NOTE="Permanently signed APK included."
@@ -621,20 +629,20 @@ jobs:
           # matches cannot be mistaken for the intended release.
           tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_TAG" --jq ".[] | select(.ref == \"refs/tags/$RELEASE_TAG\") | .object.sha")
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+            if [[ "$tag_sha" != "${{ github.event.workflow_run.head_sha || github.sha }}" ]]; then
               echo "::error::The existing tag targets a different commit. Refusing to overwrite."
               exit 1
             fi
             echo '::error::Release already exists; refusing to overwrite immutable assets.'; exit 1
             gh release edit "$RELEASE_TAG" --notes-file release-notes.md
           else
-            if [[ -n "$tag_sha" && "$tag_sha" != "$GITHUB_SHA" ]]; then
+            if [[ -n "$tag_sha" && "$tag_sha" != "${{ github.event.workflow_run.head_sha || github.sha }}" ]]; then
               echo "::error::Tag exists at a different commit."
               exit 1
             fi
             if [[ -n "$tag_sha" ]]; then
               gh release create "$RELEASE_TAG" dist/* --verify-tag --title "HYP Viewer $RELEASE_TAG" --notes-file release-notes.md
             else
-              gh release create "$RELEASE_TAG" dist/* --target "$GITHUB_SHA" --title "HYP Viewer $RELEASE_TAG" --notes-file release-notes.md
+              gh release create "$RELEASE_TAG" dist/* --target "${{ github.event.workflow_run.head_sha || github.sha }}" --title "HYP Viewer $RELEASE_TAG" --notes-file release-notes.md
             fi
           fi
