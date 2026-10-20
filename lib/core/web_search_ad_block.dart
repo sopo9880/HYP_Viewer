@@ -45,8 +45,8 @@ class WebSearchAdBlock {
       for (final domain in domains)
         ContentBlocker(
           trigger: ContentBlockerTrigger(
-            urlFilter: r'^https?://([a-z0-9-]+\\.)*' +
-                domain.replaceAll('.', r'\\.') + r'([/:?#]|$)',
+            urlFilter: r'^https?://([a-z0-9-]+\.)*' +
+                domain.replaceAll('.', r'\.') + r'([/:?#]|$)',
           ),
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),
