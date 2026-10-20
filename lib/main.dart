@@ -2455,8 +2455,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         );
         if (picked == null || picked.files.isEmpty) return;
         final chosen = picked.files.single;
-        if (chosen.size > GalleryArchive.maxSingleImageBytes) {
-          throw const FormatException('이미지 파일은 최대 35MB까지 지원해.');
+        if (chosen.size >
+            GalleryDownloadLimits.defaultImageMiB * GalleryDownloadLimits.mib) {
+          throw const FormatException('이미지 파일은 최대 35MiB까지 지원해.');
         }
         final bytes = chosen.bytes ??
             (chosen.path != null ? await File(chosen.path!).readAsBytes() : null);
