@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+import 'gallery_download_limits.dart';
+
 /// When set to 'left', swipe/turn to the left to advance the book.
 /// 'right' reverses the swipe direction for right-to-left reading.
 class ReaderSettings {
@@ -23,6 +25,10 @@ class ReaderSettings {
   final String webSearchAdBlockMode;
   /// Number of simultaneous gallery downloads, 1..3.
   final int maxConcurrentDownloads;
+  /// Soft limits for downloaded (not in-memory decoded) page images / CBZ.
+  final int downloadImageLimitMiB;
+  final int downloadTotalLimitMiB;
+  final int downloadArchiveLimitMiB;
   final bool showOrientationAction;
   final int preloadPages; // -1: whole gallery to bounded disk cache
   final bool tapNavigation;
@@ -67,6 +73,9 @@ class ReaderSettings {
     this.autoWebSearch = true,
     this.webSearchAdBlockMode = 'standard',
     this.maxConcurrentDownloads = 2,
+    this.downloadImageLimitMiB = GalleryDownloadLimits.defaultImageMiB,
+    this.downloadTotalLimitMiB = GalleryDownloadLimits.defaultTotalMiB,
+    this.downloadArchiveLimitMiB = GalleryDownloadLimits.defaultArchiveMiB,
     this.showOrientationAction = true,
     this.preloadPages = -1,
     this.tapNavigation = true,
@@ -98,6 +107,12 @@ class ReaderSettings {
 
   bool get reverse => nextDirection == 'right';
 
+  GalleryDownloadLimits get downloadLimits => GalleryDownloadLimits(
+    imageMiB: downloadImageLimitMiB,
+    totalMiB: downloadTotalLimitMiB,
+    archiveMiB: downloadArchiveLimitMiB,
+  ).validated;
+
   ReaderSettings copyWith({
     String? nextDirection,
     bool? twoPageSpread,
@@ -111,6 +126,9 @@ class ReaderSettings {
     bool? autoWebSearch,
     String? webSearchAdBlockMode,
     int? maxConcurrentDownloads,
+    int? downloadImageLimitMiB,
+    int? downloadTotalLimitMiB,
+    int? downloadArchiveLimitMiB,
     bool? showOrientationAction,
     int? preloadPages,
     bool? tapNavigation,
@@ -151,6 +169,18 @@ class ReaderSettings {
     autoWebSearch: autoWebSearch ?? this.autoWebSearch,
     webSearchAdBlockMode: webSearchAdBlockMode ?? this.webSearchAdBlockMode,
     maxConcurrentDownloads: maxConcurrentDownloads ?? this.maxConcurrentDownloads,
+    downloadImageLimitMiB: GalleryDownloadLimits.sanitizeMiB(
+      downloadImageLimitMiB ?? this.downloadImageLimitMiB,
+      GalleryDownloadLimits.defaultImageMiB,
+      GalleryDownloadLimits.hardImageMiB),
+    downloadTotalLimitMiB: GalleryDownloadLimits.sanitizeMiB(
+      downloadTotalLimitMiB ?? this.downloadTotalLimitMiB,
+      GalleryDownloadLimits.defaultTotalMiB,
+      GalleryDownloadLimits.hardTotalMiB),
+    downloadArchiveLimitMiB: GalleryDownloadLimits.sanitizeMiB(
+      downloadArchiveLimitMiB ?? this.downloadArchiveLimitMiB,
+      GalleryDownloadLimits.defaultArchiveMiB,
+      GalleryDownloadLimits.hardArchiveMiB),
     showOrientationAction: showOrientationAction ?? this.showOrientationAction,
     preloadPages: preloadPages ?? this.preloadPages,
     tapNavigation: tapNavigation ?? this.tapNavigation,
@@ -193,6 +223,9 @@ class ReaderSettings {
     'autoWebSearch': autoWebSearch,
     'webSearchAdBlockMode': webSearchAdBlockMode,
     'maxConcurrentDownloads': maxConcurrentDownloads,
+    'downloadImageLimitMiB': downloadImageLimitMiB,
+    'downloadTotalLimitMiB': downloadTotalLimitMiB,
+    'downloadArchiveLimitMiB': downloadArchiveLimitMiB,
     'showOrientationAction': showOrientationAction,
     'preloadPages': preloadPages,
     'tapNavigation': tapNavigation,
@@ -238,6 +271,15 @@ class ReaderSettings {
         autoWebSearch: data['autoWebSearch'] != false,
         webSearchAdBlockMode: const {'off', 'standard', 'strong'}.contains(data['webSearchAdBlockMode']) ? data['webSearchAdBlockMode'] as String : 'standard',
         maxConcurrentDownloads: data['maxConcurrentDownloads'] is int && const {1, 2, 3}.contains(data['maxConcurrentDownloads']) ? data['maxConcurrentDownloads'] as int : 2,
+        downloadImageLimitMiB: GalleryDownloadLimits.sanitizeMiB(
+          data['downloadImageLimitMiB'], GalleryDownloadLimits.defaultImageMiB,
+          GalleryDownloadLimits.hardImageMiB),
+        downloadTotalLimitMiB: GalleryDownloadLimits.sanitizeMiB(
+          data['downloadTotalLimitMiB'], GalleryDownloadLimits.defaultTotalMiB,
+          GalleryDownloadLimits.hardTotalMiB),
+        downloadArchiveLimitMiB: GalleryDownloadLimits.sanitizeMiB(
+          data['downloadArchiveLimitMiB'], GalleryDownloadLimits.defaultArchiveMiB,
+          GalleryDownloadLimits.hardArchiveMiB),
         showOrientationAction: data['showOrientationAction'] != false,
         startupUpdatePrompt: data['startupUpdatePrompt'] != false,
         snoozedUpdateVersion: data['snoozedUpdateVersion'] is String && (data['snoozedUpdateVersion'] as String).length <= 40 ? data['snoozedUpdateVersion'] as String : '',
