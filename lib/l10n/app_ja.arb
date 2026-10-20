@@ -827,5 +827,16 @@
   "autoWebSearchWorking": "Webサイトから検索結果を収集中…",
   "downloadFailedDismiss": "失敗記録を消す",
   "downloadFailedClearAll": "すべて削除",
-  "downloadFailedClearAllConfirm": "自動再試行を停止した作品の失敗記録をすべて削除しますか？本棚・保存済みファイル・進行中の作業は削除されません。後で一括ダウンロードを行うと再試行される場合があります。"
+  "downloadFailedClearAllConfirm": "自動再試行を停止した作品の失敗記録をすべて削除しますか？本棚・保存済みファイル・進行中の作業は削除されません。後で一括ダウンロードを行うと再試行される場合があります。",
+  "webAdBlockTitle": "Web検索の広告ブロック",
+  "webAdBlockOff": "オフ",
+  "webAdBlockStandard": "標準",
+  "webAdBlockStrong": "強力",
+  "webAdBlockPause": "このページの広告ブロックを一時停止",
+  "webAdBlockResume": "広告ブロックを再開",
+  "downloadRetryAll": "すべて再試行",
+  "downloadRetryAllConfirm": "失敗した作品をすべてダウンロード待機列に追加しますか？保存済みの作品はスキップします。",
+  "downloadFailedCollapse": "失敗一覧を閉じる",
+  "downloadFailedExpand": "失敗一覧を開く",
+  "downloadConcurrentTitle": "同時ダウンロード"
 }
