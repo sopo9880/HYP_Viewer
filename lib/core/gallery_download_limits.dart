@@ -79,7 +79,7 @@ class GallerySizeLimitException extends FormatException {
       );
 
   static String _describe(int bytes) =>
-      (bytes / mib).toStringAsFixed(0) + 'MiB';
+      (bytes / GalleryDownloadLimits.mib).toStringAsFixed(0) + 'MiB';
 
   /// Legacy 0.4.22 records used DOWNLOAD_FAILED for several FormatExceptions.
   /// Manual user retries may opt in for that code; automatic ones never do.
