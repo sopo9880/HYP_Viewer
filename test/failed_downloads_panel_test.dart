@@ -74,6 +74,9 @@ void main() {
       ))),
     ));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('failed-download-3538281')), findsNothing);
+    await tester.tap(find.byKey(const Key('toggle-failed-downloads')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('failed-download-3538281')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('clear-all-failed-downloads')));
