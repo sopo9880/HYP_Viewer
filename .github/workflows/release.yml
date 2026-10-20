@@ -71,7 +71,7 @@ jobs:
           source_sha="${{ github.event.workflow_run.head_sha || github.sha }}"
           run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/verify.yml/runs?head_sha=$source_sha&event=push&status=success&per_page=30" --jq '.workflow_runs[] | select(.head_branch == "main" and .conclusion == "success") | .id' | head -n 1)
           if [[ -z "$run_id" ]]; then
-            echo "::error::No successful CI for exact commit $GITHUB_SHA; release refused."
+            echo "::error::No successful CI for exact source commit $source_sha; release refused."
             exit 1
           fi
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
@@ -119,7 +119,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/download-artifact@v4
         with:
-          name: exact-ci-release-${{ github.sha }}
+          name: exact-ci-release-${{ github.event.workflow_run.head_sha || github.sha }}
           path: dist
       - name: Verify CI checksums and prepare release notes
         env:
@@ -634,7 +634,6 @@ jobs:
               exit 1
             fi
             echo '::error::Release already exists; refusing to overwrite immutable assets.'; exit 1
-            gh release edit "$RELEASE_TAG" --notes-file release-notes.md
           else
             if [[ -n "$tag_sha" && "$tag_sha" != "${{ github.event.workflow_run.head_sha || github.sha }}" ]]; then
               echo "::error::Tag exists at a different commit."
