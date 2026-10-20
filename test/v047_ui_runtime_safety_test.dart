@@ -36,15 +36,21 @@ void main() {
     expect(SocialWebCapture.observerJavascript, isNot(contains('document.cookie')));
   });
 
-  test('single-instance launch guard applied in Windows CI and release', () {
+  test('single-instance guard is built in CI and reused for release', () {
     const script = 'scripts/patch_windows_single_instance.py';
     expect(File(script).existsSync(), isTrue);
-    expect(File(script).readAsStringSync(),
-      contains('CreateMutexW'));
-    for (final path in [
-      '.github/workflows/verify.yml', '.github/workflows/release.yml',
-    ]) {
-      expect(File(path).readAsStringSync(), contains(script));
-    }
+    expect(File(script).readAsStringSync(), contains('CreateMutexW'));
+
+    // Release does not rebuild the Windows executable: it retrieves and
+    // verifies the exact CI-generated installer, which already has the guard.
+    final ci = File('.github/workflows/verify.yml').readAsStringSync();
+    final release = File('.github/workflows/release.yml').readAsStringSync();
+    expect(ci, contains(script));
+    expect(ci, contains('release-windows-'));
+    expect(release, contains('release-windows-'));
+    expect(release, contains('actions/download-artifact@v4'));
+    expect(release, isNot(contains('flutter build windows')));
+    expect(release, isNot(contains('flutter build apk')));
+    expect(release, contains('sha256sum -c SHA256SUMS.txt'));
   });
 }
