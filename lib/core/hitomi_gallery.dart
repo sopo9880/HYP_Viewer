@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'gallery.dart';
+import 'gallery_download_limits.dart';
 import 'online_gallery.dart';
 
 /// In-app reader for public galleries.
@@ -42,23 +43,31 @@ class HitomiGallery implements GalleryPageSource {
   }
 
   @override
-  Future<Uint8List> loadPage(int index) async {
+  Future<Uint8List> loadPage(int index) =>
+      loadPageWithLimit(index,
+          GalleryDownloadLimits.defaultImageMiB * GalleryDownloadLimits.mib);
+
+  /// Downloads may use per-work approved limits; ordinary online reading
+  /// keeps its original conservative default.
+  Future<Uint8List> loadPageWithLimit(int index, int maxBytes) async {
     if (index < 0 || index >= pageUrls.length) {
       throw RangeError.index(index, pageUrls);
     }
     final original = pageUrls[index];
     if (dataSaver && index < thumbnailUrls.length) {
       try {
-        return await _loadAllowed(thumbnailUrls[index], page: index + 1);
+        return await _loadAllowed(thumbnailUrls[index],
+            page: index + 1, maxBytes: maxBytes);
       } catch (_) {
         // A missing/blocked thumbnail never makes the book unreadable.
         // Retry the actual image with the same bounded request policy.
       }
     }
-    return _loadAllowed(original, page: index + 1);
+    return _loadAllowed(original, page: index + 1, maxBytes: maxBytes);
   }
 
-  Future<Uint8List> _loadAllowed(Uri url, {required int page}) async {
+  Future<Uint8List> _loadAllowed(Uri url,
+      {required int page, required int maxBytes}) async {
     final origin = RegExp(r'^w[12]\.gold-usergeneratedcontent\.net$')
         .hasMatch(url.host);
     final thumbnail = RegExp(r'^[ab]tn\.gold-usergeneratedcontent\.net$')
@@ -70,7 +79,7 @@ class HitomiGallery implements GalleryPageSource {
     }
     try {
       return await BoundedWebImages.load(_client, url,
-        maxBytes: GalleryArchive.maxSingleImageBytes,
+        maxBytes: maxBytes,
         headers: const {'Referer': 'https://hitomi.la/'});
     } catch (error) {
       throw OnlineReaderFailure.classify(error,
