@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../core/hitomi_web_search.dart';
 import '../core/web_search_ad_block.dart';
+import '../core/web_search_ad_rule_store.dart';
 import '../l10n/app_localizations.dart';
 
 /// User-controlled Hitomi search browser. Only gallery links from the
@@ -27,6 +30,24 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
   bool _busy = false;
   bool _adsTemporarilyOff = false;
   String? _error;
+  String? _currentUrl;
+  final ValueNotifier<int> _blockedCount = ValueNotifier(0);
+  bool get _adBlockingEnabled =>
+      widget.adBlockMode != 'off' && !_adsTemporarilyOff;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.adBlockMode != 'off') {
+      WebSearchAdRuleStore.instance.ensureStarted();
+    }
+  }
+
+  @override
+  void dispose() {
+    _blockedCount.dispose();
+    super.dispose();
+  }
 
   Future<void> _collect() async {
     final web = _web;
@@ -66,19 +87,31 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
     final browserSupported = Platform.isWindows || Platform.isAndroid;
     return Scaffold(
       appBar: AppBar(title: Text(labels.webSearchTitle), actions: [
+        ValueListenableBuilder<int>(
+          valueListenable: _blockedCount,
+          builder: (context, count, child) => Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Text('${labels.webAdBlockBlockedLabel} $count',
+                  style: Theme.of(context).textTheme.labelSmall),
+            ),
+          ),
+        ),
         IconButton(
           key: const Key('web-search-toggle-adblock'),
-          tooltip: _adsTemporarilyOff ? labels.webAdBlockResume : labels.webAdBlockPause,
-          icon: Icon(_adsTemporarilyOff ? Icons.shield_outlined : Icons.shield),
-          onPressed: () async {
-            setState(() => _adsTemporarilyOff = !_adsTemporarilyOff);
-            await _web?.setSettings(settings: InAppWebViewSettings(
-              javaScriptEnabled: true,
-              useShouldOverrideUrlLoading: true,
-              contentBlockers: WebSearchAdBlock.contentBlockers(
-                  _adsTemporarilyOff ? 'off' : widget.adBlockMode),
-            ));
-            await _web?.reload();
+          tooltip: _adBlockingEnabled
+              ? labels.webAdBlockPause : labels.webAdBlockResume,
+          icon: Icon(_adBlockingEnabled ? Icons.shield : Icons.shield_outlined),
+          onPressed: widget.adBlockMode == 'off' ? null : () {
+            // Rebuild the native view so document-start script and network
+            // interception switch together, including on Windows.
+            setState(() {
+              _adsTemporarilyOff = !_adsTemporarilyOff;
+              _loaded = false;
+              _web = null;
+              _error = null;
+              _blockedCount.value = 0;
+            });
           },
         ),
       ]),
@@ -90,16 +123,44 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
         ),
         Expanded(child: browserSupported
             ? InAppWebView(
+                key: ValueKey('hitomi-ad-block-$_adBlockingEnabled'),
+                initialUserScripts: UnmodifiableListView<UserScript>(
+                  _adBlockingEnabled
+                      ? [UserScript(
+                          source: WebSearchAdBlock.cleanPageJavaScript,
+                          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START)]
+                      : <UserScript>[],
+                ),
                 initialUrlRequest: URLRequest(
-                  url: WebUri(HitomiWebSearch.searchUri(widget.query)
-                      .toString()),
+                  url: WebUri(_currentUrl ??
+                      HitomiWebSearch.searchUri(widget.query).toString()),
                 ),
                 initialSettings: InAppWebViewSettings(
                   javaScriptEnabled: true,
                   useShouldOverrideUrlLoading: true,
-                  contentBlockers: WebSearchAdBlock.contentBlockers(widget.adBlockMode),
+                  useShouldInterceptRequest: true,
+                  supportMultipleWindows: true,
+                  javaScriptCanOpenWindowsAutomatically: false,
+                  contentBlockers: WebSearchAdBlock.contentBlockers(
+                      _adBlockingEnabled ? widget.adBlockMode : 'off'),
                 ),
                 onWebViewCreated: (controller) => _web = controller,
+                shouldInterceptRequest: (controller, request) async =>
+                    WebSearchAdBlock.intercept(request,
+                        _adBlockingEnabled ? widget.adBlockMode : 'off',
+                        onBlocked: () {
+                          if (mounted) _blockedCount.value++;
+                        }),
+                onCreateWindow: (controller, action) async {
+                  final target = Uri.tryParse(
+                      action.request.url?.toString() ?? '');
+                  if (action.hasGesture == true &&
+                      HitomiWebSearch.allowedOrigin(target)) {
+                    await controller.loadUrl(urlRequest:
+                        URLRequest(url: WebUri(target.toString())));
+                  }
+                  return false;
+                },
                 shouldOverrideUrlLoading: (controller, action) async {
                   final target = Uri.tryParse(
                       action.request.url?.toString() ?? '');
@@ -112,8 +173,13 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
                 },
                 onLoadStop: (controller, url) {
                   if (mounted) setState(() => _loaded = true);
-                  if (!_adsTemporarilyOff && widget.adBlockMode != 'off') {
-                    controller.evaluateJavascript(source: WebSearchAdBlock.cleanPageJavaScript);
+                  if (HitomiWebSearch.allowedOrigin(
+                      Uri.tryParse(url?.toString() ?? ''))) {
+                    _currentUrl = url.toString();
+                  }
+                  if (_adBlockingEnabled) {
+                    unawaited(controller.evaluateJavascript(
+                        source: WebSearchAdBlock.cleanPageJavaScript));
                   }
                 },
                 onReceivedError: (controller, request, error) {
