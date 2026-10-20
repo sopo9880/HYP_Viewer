@@ -3365,9 +3365,9 @@ class _HypDashboardState extends State<HypDashboard> {
     try {
       return await showDialog<int>(
         context: context,
-        builder: (dialog) => StatefulBuilder(builder: (ctx, refresh) {
+        builder: (dialog) {
           var hasError = false;
-          return AlertDialog(
+          return StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
             title: Text(label),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
               TextField(
@@ -3403,8 +3403,8 @@ class _HypDashboardState extends State<HypDashboard> {
                 child: Text(MaterialLocalizations.of(ctx).okButtonLabel),
               ),
             ],
-          );
-        }),
+          ));
+        },
       );
     } finally {
       field.dispose();
