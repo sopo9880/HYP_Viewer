@@ -832,6 +832,7 @@
   "webAdBlockOff": "끄기",
   "webAdBlockStandard": "표준",
   "webAdBlockStrong": "강력",
+  "webAdBlockWindowsCompatibilityInfo": "Windows에서는 호환성을 위해 페이지 로딩 후 광고 요소를 숨깁니다. 네트워크 요청 차단은 적용되지 않습니다.",
   "webAdBlockPause": "이 페이지에서 광고 차단 일시 해제",
   "webAdBlockResume": "광고 차단 다시 켜기",
   "downloadRetryAll": "전체 재시도",
