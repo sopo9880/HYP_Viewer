@@ -42,7 +42,8 @@ class _AutoHitomiWebSearchState extends State<AutoHitomiWebSearch> {
   void initState() {
     super.initState();
     if (Platform.isWindows) _environment = WindowsWebSearchRuntime.environment;
-    if (widget.adBlockMode != 'off') {
+    // The Windows cosmetic-only fallback never needs network filter lists.
+    if (widget.adBlockMode != 'off' && !Platform.isWindows) {
       WebSearchAdRuleStore.instance.ensureStarted();
     }
     _timeout = Timer(const Duration(seconds: 12), () {
