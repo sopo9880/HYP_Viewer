@@ -615,26 +615,92 @@
   },
   "editionFinderLoading": "他の言語版を検索中…",
   "editionFinderProgress": "検索中 {completed}/{total}",
-  "@editionFinderProgress": {"placeholders":{"completed":{"type":"int"},"total":{"type":"int"}}},
+  "@editionFinderProgress": {
+    "placeholders": {
+      "completed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "editionFinderRetry": "再検索",
   "editionFinderLinkSelected": "選択した{count}件の言語版をまとめる",
-  "@editionFinderLinkSelected": {"placeholders":{"count":{"type":"int"}}},
+  "@editionFinderLinkSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "editionFinderSaveError": "言語版の紐付け失敗: {error}",
-  "@editionFinderSaveError": {"placeholders":{"error":{"type":"String"}}},
+  "@editionFinderSaveError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "homeRecentCountHint": "最近の{count}作品・折りたたんで非表示",
-  "@homeRecentCountHint": {"placeholders":{"count":{"type":"int"}}},
+  "@homeRecentCountHint": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "downloadsStoredCount": "端末に保存した作品: {count}件",
-  "@downloadsStoredCount": {"placeholders":{"count":{"type":"int"}}},
+  "@downloadsStoredCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "workCardCreator": "作者: {creator}",
-  "@workCardCreator": {"placeholders":{"creator":{"type":"String"}}},
+  "@workCardCreator": {
+    "placeholders": {
+      "creator": {
+        "type": "String"
+      }
+    }
+  },
   "workCardNumber": "番号: {id}",
-  "@workCardNumber": {"placeholders":{"id":{"type":"String"}}},
+  "@workCardNumber": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "workCardUntitled": "作品 {id}",
-  "@workCardUntitled": {"placeholders":{"id":{"type":"String"}}},
+  "@workCardUntitled": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "workCardPageStart": "{page}ページから",
-  "@workCardPageStart": {"placeholders":{"page":{"type":"int"}}},
+  "@workCardPageStart": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
   "workCardPageProgress": "{page}ページから・{percent}%",
-  "@workCardPageProgress": {"placeholders":{"page":{"type":"int"},"percent":{"type":"int"}}},
+  "@workCardPageProgress": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
   "workCardComplete": "読了・100%",
   "dpiSettingsTitle": "Windowsネットワーク互換 (GoodbyeDPI)",
   "dpiEnable": "内蔵GoodbyeDPIを使用",
@@ -657,14 +723,26 @@
   "webSearchCollect": "このページを収集",
   "webSearchApply": "アプリの検索結果に追加",
   "webSearchCollected": "ウェブで{count}作品を収集",
-  "@webSearchCollected": {"placeholders":{"count":{"type":"int"}}},
+  "@webSearchCollected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "webSearchNoLinks": "この画面に作品リンクがありません。読み込み後またはスクロール後に再試行してください。",
   "webSearchCaptureFailed": "このページの作品リンクを収集できませんでした。",
   "webSearchLoadFailed": "ウェブ検索ページを読み込めませんでした。",
   "webSearchSourceLabel": "ウェブから収集",
   "webSearchUnsupported": "この端末ではアプリ内ウェブ検索を利用できません。",
   "webSearchImported": "ウェブ検索から取り込んだ{count}作品を含む",
-  "@webSearchImported": {"placeholders":{"count":{"type":"int"}}},
+  "@webSearchImported": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "readerOnlineReturnedId": "サーバー返却作品番号",
   "readerOnlineRetried": "キャッシュを回避して再取得しても作品番号が一致しません。",
   "readerOnlineFailureTitle": "アプリ内オンライン閲覧に失敗しました",
@@ -721,12 +799,30 @@
   "settingsVolumeFast": "速い · 0.2秒",
   "inspectorShareImageSource": "共有画像",
   "inspectorReadShareError": "共有画像を読み込めませんでした: {error}",
-  "@inspectorReadShareError": {"placeholders":{"error":{"type":"String"}}},
+  "@inspectorReadShareError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorDeviceFile": "端末: {name}",
-  "@inspectorDeviceFile": {"placeholders":{"name":{"type":"String"}}},
+  "@inspectorDeviceFile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorPageReadError": "ページの内容を読み取れませんでした。本文をコピーするか画面を撮影してください。",
   "inspectorPageAnalyzeError": "アクセス可能なページ本文を解析できませんでした: {error}",
-  "@inspectorPageAnalyzeError": {"placeholders":{"error":{"type":"String"}}},
+  "@inspectorPageAnalyzeError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorPublicPostImage": "公開投稿の画像",
   "inspectorPublicImageFetchError": "公開画像の元データを取得できませんでした。画面キャプチャをお試しください。",
   "inspectorCaptureRestricted": "画面キャプチャが制限されています。ギャラリーから画像を共有してください。",
@@ -745,20 +841,56 @@
   "inspectorBuildVisualIndex": "本棚の画像インデックスを作成",
   "inspectorLocalOcrSearch": "ローカルOCR・画像検索",
   "inspectorIndexingProgress": "本棚を索引中 {completed}/{total}・画像特徴 {indexed}件",
-  "@inspectorIndexingProgress": {"placeholders":{"completed":{"type":"int"},"total":{"type":"int"},"indexed":{"type":"int"}}},
+  "@inspectorIndexingProgress": {
+    "placeholders": {
+      "completed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "indexed": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorImagesAnalyzed": "解析対象画像・{count}件",
-  "@inspectorImagesAnalyzed": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorImagesAnalyzed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorPageExcerpt": "現在のページ本文: {text}",
-  "@inspectorPageExcerpt": {"placeholders":{"text":{"type":"String"}}},
+  "@inspectorPageExcerpt": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorDisplayedComments": "現在読み込まれたコメント {count}件・すべてのコメントとは限りません",
-  "@inspectorDisplayedComments": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorDisplayedComments": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorOcrResult": "ローカルOCRの結果",
   "inspectorSearchByTitle": "タイトル・作者でオンライン検索",
   "inspectorSearchPrivacy": "画像は送信せず、入力した検索語のみ送信します",
   "inspectorSearchTooltip": "オンライン候補を検索",
   "inspectorFindOnlineCandidates": "タイトル・作者のオンライン候補を探す",
   "inspectorIdCandidateCount": "作品番号の候補・{count}件",
-  "@inspectorIdCandidateCount": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorIdCandidateCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorImportCandidate": "Finderに取り込む",
   "inspectorCaution": "画像の一致や検索結果だけでは作品を確定できません。実際に画面へ読み込まれた公開コメントのみ解析できます。",
   "inspectorImportAnalysis": "解析結果をFinderに取り込む",
@@ -768,7 +900,13 @@
   "inspectorImageFirstHint": "スクリーンショット・表紙からネットや本棚を検索できます。",
   "inspectorLoginLimited": "Instagramのログイン・アクセス制限により表示中の内容のみ取得できます。",
   "inspectorRemoteLookupError": "作品番号検索に失敗: {error}",
-  "@inspectorRemoteLookupError": {"placeholders":{"error":{"type":"String"}}},
+  "@inspectorRemoteLookupError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorDirectSourceEvidence": "出典URLに作品番号あり・画像一致は未確認",
   "inspectorRemoteTab": "ネット画像検索",
   "inspectorLocalTab": "本棚画像検索",
@@ -779,34 +917,73 @@
   "inspectorManualPasteHint": "アクセス制限時はコピーしたテキストから番号を抽出できます。",
   "inspectorPasteClipboard": "クリップボードから貼り付け",
   "inspectorSelectedImage": "検索画像 {count} を選択中",
-  "@inspectorSelectedImage": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorSelectedImage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorRemoteIntro": "本棚の外の画像出典を探し、タイトル・作者から作品番号を検索します。確認が必要です。",
   "inspectorSauceKey": "SauceNAO APIキー（任意）",
   "inspectorSauceHint": "キーなしでascii2dを検索可能・キーは保存しません。",
   "inspectorSearchExternal": "この画像でネット検索",
   "inspectorUploadPrivacy": "実行すると選択した画像1枚が外部サービスへ送信されます。制限時は失敗する場合があります。",
   "inspectorRemoteCount": "オンライン画像出典 {count}件",
-  "@inspectorRemoteCount": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorRemoteCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorRemoteEmpty": "外部画像の出典が見つかりません",
   "inspectorRemoteEmptyHint": "提供元の制限・未登録の可能性があります。SauceNAOキーやタイトル検索をお試しください。",
   "inspectorUnscoredMatch": "類似度スコアなし",
   "inspectorSimilarity": "画像類似度 {value}%",
-  "@inspectorSimilarity": {"placeholders":{"value":{"type":"String"}}},
+  "@inspectorSimilarity": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorUnknownTitle": "タイトル情報なし",
   "inspectorLinkedWorkId": "出典URLに作品番号 #{id} を発見",
-  "@inspectorLinkedWorkId": {"placeholders":{"id":{"type":"String"}}},
+  "@inspectorLinkedWorkId": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorOpenSource": "出典を開く",
   "inspectorFindGalleryNumber": "タイトル・作者で番号検索",
   "inspectorLocalIntro": "保存済み表紙とダウンロード作品の最初・中央・最後のページの補助検索です。",
   "inspectorLocalCount": "本棚内の類似作品 {count}件",
-  "@inspectorLocalCount": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorLocalCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorLocalEmpty": "本棚に一致する作品がありません",
   "inspectorLocalEmptyHint": "先に本棚画像インデックスを作成してください。全ページは対象外です。",
   "inspectorCandidateNotConfirmed": "候補は画像やタイトル・作者の手掛かりによるものです。確認後に取り込んでください。",
   "downloadFailedHeading": "自動再試行を停止した作品",
   "downloadFailedHelp": "エラーの作品は自動再試行しません。×や「すべて削除」で消えるのは失敗記録だけで、本棚や保存済みファイルは残ります。後でダウンロードを再度要求すると再試行できます。",
   "downloadFailedDetail": "#{id} · {code}",
-  "@downloadFailedDetail": {"placeholders":{"id":{"type":"String"},"code":{"type":"String"}}},
+  "@downloadFailedDetail": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
   "downloadFailedRetry": "再試行",
   "androidDpiTitle": "Android通信互換モード (ByeDPI)",
   "androidDpiNotice": "端末内のByeDPIプロキシはHYP ViewerのWebView・メタデータ・画像ダウンロードのHTTP(S)通信にのみ適用されます。他のアプリに影響せず、VPN・root・証明書のインストールは不要です。効果はネットワークによって異なります。",
@@ -832,6 +1009,7 @@
   "webAdBlockOff": "オフ",
   "webAdBlockStandard": "標準",
   "webAdBlockStrong": "強力",
+  "webAdBlockWindowsCompatibilityInfo": "Windowsでは互換モードで読み込み後に広告要素を非表示にします。ネットワーク要求の遮断は行いません。",
   "webAdBlockPause": "このページの広告ブロックを一時停止",
   "webAdBlockResume": "広告ブロックを再開",
   "downloadRetryAll": "すべて再試行",
@@ -847,5 +1025,11 @@
   "downloadSizeArchiveTitle": "完成したCBZファイルの最大容量",
   "downloadSizeCustomValue": "直接入力",
   "downloadSizeInvalid": "許容範囲内の整数を入力してください。",
-  "downloadSizeRetryHelp": "容量超過で失敗した作品を手動で再試行すると、その作品に限り設定上限を一度超えることを許可します。安全上限や保存権限の確認は維持されます。"
+  "downloadSizeRetryHelp": "容量超過で失敗した作品を手動で再試行すると、その作品に限り設定上限を一度超えることを許可します。安全上限や保存権限の確認は維持されます。",
+  "windowsUpdateInstallNotice": "インストーラーのSHA-256検証が完了しました。ダウンロードが実行されていない場合、アプリとトレイを終了し、HYP Viewerが起動したDPIエンジンのみ停止してインストールします。他のGoodbyeDPIやWinDivertプログラムは終了しません。続行しますか？",
+  "webSearchWindowsInitFailed": "Windows WebView2の検索画面を初期化できませんでした。",
+  "webSearchWindowsRetry": "再試行",
+  "webSearchWindowsOpenExternal": "外部ブラウザーで開く",
+  "webSearchWindowsLoadDelayed": "ウェブ検索画面の読み込みが遅れています。再試行するか外部ブラウザーで開いてください。",
+  "webSearchWindowsRetrySearch": "検索を再試行"
 }

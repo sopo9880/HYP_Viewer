@@ -4033,6 +4033,11 @@ class _HypDashboardState extends State<HypDashboard> {
             onSelectionChanged: (mode) => widget.onSaveReaderSettings(
               widget.readerSettings.copyWith(webSearchAdBlockMode: mode.first)),
           ),
+          if (Platform.isWindows) ...[
+            const SizedBox(height: 6),
+            Text(AppLocalizations.of(context)!.webAdBlockWindowsCompatibilityInfo,
+                style: Theme.of(context).textTheme.bodySmall),
+          ],
           const SizedBox(height: 8),
           HypText('기본 웹 리더 (주소 고정)',
               style: Theme.of(context).textTheme.titleMedium),

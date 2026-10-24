@@ -94,7 +94,11 @@ void main() {
     final manual = File('lib/ui/hitomi_web_search_page.dart').readAsStringSync();
     final automatic = File('lib/ui/auto_hitomi_web_search.dart').readAsStringSync();
     for (final webview in [manual, automatic]) {
-      expect(webview, contains('useShouldInterceptRequest: true'));
+      expect(webview, contains('useShouldInterceptRequest: !Platform.isWindows'));
+      expect(webview, contains('shouldInterceptRequest: Platform.isWindows ? null'));
+      expect(webview, contains('contentBlockers: Platform.isWindows ? const <ContentBlocker>[]'));
+      expect(webview, contains('webViewEnvironment: environment'));
+      expect(webview, contains('WindowsWebSearchRuntime.environment'));
       expect(webview, contains('shouldInterceptRequest:'));
       expect(webview, contains('WebSearchAdBlock.intercept('));
       expect(webview, contains('onCreateWindow:'));
