@@ -615,26 +615,92 @@
   },
   "editionFinderLoading": "Searching for other editions…",
   "editionFinderProgress": "Searching {completed}/{total}",
-  "@editionFinderProgress": {"placeholders":{"completed":{"type":"int"},"total":{"type":"int"}}},
+  "@editionFinderProgress": {
+    "placeholders": {
+      "completed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "editionFinderRetry": "Search again",
   "editionFinderLinkSelected": "Link {count} selected editions",
-  "@editionFinderLinkSelected": {"placeholders":{"count":{"type":"int"}}},
+  "@editionFinderLinkSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "editionFinderSaveError": "Failed to link editions: {error}",
-  "@editionFinderSaveError": {"placeholders":{"error":{"type":"String"}}},
+  "@editionFinderSaveError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "homeRecentCountHint": "Latest {count} works · collapse to hide.",
-  "@homeRecentCountHint": {"placeholders":{"count":{"type":"int"}}},
+  "@homeRecentCountHint": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "downloadsStoredCount": "Works saved on this device: {count}",
-  "@downloadsStoredCount": {"placeholders":{"count":{"type":"int"}}},
+  "@downloadsStoredCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "workCardCreator": "Creator: {creator}",
-  "@workCardCreator": {"placeholders":{"creator":{"type":"String"}}},
+  "@workCardCreator": {
+    "placeholders": {
+      "creator": {
+        "type": "String"
+      }
+    }
+  },
   "workCardNumber": "ID: {id}",
-  "@workCardNumber": {"placeholders":{"id":{"type":"String"}}},
+  "@workCardNumber": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "workCardUntitled": "Work {id}",
-  "@workCardUntitled": {"placeholders":{"id":{"type":"String"}}},
+  "@workCardUntitled": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "workCardPageStart": "From page {page}",
-  "@workCardPageStart": {"placeholders":{"page":{"type":"int"}}},
+  "@workCardPageStart": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
   "workCardPageProgress": "From page {page} · {percent}%",
-  "@workCardPageProgress": {"placeholders":{"page":{"type":"int"},"percent":{"type":"int"}}},
+  "@workCardPageProgress": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
   "workCardComplete": "Completed · 100%",
   "dpiSettingsTitle": "Windows network compatibility (GoodbyeDPI)",
   "dpiEnable": "Enable bundled GoodbyeDPI engine",
@@ -657,14 +723,26 @@
   "webSearchCollect": "Collect This Page",
   "webSearchApply": "Add to App Results",
   "webSearchCollected": "Collected {count} works from web",
-  "@webSearchCollected": {"placeholders":{"count":{"type":"int"}}},
+  "@webSearchCollected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "webSearchNoLinks": "No gallery links found on this page. Wait for loading or scroll and try again.",
   "webSearchCaptureFailed": "Could not collect gallery links from this page.",
   "webSearchLoadFailed": "Could not load the web search page.",
   "webSearchSourceLabel": "Collected from web",
   "webSearchUnsupported": "In-app web search is unavailable on this platform.",
   "webSearchImported": "Including {count} works imported from website",
-  "@webSearchImported": {"placeholders":{"count":{"type":"int"}}},
+  "@webSearchImported": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "readerOnlineReturnedId": "Returned gallery ID",
   "readerOnlineRetried": "Gallery ID still mismatched after bypassing cache.",
   "readerOnlineFailureTitle": "In-app online reading failed",
@@ -721,12 +799,30 @@
   "settingsVolumeFast": "Fast · 0.2s",
   "inspectorShareImageSource": "Shared image",
   "inspectorReadShareError": "Could not read the shared image: {error}",
-  "@inspectorReadShareError": {"placeholders":{"error":{"type":"String"}}},
+  "@inspectorReadShareError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorDeviceFile": "Device: {name}",
-  "@inspectorDeviceFile": {"placeholders":{"name":{"type":"String"}}},
+  "@inspectorDeviceFile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorPageReadError": "Could not read the page. Copy the text or capture the screen.",
   "inspectorPageAnalyzeError": "Could not analyze the accessible page content: {error}",
-  "@inspectorPageAnalyzeError": {"placeholders":{"error":{"type":"String"}}},
+  "@inspectorPageAnalyzeError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorPublicPostImage": "Public post image",
   "inspectorPublicImageFetchError": "The original public images could not be accessed. Try a screenshot.",
   "inspectorCaptureRestricted": "Screen capture is restricted. Try sharing an image from your gallery.",
@@ -745,20 +841,56 @@
   "inspectorBuildVisualIndex": "Build image index for my library",
   "inspectorLocalOcrSearch": "Local OCR and image search",
   "inspectorIndexingProgress": "Indexing library {completed}/{total} · {indexed} image signatures",
-  "@inspectorIndexingProgress": {"placeholders":{"completed":{"type":"int"},"total":{"type":"int"},"indexed":{"type":"int"}}},
+  "@inspectorIndexingProgress": {
+    "placeholders": {
+      "completed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "indexed": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorImagesAnalyzed": "Images for analysis · {count}",
-  "@inspectorImagesAnalyzed": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorImagesAnalyzed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorPageExcerpt": "Current page excerpt: {text}",
-  "@inspectorPageExcerpt": {"placeholders":{"text":{"type":"String"}}},
+  "@inspectorPageExcerpt": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorDisplayedComments": "{count} comments currently loaded · not necessarily all comments",
-  "@inspectorDisplayedComments": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorDisplayedComments": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorOcrResult": "Local OCR results",
   "inspectorSearchByTitle": "Search online by title or artist",
   "inspectorSearchPrivacy": "Only the entered search term is sent, never your images",
   "inspectorSearchTooltip": "Search online candidates",
   "inspectorFindOnlineCandidates": "Find online title or artist candidates",
   "inspectorIdCandidateCount": "Work ID candidates · {count}",
-  "@inspectorIdCandidateCount": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorIdCandidateCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorImportCandidate": "Send to Finder",
   "inspectorCaution": "Image matches and search results do not confirm a work's identity. Only comments actually loaded on screen can be analyzed.",
   "inspectorImportAnalysis": "Import analysis into Finder",
@@ -768,7 +900,13 @@
   "inspectorImageFirstHint": "Search online or in your library using a screenshot or cover.",
   "inspectorLoginLimited": "Instagram requires login or limits access. Only visible content can be read.",
   "inspectorRemoteLookupError": "Work ID lookup failed: {error}",
-  "@inspectorRemoteLookupError": {"placeholders":{"error":{"type":"String"}}},
+  "@inspectorRemoteLookupError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorDirectSourceEvidence": "Gallery ID in original URL · image match unconfirmed",
   "inspectorRemoteTab": "Internet image search",
   "inspectorLocalTab": "My library image search",
@@ -779,34 +917,73 @@
   "inspectorManualPasteHint": "When access is limited, paste text manually to extract IDs.",
   "inspectorPasteClipboard": "Paste from clipboard",
   "inspectorSelectedImage": "Search image {count} selected",
-  "@inspectorSelectedImage": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorSelectedImage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorRemoteIntro": "Search the web for image sources and look up possible work IDs by title/artist. You must verify matches.",
   "inspectorSauceKey": "SauceNAO API key (optional)",
   "inspectorSauceHint": "ascii2d works without a key. Keys are never stored.",
   "inspectorSearchExternal": "Search online using this image",
   "inspectorUploadPrivacy": "Clicking uploads the selected image to an external search provider; restrictions may cause failure.",
   "inspectorRemoteCount": "{count} online image sources",
-  "@inspectorRemoteCount": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorRemoteCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorRemoteEmpty": "No external image source found",
   "inspectorRemoteEmptyHint": "The provider may restrict access or lack this image. Try a SauceNAO key or title search.",
   "inspectorUnscoredMatch": "No similarity score provided",
   "inspectorSimilarity": "Image similarity {value}%",
-  "@inspectorSimilarity": {"placeholders":{"value":{"type":"String"}}},
+  "@inspectorSimilarity": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorUnknownTitle": "Title unavailable",
   "inspectorLinkedWorkId": "Work ID #{id} found in source URL",
-  "@inspectorLinkedWorkId": {"placeholders":{"id":{"type":"String"}}},
+  "@inspectorLinkedWorkId": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorOpenSource": "Open source",
   "inspectorFindGalleryNumber": "Find work ID by title/artist",
   "inspectorLocalIntro": "Supplementary comparison against saved covers and first/middle/last downloaded pages.",
   "inspectorLocalCount": "{count} similar library works",
-  "@inspectorLocalCount": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorLocalCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorLocalEmpty": "No matching works in your library",
   "inspectorLocalEmptyHint": "Build the local image index first. Not every page is indexed.",
   "inspectorCandidateNotConfirmed": "Candidates come from image or metadata clues. Confirm the work before importing.",
   "downloadFailedHeading": "Downloads stopped after failures",
   "downloadFailedHelp": "Failed works are not retried automatically. X and Clear all remove only failure records, preserving library entries and downloaded files. A later download request may try these works again.",
   "downloadFailedDetail": "#{id} · {code}",
-  "@downloadFailedDetail": {"placeholders":{"id":{"type":"String"},"code":{"type":"String"}}},
+  "@downloadFailedDetail": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
   "downloadFailedRetry": "Retry",
   "androidDpiTitle": "Android network compatibility (ByeDPI)",
   "androidDpiNotice": "An on-device ByeDPI proxy routes only HYP Viewer WebView, metadata and image/download HTTP(S) traffic. It does not change other apps, require a VPN or root, or install a certificate. Effectiveness varies by network.",
@@ -848,5 +1025,11 @@
   "downloadSizeArchiveTitle": "Maximum completed CBZ file",
   "downloadSizeCustomValue": "Custom value",
   "downloadSizeInvalid": "Enter a whole number within the permitted range.",
-  "downloadSizeRetryHelp": "Explicitly retrying a gallery that failed for size reasons permits that gallery to exceed the configured limits once. Absolute safety caps and content permissions remain enforced."
+  "downloadSizeRetryHelp": "Explicitly retrying a gallery that failed for size reasons permits that gallery to exceed the configured limits once. Absolute safety caps and content permissions remain enforced.",
+  "windowsUpdateInstallNotice": "The installer SHA-256 is verified. If no downloads are active, HYP Viewer and its tray will close and only the DPI engine started by HYP Viewer will be stopped before installation. Other GoodbyeDPI or WinDivert programs will not be terminated. Continue?",
+  "webSearchWindowsInitFailed": "Unable to initialize the Windows WebView2 search screen.",
+  "webSearchWindowsRetry": "Retry",
+  "webSearchWindowsOpenExternal": "Open in external browser",
+  "webSearchWindowsLoadDelayed": "The web search page is taking too long. Retry or open it in an external browser.",
+  "webSearchWindowsRetrySearch": "Retry search"
 }
