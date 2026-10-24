@@ -832,6 +832,7 @@
   "webAdBlockOff": "オフ",
   "webAdBlockStandard": "標準",
   "webAdBlockStrong": "強力",
+  "webAdBlockWindowsCompatibilityInfo": "Windowsでは互換モードで読み込み後に広告要素を非表示にします。ネットワーク要求の遮断は行いません。",
   "webAdBlockPause": "このページの広告ブロックを一時停止",
   "webAdBlockResume": "広告ブロックを再開",
   "downloadRetryAll": "すべて再試行",
