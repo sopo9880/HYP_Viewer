@@ -8,6 +8,8 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../core/hitomi_web_search.dart';
 import '../core/web_search_ad_block.dart';
 import '../core/web_search_ad_rule_store.dart';
+import '../core/windows_web_search.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 
 /// User-controlled Hitomi search browser. Only gallery links from the
@@ -29,6 +31,9 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
   bool _loaded = false;
   bool _busy = false;
   bool _adsTemporarilyOff = false;
+  Future<WebViewEnvironment?>? _environment;
+  Timer? _loadTimer;
+  int _viewGeneration = 0;
   String? _error;
   String? _currentUrl;
   final ValueNotifier<int> _blockedCount = ValueNotifier(0);
@@ -38,6 +43,7 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
   @override
   void initState() {
     super.initState();
+    if (Platform.isWindows) _environment = WindowsWebSearchRuntime.environment;
     if (widget.adBlockMode != 'off') {
       WebSearchAdRuleStore.instance.ensureStarted();
     }
@@ -45,6 +51,7 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
 
   @override
   void dispose() {
+    _loadTimer?.cancel();
     _blockedCount.dispose();
     super.dispose();
   }
@@ -81,6 +88,124 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
     }
   }
 
+
+  Widget _windowsWebViewError(String details) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Text('Windows WebView2 검색 화면을 시작하지 못했어요.'),
+        const SizedBox(height: 8),
+        SelectableText(details, maxLines: 4),
+        const SizedBox(height: 12),
+        Wrap(spacing: 8, children: [
+          OutlinedButton(
+            onPressed: () {
+              WindowsWebSearchRuntime.retryFailedInitialization();
+              setState(() {
+                _environment = WindowsWebSearchRuntime.environment;
+                _viewGeneration++;
+              });
+            },
+            child: const Text('다시 시도'),
+          ),
+          TextButton(
+            onPressed: _openExternalSearch,
+            child: const Text('외부 브라우저에서 열기'),
+          ),
+        ]),
+      ]),
+    ),
+  );
+
+  Future<void> _openExternalSearch() async {
+    final target = HitomiWebSearch.searchUri(widget.query);
+    await launchUrl(target, mode: LaunchMode.externalApplication);
+  }
+
+  Widget _buildWebView(
+      BuildContext context, WebViewEnvironment? environment) {
+    final labels = AppLocalizations.of(context)!;
+    return InAppWebView(
+                key: ValueKey('hitomi-ad-block-$_adBlockingEnabled-$_viewGeneration'),
+                webViewEnvironment: environment,
+                initialUserScripts: UnmodifiableListView<UserScript>(
+                  _adBlockingEnabled && !Platform.isWindows
+                      ? [UserScript(
+                          source: WebSearchAdBlock.cleanPageJavaScript,
+                          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START)]
+                      : <UserScript>[],
+                ),
+                initialUrlRequest: URLRequest(
+                  url: WebUri(_currentUrl ??
+                      HitomiWebSearch.searchUri(widget.query).toString()),
+                ),
+                initialSettings: InAppWebViewSettings(
+                  javaScriptEnabled: true,
+                  useShouldOverrideUrlLoading: true,
+                  useShouldInterceptRequest: !Platform.isWindows && _adBlockingEnabled,
+                  supportMultipleWindows: true,
+                  javaScriptCanOpenWindowsAutomatically: false,
+                  // Windows compatibility mode avoids WebView2 native interception
+                  // at creation; apply cosmetic filtering after load instead.
+                  contentBlockers: Platform.isWindows ? const <ContentBlocker>[]
+                      : WebSearchAdBlock.contentBlockers(
+                          _adBlockingEnabled ? widget.adBlockMode : 'off'),
+                ),
+                onWebViewCreated: (controller) => _web = controller,
+                shouldInterceptRequest: Platform.isWindows ? null : (controller, request) async =>
+                    WebSearchAdBlock.intercept(request,
+                        _adBlockingEnabled ? widget.adBlockMode : 'off',
+                        onBlocked: () {
+                          if (mounted) _blockedCount.value++;
+                        }),
+                onCreateWindow: (controller, action) async {
+                  final target = Uri.tryParse(
+                      action.request.url?.toString() ?? '');
+                  if (action.hasGesture == true &&
+                      HitomiWebSearch.allowedOrigin(target)) {
+                    await controller.loadUrl(urlRequest:
+                        URLRequest(url: WebUri(target.toString())));
+                  }
+                  return false;
+                },
+                shouldOverrideUrlLoading: (controller, action) async {
+                  final target = Uri.tryParse(
+                      action.request.url?.toString() ?? '');
+                  return HitomiWebSearch.allowedOrigin(target)
+                      ? NavigationActionPolicy.ALLOW
+                      : NavigationActionPolicy.CANCEL;
+                },
+                onLoadStart: (controller, url) {
+                  _loadTimer?.cancel();
+                  _loadTimer = Timer(const Duration(seconds: 15), () {
+                    if (mounted && !_loaded) {
+                      setState(() => _error =
+                          '웹 검색 화면 로딩이 지연되고 있어요. 다시 시도하거나 외부 브라우저로 열어 주세요.');
+                    }
+                  });
+                  if (mounted) setState(() { _loaded = false; _error = null; });
+                },
+                onLoadStop: (controller, url) {
+                  _loadTimer?.cancel();
+                  if (mounted) setState(() { _loaded = true; _error = null; });
+                  if (HitomiWebSearch.allowedOrigin(
+                      Uri.tryParse(url?.toString() ?? ''))) {
+                    _currentUrl = url.toString();
+                  }
+                  if (_adBlockingEnabled) {
+                    unawaited(controller.evaluateJavascript(
+                        source: WebSearchAdBlock.cleanPageJavaScript));
+                  }
+                },
+                onReceivedError: (controller, request, error) {
+                  if (request.isForMainFrame == true) _loadTimer?.cancel();
+                  if (mounted && request.isForMainFrame == true) {
+                    setState(() => _error = labels.webSearchLoadFailed);
+                  }
+                },
+              );
+  }
+
   @override
   Widget build(BuildContext context) {
     final labels = AppLocalizations.of(context)!;
@@ -111,6 +236,7 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
               _web = null;
               _error = null;
               _blockedCount.value = 0;
+              _viewGeneration++;
             });
           },
         ),
@@ -122,80 +248,45 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
               style: Theme.of(context).textTheme.bodySmall),
         ),
         Expanded(child: browserSupported
-            ? InAppWebView(
-                key: ValueKey('hitomi-ad-block-$_adBlockingEnabled'),
-                initialUserScripts: UnmodifiableListView<UserScript>(
-                  _adBlockingEnabled
-                      ? [UserScript(
-                          source: WebSearchAdBlock.cleanPageJavaScript,
-                          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START)]
-                      : <UserScript>[],
-                ),
-                initialUrlRequest: URLRequest(
-                  url: WebUri(_currentUrl ??
-                      HitomiWebSearch.searchUri(widget.query).toString()),
-                ),
-                initialSettings: InAppWebViewSettings(
-                  javaScriptEnabled: true,
-                  useShouldOverrideUrlLoading: true,
-                  useShouldInterceptRequest: true,
-                  supportMultipleWindows: true,
-                  javaScriptCanOpenWindowsAutomatically: false,
-                  contentBlockers: WebSearchAdBlock.contentBlockers(
-                      _adBlockingEnabled ? widget.adBlockMode : 'off'),
-                ),
-                onWebViewCreated: (controller) => _web = controller,
-                shouldInterceptRequest: (controller, request) async =>
-                    WebSearchAdBlock.intercept(request,
-                        _adBlockingEnabled ? widget.adBlockMode : 'off',
-                        onBlocked: () {
-                          if (mounted) _blockedCount.value++;
-                        }),
-                onCreateWindow: (controller, action) async {
-                  final target = Uri.tryParse(
-                      action.request.url?.toString() ?? '');
-                  if (action.hasGesture == true &&
-                      HitomiWebSearch.allowedOrigin(target)) {
-                    await controller.loadUrl(urlRequest:
-                        URLRequest(url: WebUri(target.toString())));
-                  }
-                  return false;
-                },
-                shouldOverrideUrlLoading: (controller, action) async {
-                  final target = Uri.tryParse(
-                      action.request.url?.toString() ?? '');
-                  return HitomiWebSearch.allowedOrigin(target)
-                      ? NavigationActionPolicy.ALLOW
-                      : NavigationActionPolicy.CANCEL;
-                },
-                onLoadStart: (controller, url) {
-                  if (mounted) setState(() => _loaded = false);
-                },
-                onLoadStop: (controller, url) {
-                  if (mounted) setState(() => _loaded = true);
-                  if (HitomiWebSearch.allowedOrigin(
-                      Uri.tryParse(url?.toString() ?? ''))) {
-                    _currentUrl = url.toString();
-                  }
-                  if (_adBlockingEnabled) {
-                    unawaited(controller.evaluateJavascript(
-                        source: WebSearchAdBlock.cleanPageJavaScript));
-                  }
-                },
-                onReceivedError: (controller, request, error) {
-                  if (mounted && request.isForMainFrame == true) {
-                    setState(() => _error = labels.webSearchLoadFailed);
-                  }
-                },
-              )
+            ? (Platform.isWindows
+                ? FutureBuilder<WebViewEnvironment?>(
+                    future: _environment,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return _windowsWebViewError(snapshot.error.toString());
+                      }
+                      if (snapshot.connectionState != ConnectionState.done) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      return _buildWebView(context, snapshot.data);
+                    },
+                  )
+                : _buildWebView(context, null))
             : Center(child: Text(labels.webSearchUnsupported))),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             if (_error != null) Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: Text(_error!, style: TextStyle(
-                  color: Theme.of(context).colorScheme.error))),
+              child: Column(children: [
+                Text(_error!, style: TextStyle(
+                    color: Theme.of(context).colorScheme.error)),
+                if (Platform.isWindows)
+                  Wrap(spacing: 8, children: [
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _error = null;
+                        _loaded = false;
+                        _viewGeneration++;
+                      }),
+                      child: const Text('검색 다시 시도'),
+                    ),
+                    TextButton(
+                      onPressed: _openExternalSearch,
+                      child: const Text('외부 브라우저에서 열기'),
+                    ),
+                  ]),
+              ])),
             Text(labels.webSearchCollected(_collected.length),
                 key: const Key('web-search-collected-count')),
             const SizedBox(height: 6),
