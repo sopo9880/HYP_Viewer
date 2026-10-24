@@ -94,7 +94,7 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
     child: Padding(
       padding: const EdgeInsets.all(16),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Text('Windows WebView2 검색 화면을 시작하지 못했어요.'),
+        Text(AppLocalizations.of(context)!.webSearchWindowsInitFailed),
         const SizedBox(height: 8),
         SelectableText(details, maxLines: 4),
         const SizedBox(height: 12),
@@ -107,11 +107,11 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
                 _viewGeneration++;
               });
             },
-            child: const Text('다시 시도'),
+            child: Text(AppLocalizations.of(context)!.webSearchWindowsRetry),
           ),
           TextButton(
             onPressed: _openExternalSearch,
-            child: const Text('외부 브라우저에서 열기'),
+            child: Text(AppLocalizations.of(context)!.webSearchWindowsOpenExternal),
           ),
         ]),
       ]),
@@ -181,7 +181,7 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
                   _loadTimer = Timer(const Duration(seconds: 15), () {
                     if (mounted && !_loaded) {
                       setState(() => _error =
-                          '웹 검색 화면 로딩이 지연되고 있어요. 다시 시도하거나 외부 브라우저로 열어 주세요.');
+                          AppLocalizations.of(context)!.webSearchWindowsLoadDelayed);
                     }
                   });
                   if (mounted) setState(() { _loaded = false; _error = null; });
@@ -280,11 +280,11 @@ class _HitomiWebSearchPageState extends State<HitomiWebSearchPage> {
                         _loaded = false;
                         _viewGeneration++;
                       }),
-                      child: const Text('검색 다시 시도'),
+                      child: Text(AppLocalizations.of(context)!.webSearchWindowsRetrySearch),
                     ),
                     TextButton(
                       onPressed: _openExternalSearch,
-                      child: const Text('외부 브라우저에서 열기'),
+                      child: Text(AppLocalizations.of(context)!.webSearchWindowsOpenExternal),
                     ),
                   ]),
               ])),
