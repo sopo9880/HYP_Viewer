@@ -832,6 +832,7 @@
   "webAdBlockOff": "Off",
   "webAdBlockStandard": "Standard",
   "webAdBlockStrong": "Strong",
+  "webAdBlockWindowsCompatibilityInfo": "On Windows, compatibility mode hides ad elements after loading. Network request blocking is unavailable.",
   "webAdBlockPause": "Pause ad blocking for this page",
   "webAdBlockResume": "Resume ad blocking",
   "downloadRetryAll": "Retry all",
