@@ -3525,10 +3525,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const HypText('업데이트 파일 검증 완료'),
-            content: const HypText('다운로드한 파일의 SHA-256을 확인했어. '
-                '진행 중인 다운로드가 없으면 앱과 트레이를 종료하고, '
-                'HYP Viewer에서 실행한 DPI 엔진만 중지한 후 설치할게. '
-                '다른 프로그램의 GoodbyeDPI나 WinDivert는 건드리지 않아. 계속할까?'),
+            content: Text(AppLocalizations.of(ctx)!.windowsUpdateInstallNotice),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx, false),
                   child: const HypText('나중에')),
