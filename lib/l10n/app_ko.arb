@@ -615,26 +615,92 @@
   },
   "editionFinderLoading": "다른 언어판 검색 중…",
   "editionFinderProgress": "검색 중 {completed}/{total}",
-  "@editionFinderProgress": {"placeholders":{"completed":{"type":"int"},"total":{"type":"int"}}},
+  "@editionFinderProgress": {
+    "placeholders": {
+      "completed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "editionFinderRetry": "다시 검색",
   "editionFinderLinkSelected": "선택한 {count}개 언어판 묶기",
-  "@editionFinderLinkSelected": {"placeholders":{"count":{"type":"int"}}},
+  "@editionFinderLinkSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "editionFinderSaveError": "언어판 묶기 실패: {error}",
-  "@editionFinderSaveError": {"placeholders":{"error":{"type":"String"}}},
+  "@editionFinderSaveError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "homeRecentCountHint": "최근 {count}개 · 접어서 숨길 수 있어.",
-  "@homeRecentCountHint": {"placeholders":{"count":{"type":"int"}}},
+  "@homeRecentCountHint": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "downloadsStoredCount": "내 기기에 저장된 작품 {count}개",
-  "@downloadsStoredCount": {"placeholders":{"count":{"type":"int"}}},
+  "@downloadsStoredCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "workCardCreator": "작가 {creator}",
-  "@workCardCreator": {"placeholders":{"creator":{"type":"String"}}},
+  "@workCardCreator": {
+    "placeholders": {
+      "creator": {
+        "type": "String"
+      }
+    }
+  },
   "workCardNumber": "번호 {id}",
-  "@workCardNumber": {"placeholders":{"id":{"type":"String"}}},
+  "@workCardNumber": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "workCardUntitled": "작품 {id}",
-  "@workCardUntitled": {"placeholders":{"id":{"type":"String"}}},
+  "@workCardUntitled": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "workCardPageStart": "{page}페이지부터",
-  "@workCardPageStart": {"placeholders":{"page":{"type":"int"}}},
+  "@workCardPageStart": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
   "workCardPageProgress": "{page}페이지부터 · {percent}%",
-  "@workCardPageProgress": {"placeholders":{"page":{"type":"int"},"percent":{"type":"int"}}},
+  "@workCardPageProgress": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
   "workCardComplete": "완독 · 100%",
   "dpiSettingsTitle": "Windows 네트워크 호환 모드 (GoodbyeDPI)",
   "dpiEnable": "GoodbyeDPI 내장 엔진 사용",
@@ -657,14 +723,26 @@
   "webSearchCollect": "현재 화면 수집",
   "webSearchApply": "앱 검색 결과에 추가",
   "webSearchCollected": "웹에서 수집한 작품 {count}개",
-  "@webSearchCollected": {"placeholders":{"count":{"type":"int"}}},
+  "@webSearchCollected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "webSearchNoLinks": "이 화면에서 작품 링크를 찾지 못했습니다. 로딩 후 다시 시도하거나 스크롤해 주세요.",
   "webSearchCaptureFailed": "이 화면의 작품 링크를 수집하지 못했습니다.",
   "webSearchLoadFailed": "웹 검색 페이지를 불러오지 못했습니다.",
   "webSearchSourceLabel": "웹에서 수집",
   "webSearchUnsupported": "이 플랫폼에서는 앱 내부 웹 검색을 지원하지 않습니다.",
   "webSearchImported": "웹 검색에서 가져온 작품 {count}개 포함",
-  "@webSearchImported": {"placeholders":{"count":{"type":"int"}}},
+  "@webSearchImported": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "readerOnlineReturnedId": "서버 반환 작품 번호",
   "readerOnlineRetried": "캐시 우회 재요청 후에도 번호가 일치하지 않습니다.",
   "readerOnlineFailureTitle": "앱 내 온라인 읽기 실패",
@@ -721,12 +799,30 @@
   "settingsVolumeFast": "빠르게 · 0.2초",
   "inspectorShareImageSource": "공유 이미지",
   "inspectorReadShareError": "공유 이미지를 읽지 못했어: {error}",
-  "@inspectorReadShareError": {"placeholders":{"error":{"type":"String"}}},
+  "@inspectorReadShareError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorDeviceFile": "내 기기: {name}",
-  "@inspectorDeviceFile": {"placeholders":{"name":{"type":"String"}}},
+  "@inspectorDeviceFile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorPageReadError": "페이지 내용을 읽지 못했어. 원문을 복사하거나 캡처해줘.",
   "inspectorPageAnalyzeError": "접근 가능한 웹 본문을 분석하지 못했어: {error}",
-  "@inspectorPageAnalyzeError": {"placeholders":{"error":{"type":"String"}}},
+  "@inspectorPageAnalyzeError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorPublicPostImage": "공개 게시물 이미지",
   "inspectorPublicImageFetchError": "공개 이미지 원본에 접근하지 못했어. 화면 캡처를 사용해줘.",
   "inspectorCaptureRestricted": "화면 캡처가 제한되어 있어. 갤러리 이미지 공유를 사용해줘.",
@@ -745,20 +841,56 @@
   "inspectorBuildVisualIndex": "내 서재 이미지 인덱스 만들기",
   "inspectorLocalOcrSearch": "로컬 OCR·이미지 검색",
   "inspectorIndexingProgress": "서재 인덱스 생성 {completed}/{total} · 지문 {indexed}개",
-  "@inspectorIndexingProgress": {"placeholders":{"completed":{"type":"int"},"total":{"type":"int"},"indexed":{"type":"int"}}},
+  "@inspectorIndexingProgress": {
+    "placeholders": {
+      "completed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "indexed": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorImagesAnalyzed": "분석 이미지 · {count}개",
-  "@inspectorImagesAnalyzed": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorImagesAnalyzed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorPageExcerpt": "현재 페이지 본문: {text}",
-  "@inspectorPageExcerpt": {"placeholders":{"text":{"type":"String"}}},
+  "@inspectorPageExcerpt": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorDisplayedComments": "현재 로딩된 댓글 {count}개 · 댓글 전체를 수집했다는 의미는 아니야",
-  "@inspectorDisplayedComments": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorDisplayedComments": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorOcrResult": "로컬 OCR 결과",
   "inspectorSearchByTitle": "제목·작가로 온라인 검색",
   "inspectorSearchPrivacy": "이미지는 보내지 않고 입력한 검색어만 전송해",
   "inspectorSearchTooltip": "온라인 후보 검색",
   "inspectorFindOnlineCandidates": "온라인 제목·작가 후보 찾기",
   "inspectorIdCandidateCount": "작품 번호 후보 · {count}개",
-  "@inspectorIdCandidateCount": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorIdCandidateCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorImportCandidate": "Finder로 가져오기",
   "inspectorCaution": "이미지 일치·검색 결과만으로 작품을 확정하지 않아. 공개 댓글은 실제 화면에 로딩된 것만 분석할 수 있어.",
   "inspectorImportAnalysis": "분석 내용 Finder로 가져오기",
@@ -768,7 +900,13 @@
   "inspectorImageFirstHint": "캡처나 표지 이미지로 인터넷이나 서재를 검색할 수 있어.",
   "inspectorLoginLimited": "Instagram 로그인 또는 접근 제한으로 표시된 내용만 읽을 수 있어.",
   "inspectorRemoteLookupError": "작품 번호 검색 실패: {error}",
-  "@inspectorRemoteLookupError": {"placeholders":{"error":{"type":"String"}}},
+  "@inspectorRemoteLookupError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorDirectSourceEvidence": "원본 출처 URL에 작품 번호 있음 · 장면 일치 미검증",
   "inspectorRemoteTab": "인터넷 이미지 검색",
   "inspectorLocalTab": "내 서재 이미지 검색",
@@ -779,34 +917,73 @@
   "inspectorManualPasteHint": "접근이 제한되면 직접 복사한 텍스트에서도 번호를 추출할 수 있어.",
   "inspectorPasteClipboard": "클립보드 붙여넣기",
   "inspectorSelectedImage": "검색 이미지 {count}번 선택",
-  "@inspectorSelectedImage": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorSelectedImage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorRemoteIntro": "서재 밖의 이미지 출처를 찾아보고 제목·작가로 작품 번호 후보를 다시 검색해. 결과는 직접 확인해야 해.",
   "inspectorSauceKey": "SauceNAO API 키 (선택)",
   "inspectorSauceHint": "키 없이 ascii2d 검색 가능 · 키는 저장하지 않아.",
   "inspectorSearchExternal": "선택한 이미지로 인터넷 검색",
   "inspectorUploadPrivacy": "실행하면 선택한 이미지 1장이 외부 검색 서비스에 전송돼. 서비스 제한 시 실패할 수 있어.",
   "inspectorRemoteCount": "온라인 이미지 출처 {count}개",
-  "@inspectorRemoteCount": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorRemoteCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorRemoteEmpty": "외부 이미지 출처를 찾지 못했어",
   "inspectorRemoteEmptyHint": "검색 서비스가 차단됐거나 이미지가 등록되지 않았을 수 있어. SauceNAO 키·제목 검색도 시도해줘.",
   "inspectorUnscoredMatch": "유사도 수치 없음",
   "inspectorSimilarity": "이미지 유사도 {value}%",
-  "@inspectorSimilarity": {"placeholders":{"value":{"type":"String"}}},
+  "@inspectorSimilarity": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorUnknownTitle": "제목 정보 없음",
   "inspectorLinkedWorkId": "출처 URL에서 작품 번호 #{id} 발견",
-  "@inspectorLinkedWorkId": {"placeholders":{"id":{"type":"String"}}},
+  "@inspectorLinkedWorkId": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "inspectorOpenSource": "원본 출처 열기",
   "inspectorFindGalleryNumber": "제목·작가로 번호 찾기",
   "inspectorLocalIntro": "내 서재 표지 및 다운로드 작품의 첫·중간·끝 페이지를 비교하는 보조 검색이야.",
   "inspectorLocalCount": "내 서재 유사 작품 {count}개",
-  "@inspectorLocalCount": {"placeholders":{"count":{"type":"int"}}},
+  "@inspectorLocalCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "inspectorLocalEmpty": "내 서재에서 일치하는 작품을 찾지 못했어",
   "inspectorLocalEmptyHint": "먼저 서재 이미지 인덱스를 생성해줘. 모든 페이지가 포함되는 건 아니야.",
   "inspectorCandidateNotConfirmed": "번호 후보는 이미지 또는 제목·작가 단서로 찾은 결과야. 실제 작품인지 확인 후 가져와줘.",
   "downloadFailedHeading": "자동 재시도 중지된 작품",
   "downloadFailedHelp": "오류로 중지된 작품은 자동 재시도하지 않습니다. X 또는 전체 삭제는 실패 기록만 지우며 서재와 다운로드 파일은 유지합니다. 이후 다운로드를 다시 요청하면 재시도할 수 있습니다.",
   "downloadFailedDetail": "#{id} · {code}",
-  "@downloadFailedDetail": {"placeholders":{"id":{"type":"String"},"code":{"type":"String"}}},
+  "@downloadFailedDetail": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
   "downloadFailedRetry": "다시 시도",
   "androidDpiTitle": "Android 네트워크 호환 모드 (ByeDPI)",
   "androidDpiNotice": "HYP Viewer 내부의 웹 검색·메타데이터·이미지 다운로드 요청에만 로컬 ByeDPI 프록시를 적용합니다. 다른 앱의 통신은 변경하지 않으며 VPN, 루트 권한이나 인증서 설치가 필요하지 않습니다. DPI 우회 성공은 네트워크마다 다를 수 있습니다.",
@@ -848,5 +1025,11 @@
   "downloadSizeArchiveTitle": "완성된 CBZ 파일 최대 용량",
   "downloadSizeCustomValue": "직접 입력",
   "downloadSizeInvalid": "허용 범위 안의 정수를 입력하세요.",
-  "downloadSizeRetryHelp": "용량 초과로 실패한 작품을 직접 재시도하면 해당 작품의 설정 한도를 한 번 초과하도록 허용합니다. 앱의 안전 상한과 저장 권한 검사는 해제되지 않습니다."
+  "downloadSizeRetryHelp": "용량 초과로 실패한 작품을 직접 재시도하면 해당 작품의 설정 한도를 한 번 초과하도록 허용합니다. 앱의 안전 상한과 저장 권한 검사는 해제되지 않습니다.",
+  "windowsUpdateInstallNotice": "설치 파일의 SHA-256을 검증했습니다. 진행 중인 다운로드가 없으면 앱과 트레이를 종료하고 HYP Viewer가 실행한 DPI 엔진만 중지한 뒤 설치합니다. 다른 프로그램의 GoodbyeDPI나 WinDivert는 종료하지 않습니다. 계속할까요?",
+  "webSearchWindowsInitFailed": "Windows WebView2 검색 화면을 시작하지 못했습니다.",
+  "webSearchWindowsRetry": "다시 시도",
+  "webSearchWindowsOpenExternal": "외부 브라우저에서 열기",
+  "webSearchWindowsLoadDelayed": "웹 검색 화면 로딩이 지연되고 있습니다. 다시 시도하거나 외부 브라우저로 열어 주세요.",
+  "webSearchWindowsRetrySearch": "검색 다시 시도"
 }
