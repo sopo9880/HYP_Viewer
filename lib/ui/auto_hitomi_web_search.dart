@@ -8,6 +8,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../core/hitomi_web_search.dart';
 import '../core/web_search_ad_block.dart';
 import '../core/web_search_ad_rule_store.dart';
+import '../core/windows_web_search.dart';
 
 /// One-shot, bounded public website search. It is created only after the
 /// user stops typing; no browser runs while search is empty or disabled.
@@ -35,10 +36,12 @@ class _AutoHitomiWebSearchState extends State<AutoHitomiWebSearch> {
   bool _done = false;
   bool _loaded = false;
   String? _loadError;
+  Future<WebViewEnvironment?>? _environment;
 
   @override
   void initState() {
     super.initState();
+    if (Platform.isWindows) _environment = WindowsWebSearchRuntime.environment;
     if (widget.adBlockMode != 'off') {
       WebSearchAdRuleStore.instance.ensureStarted();
     }
@@ -95,20 +98,15 @@ class _AutoHitomiWebSearchState extends State<AutoHitomiWebSearch> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (!Platform.isAndroid && !Platform.isWindows) {
-      return const SizedBox.shrink();
-    }
-    // Non-zero layout allows the native WebView to render its DOM; it is not
-    // an always-running background service. Disposed at success or timeout.
+  Widget _buildWebView(WebViewEnvironment? environment) {
     return SizedBox(
       key: const Key('automatic-web-search'),
       width: 2,
       height: 2,
       child: InAppWebView(
+        webViewEnvironment: environment,
         initialUserScripts: UnmodifiableListView<UserScript>(
-          widget.adBlockMode == 'off'
+          widget.adBlockMode == 'off' || Platform.isWindows
               ? <UserScript>[]
               : [UserScript(
                   source: WebSearchAdBlock.cleanPageJavaScript,
@@ -119,13 +117,14 @@ class _AutoHitomiWebSearchState extends State<AutoHitomiWebSearch> {
         ),
         initialSettings: InAppWebViewSettings(
           javaScriptEnabled: true, useShouldOverrideUrlLoading: true,
-          useShouldInterceptRequest: true,
+          useShouldInterceptRequest: !Platform.isWindows && widget.adBlockMode != 'off',
           supportMultipleWindows: true,
           javaScriptCanOpenWindowsAutomatically: false,
-          contentBlockers: WebSearchAdBlock.contentBlockers(widget.adBlockMode),
+          contentBlockers: Platform.isWindows ? const <ContentBlocker>[]
+              : WebSearchAdBlock.contentBlockers(widget.adBlockMode),
         ),
         onWebViewCreated: (controller) => _controller = controller,
-        shouldInterceptRequest: (controller, request) async =>
+        shouldInterceptRequest: Platform.isWindows ? null : (controller, request) async =>
             WebSearchAdBlock.intercept(request, widget.adBlockMode),
         // Never let a background search create ad tabs or off-site windows.
         onCreateWindow: (controller, action) async => false,
@@ -155,6 +154,33 @@ class _AutoHitomiWebSearchState extends State<AutoHitomiWebSearch> {
         },
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Platform.isAndroid && !Platform.isWindows) {
+      return const SizedBox.shrink();
+    }
+    // Non-zero layout allows the native WebView to render its DOM; it is not
+    // an always-running background service. Disposed at success or timeout.
+    if (Platform.isWindows) {
+      return FutureBuilder<WebViewEnvironment?>(
+        future: _environment,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _finish(const [], 'webview2-initialization-failed');
+            });
+            return const SizedBox.shrink();
+          }
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const SizedBox(width: 2, height: 2);
+          }
+          return _buildWebView(snapshot.data);
+        },
+      );
+    }
+    return _buildWebView(null);
   }
 }
 
