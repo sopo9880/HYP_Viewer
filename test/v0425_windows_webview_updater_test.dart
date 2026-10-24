@@ -33,7 +33,7 @@ void main() {
       expect(source, contains('WebSearchAdBlock.cleanPageJavaScript'));
     }
     expect(manual, contains('WindowsWebSearchRuntime.retryFailedInitialization()'));
-    expect(manual, contains('외부 브라우저에서 열기'));
+    expect(manual, contains('webSearchWindowsOpenExternal'));
     expect(manual, contains('Timer(const Duration(seconds: 15)'));
     expect(automatic, contains('webview2-initialization-failed'));
   });
