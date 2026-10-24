@@ -3526,7 +3526,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           builder: (ctx) => AlertDialog(
             title: const HypText('업데이트 파일 검증 완료'),
             content: const HypText('다운로드한 파일의 SHA-256을 확인했어. '
-                'Windows 설치 프로그램을 열기 전에 앱을 종료할게. 계속할까?'),
+                '진행 중인 다운로드가 없으면 앱과 트레이를 종료하고, '
+                'HYP Viewer에서 실행한 DPI 엔진만 중지한 후 설치할게. '
+                '다른 프로그램의 GoodbyeDPI나 WinDivert는 건드리지 않아. 계속할까?'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx, false),
                   child: const HypText('나중에')),
@@ -3537,6 +3539,33 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         ) == true;
       }
       if (install == true) {
+        if (Platform.isWindows) {
+          // Never force-quit a running transfer: persisted queue metadata and
+          // partial images are preserved, and the verified EXE stays cached.
+          if (galleryDownloadToken != null || _downloadQueueRunning ||
+              _backgroundDownloads.hasTransfers) {
+            _status('진행 중인 다운로드를 완료하거나 일시중지한 뒤 '
+                '설치를 다시 실행해 줘. 검증된 설치 파일은 보관돼 있어.');
+            await UpdateDiagnostics.record('handover-deferred-active-download');
+            return;
+          }
+          phase = 'dpi-shutdown';
+          await UpdateDiagnostics.record(phase);
+          // Stop only the engine owned by this HYP session. Its elevated
+          // supervisor writes "stopped" after the child exits.
+          final dpi = WindowsDpiManager.instance;
+          await dpi.stop().timeout(const Duration(seconds: 10));
+          await dpi.refreshStatus();
+          if (dpi.phase == WindowsDpiPhase.running ||
+              dpi.phase == WindowsDpiPhase.starting ||
+              dpi.phase == WindowsDpiPhase.stopping ||
+              dpi.diagnostic == 'stop-timeout' ||
+              dpi.diagnostic == 'stop-failed') {
+            throw StateError('앱 소유 DPI 프로세스 종료가 확인되지 않았어. '
+                'DPI를 끄거나 재부팅한 뒤 업데이트를 다시 시도해 줘.');
+          }
+          await UpdateDiagnostics.record('dpi-shutdown-ready');
+        }
         phase = 'installer-handover';
         await UpdateDiagnostics.record(phase);
         final pending = await _pendingUpdateFile();
