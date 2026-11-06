@@ -455,9 +455,22 @@ class _HypDashboardState extends State<HypDashboard> {
       selectedIndex: selectedIndex < 0 ? 0 : selectedIndex,
       onDestinationSelected: (index) => _navigate(pages[index]),
       destinations: pages.map((page) => NavigationDestination(
-        icon: Icon(page == HypPage.favorites
-          ? Icons.favorite_outline : page.icon),
-        selectedIcon: Icon(page.icon),
+        icon: Icon(switch (page) {
+          HypPage.favorites => Icons.favorite_outline,
+          HypPage.library => Icons.library_books_outlined,
+          HypPage.home => Icons.home_outlined,
+          HypPage.downloads => Icons.download_outlined,
+          HypPage.settings => Icons.settings_outlined,
+          HypPage.history => Icons.history_outlined,
+        }),
+        selectedIcon: Icon(switch (page) {
+          HypPage.favorites => Icons.favorite,
+          HypPage.library => Icons.library_books,
+          HypPage.home => Icons.home_rounded,
+          HypPage.downloads => Icons.download,
+          HypPage.settings => Icons.settings,
+          HypPage.history => Icons.history,
+        }),
         label: _viewerMode == ViewerMode.hyp
           ? HypI18n.t(context, switch (page) {
               HypPage.favorites => '내 독서',
@@ -485,8 +498,9 @@ class _HypDashboardState extends State<HypDashboard> {
   String? _openedGroupId;
   final Set<String> _selectedWorkIds = <String>{};
   final Set<String> _selectedGroupIds = <String>{};
-  bool get _canSelectWorks => _page == HypPage.library ||
-      _page == HypPage.downloads || _search.text.trim().isNotEmpty;
+  bool get _canSelectWorks => _viewerMode == ViewerMode.hyp &&
+      (_page == HypPage.library || _page == HypPage.downloads ||
+        _search.text.trim().isNotEmpty);
 
   final Map<String, int> _pageCounts = <String, int>{};
   final Map<String, Uint8List> _coverImages = <String, Uint8List>{};
