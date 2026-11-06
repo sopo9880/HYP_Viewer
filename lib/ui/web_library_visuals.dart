@@ -103,7 +103,7 @@ class WebVisualCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = entry.progress.clamp(0.0, 1.0);
+    final p = entry.progress.clamp(0.0, 1.0).toDouble();
     return Material(
       color: HypColors.surface,
       borderRadius: BorderRadius.circular(15),
