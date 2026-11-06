@@ -1239,6 +1239,19 @@ class _HypDashboardState extends State<HypDashboard> {
         !HardwareKeyboard.instance.isControlPressed) {
       return KeyEventResult.ignored;
     }
+    if (_viewerMode == ViewerMode.series) {
+      final target = switch (event.logicalKey) {
+        LogicalKeyboardKey.digit1 => HypPage.home,
+        LogicalKeyboardKey.digit2 => HypPage.library,
+        LogicalKeyboardKey.digit3 => HypPage.downloads,
+        LogicalKeyboardKey.digit4 || LogicalKeyboardKey.digit5 =>
+          HypPage.settings,
+        _ => null,
+      };
+      if (target == null) return KeyEventResult.ignored;
+      _navigate(target);
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.digit1) {
       _navigate(HypPage.home);
     } else if (event.logicalKey == LogicalKeyboardKey.digit2) {
@@ -1511,10 +1524,12 @@ class _HypDashboardState extends State<HypDashboard> {
         ),
       );
 
-  List<PopupMenuEntry<String>> get _toolsMenu => const [
-    PopupMenuItem(value: 'settings', child: HypText('설정')),
-    PopupMenuItem(value: 'history', child: HypText('열람 기록')),
-    PopupMenuItem(value: 'backup', child: HypText('백업 설정')),
+  List<PopupMenuEntry<String>> get _toolsMenu => [
+    const PopupMenuItem(value: 'settings', child: HypText('설정')),
+    if (_viewerMode == ViewerMode.hyp) ...[
+      const PopupMenuItem(value: 'history', child: HypText('열람 기록')),
+      const PopupMenuItem(value: 'backup', child: HypText('백업 설정')),
+    ],
   ];
 
   void _toolsAction(String value) {
