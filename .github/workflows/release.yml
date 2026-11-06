@@ -122,16 +122,22 @@ jobs:
 
           CI source commit: $SOURCE_SHA
 
-          - Add optional Standard / Strong / Off web-search ad blocking.
-          - Fold stopped-download failures, with an explicit retry-all option.
-          - Allow new downloads to enter the persistent queue during a transfer.
-          - Preserve offline files and backups; retain the 0.x version scheme.
+          - WEB Viewer sites: confirmation before deletion and editable names/URLs.
+          - Save the current browser page as a WEB site button.
+          - Reopen the last tab or choose from recently visited pages.
+          - Clear individual or all WEB download failure records.
+          - Retry transient transport resets and clean incomplete archives.
+          - Recognize dynamically rendered webtoon reader pages in page order.
+          - Preserve existing HYP/WEB library separation and user data.
           - Android APK: signed once in main CI using persistent release signing.
-          - Windows: installer built once in that same CI run.
+          - Windows installer: built once in that same CI run.
           - Release reuses the original artifacts and verifies their checksums.
 
-          Note: Fully independent parallel downloads and per-work cancel/delete
-          remain incomplete; device behavior must be tested after release.
+          Note: The 105-slot HTML example does not prove that all images can
+          be downloaded. Only already rendered, accessible public HTTPS images
+          are considered. No authentication or access control is bypassed.
+          WEB downloads continue across tab switches but not app restarts.
+          Device behavior must be tested after the official release.
 
           Check SHA256SUMS.txt and BUILD_COMMIT.txt before installation.
           EOF
