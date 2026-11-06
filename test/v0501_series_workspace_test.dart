@@ -59,9 +59,9 @@ void main() {
       await store.saveSeries(capture);
       await store.queueSeriesEpisodes(capture.url.toString(),
           capture.episodes.map((e) => e.url.toString()));
-      expect(store.nextSeriesEpisode(capture.url.toString())?.episodeNumber, 1);
+      expect(store.nextSeriesEpisode(capture.url.toString())?.number, 1);
       await store.setSeriesOldestFirst(false);
-      expect(store.nextSeriesEpisode(capture.url.toString())?.episodeNumber, 3);
+      expect(store.nextSeriesEpisode(capture.url.toString())?.number, 3);
       await store.setSeriesSelectUnsaved(false);
       await store.setSeriesHideCompleted(true);
       expect(store.autoSelectImages, isTrue);
@@ -72,7 +72,7 @@ void main() {
       expect(reopened.seriesSelectUnsaved, isFalse);
       expect(reopened.seriesHideCompleted, isTrue);
       expect(reopened.autoSelectImages, isTrue);
-      expect(reopened.nextSeriesEpisode(capture.url.toString())?.episodeNumber, 3);
+      expect(reopened.nextSeriesEpisode(capture.url.toString())?.number, 3);
       expect(reopened.works, isEmpty);
       reopened.dispose();
     } finally {
