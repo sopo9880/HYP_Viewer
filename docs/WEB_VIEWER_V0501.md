@@ -45,3 +45,39 @@ within the existing 0.x version series.
   from matching successful CI workflow and verifies their source SHA and hash.
 - Live Android browsing and access to third-party images need a real-device
   test after official release. Network/server denial can remain unresolved.
+
+## Integrated Series Manager (same v0.5.1 PR #55)
+- Explicit user action in the WEB browser scans a currently open series detail
+  page with `.serial-list .list-body li.list-item a.item-subject[href]`.
+- Saved series metadata includes series title, author, optional cover, URL,
+  published chapter labels and links. A synthetic 81-link regression fixture
+  models the supplied HTML; the site row's data-index 149 is distinct from
+  the human 77th episode label. IDs use exact episode URLs, not list indexes.
+- Selection modes: all unsaved chapters, new/unsaved-only, numeric episode range,
+  and individual checkboxes. The app only processes explicitly selected links.
+- Series groups in WEB Library contain separate chapter CBZs and independent
+  reader progress. Existing standalone WEB CBZs are re-associated by source
+  URL without redownloading or modifying HYP data.
+- In-app sequential batch mode navigates selected episode pages using the
+  existing WebView, captures images visible in the rendered DOM, downloads each
+  chapter to a bounded CBZ, then navigates to the next chapter only after
+  verifying the previous archive.
+- Per-episode states (available / queued / saved / failed / needs_browser) are
+  persisted in the WEB library. On restart, interrupted transfers become
+  queued and can be resumed by reopening the series page. Signed image URLs,
+  cookies and page credentials are never persisted in the queue.
+- Series update checks are user-initiated: reopen the source and scan again;
+  merge new links without deleting previous chapters or reading progress.
+- If a reader page has not loaded all its slots, the batch pauses, preserves
+  remaining queued episodes, and requests a normal browser review. Site
+  authentication/access restrictions are not bypassed.
+- There is no unattended service-worker crawl or invisible HTTP fetch of all
+  chapter HTML pages. Browser automation runs only after user opt-in.
+- Unit tests cover 81 distinct episode links, URL deduplication and origin
+  restrictions, saved/queued state-preserving merges, persistent series queues,
+  and adoption of existing CBZ progress.
+
+## CI regression addressed
+Previous PR run #42242604931 failed one Android test: a visited HTTPS page with
+a URL fragment was rejected before the history sanitization step. In this PR
+the fragment is removed before public URL validation so the test can pass.
