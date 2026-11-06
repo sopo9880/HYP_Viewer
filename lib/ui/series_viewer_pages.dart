@@ -1,8 +1,15 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../core/web_series_library.dart';
 import '../core/web_viewer_store.dart';
 import '../l10n/app_localizations.dart';
+import 'hero_banner.dart';
+import 'hyp_theme.dart';
+import 'web_library_visuals.dart';
+import 'update_apk_cleanup_panel.dart';
 
 /// Four dedicated SERIES screens backed by the same WEB store and CBZs.
 /// The wrapper dashboard owns the store, so mode changes never copy data.
@@ -14,89 +21,177 @@ class SeriesViewerPages extends StatelessWidget {
   final void Function(String) onOpenSeriesSource;
   final void Function(String) onOpenEpisodeSource;
   final void Function(Object) onError;
+  final Map<String, Uint8List?> heroCovers;
+  final ValueChanged<String>? onNavigate;
+  final bool updating;
 
   const SeriesViewerPages({
     super.key, required this.store, required this.section,
     required this.onOpenSeries, required this.onReadWork,
     required this.onOpenSeriesSource, required this.onOpenEpisodeSource,
-    required this.onError,
+    required this.onError, this.heroCovers = const {}, this.onNavigate,
+    this.updating = false,
   });
 
   Widget _heading(BuildContext context, String label) =>
     Text(label, style: Theme.of(context).textTheme.titleLarge);
 
-  Widget _seriesTile(WebSeriesRecord group, AppLocalizations l) =>
-    Card(child: ListTile(
-      leading: const Icon(Icons.collections_bookmark_outlined, size: 30),
-      title: Text(group.title, maxLines: 2,
-        overflow: TextOverflow.ellipsis),
-      subtitle: Text(l.webSeriesStoredCount + ': ' +
-        group.completed.toString() + '/' +
-        group.episodes.length.toString() + ' · ' +
-        l.webSeriesQueued + ': ' + group.queued.toString()),
-      onTap: () => onOpenSeries(group),
-      trailing: IconButton(
-        tooltip: l.webSeriesCheckUpdates,
-        icon: const Icon(Icons.sync),
-        onPressed: () => onOpenSeriesSource(group.url),
+  List<WebVisualEntry> _seriesEntries(AppLocalizations labels) {
+    return store.series.map((group) {
+      String? firstSavedId;
+      for (final chapter in group.episodes) {
+        if (chapter.workId != null && chapter.state == 'saved') {
+          firstSavedId = chapter.workId;
+          break;
+        }
+      }
+      return WebVisualEntry(
+        id: 'series-' + group.url,
+        title: group.title,
+        subtitle: group.author.isEmpty ? group.url : group.author,
+        detail: labels.webSeriesStoredCount + ': ' +
+            group.completed.toString() + '/' +
+            group.episodes.length.toString() + ' · ' +
+            labels.webSeriesQueued + ': ' + group.queued.toString(),
+        coverWorkId: firstSavedId,
+        remoteCoverUrl: group.coverUrl,
+        modifiedAt: group.checkedAt,
+        progress: group.episodes.isEmpty
+          ? 0 : group.completed / group.episodes.length,
+        downloaded: group.completed > 0,
+        icon: Icons.collections_bookmark_rounded,
+        onOpen: () => onOpenSeries(group),
+        actions: {
+          'open': labels.webViewerRead,
+          'source': labels.webSeriesCheckUpdates,
+        },
+        onAction: (action) {
+          if (action == 'open') onOpenSeries(group);
+          if (action == 'source') onOpenSeriesSource(group.url);
+        },
+      );
+    }).toList();
+  }
+
+  List<WebVisualEntry> _chapterEntries(AppLocalizations labels) {
+    return store.works.where((work) => work.seriesUrl != null).map((work) {
+      String parent = work.author;
+      for (final group in store.series) {
+        if (group.url == work.seriesUrl) {
+          parent = group.title;
+          break;
+        }
+      }
+      final progress = work.pages <= 1
+        ? 0.0 : ((work.currentPage - 1) / (work.pages - 1))
+          .clamp(0.0, 1.0).toDouble();
+      return WebVisualEntry(
+        id: 'chapter-' + work.id,
+        title: work.title,
+        subtitle: parent,
+        detail: work.currentPage.toString() + ' / ' +
+          work.pages.toString(),
+        coverWorkId: work.id,
+        modifiedAt: work.savedAt,
+        progress: progress, downloaded: true,
+        icon: Icons.menu_book_rounded,
+        onOpen: () => onReadWork(work),
+        actions: {
+          'read': labels.webViewerRead,
+          'source': labels.webViewerSource,
+        },
+        onAction: (action) {
+          if (action == 'read') onReadWork(work);
+          if (action == 'source') onOpenEpisodeSource(work.sourceUrl);
+        },
+      );
+    }).toList();
+  }
+
+  Widget _home(BuildContext context, AppLocalizations labels) {
+    final groups = _seriesEntries(labels)
+      ..sort((a, b) => b.modifiedAt.compareTo(a.modifiedAt));
+    final chapters = _chapterEntries(labels)
+      ..sort((a, b) => b.modifiedAt.compareTo(a.modifiedAt));
+    final ids = chapters.take(3).map((e) => e.coverWorkId).toList();
+    final art = List<Uint8List?>.generate(3,
+      (i) => i < ids.length ? heroCovers[ids[i]] : null);
+    final artworkKeys = List<String?>.generate(3,
+      (i) => i < ids.length ? ids[i] : null);
+    final saved = store.series.fold<int>(
+      0, (sum, group) => sum + group.completed);
+    final pending = store.series.fold<int>(
+      0, (sum, group) => sum + group.queued);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      HypHeroBanner(
+        viewerLabel: 'SERIES Viewer',
+        bannerIcon: Icons.collections_bookmark_rounded,
+        slideTitles: [
+          labels.seriesVisualHeroTitle1,
+          labels.seriesVisualHeroTitle2,
+          labels.seriesVisualHeroTitle3,
+        ],
+        slideDescriptions: [
+          labels.seriesVisualHeroDesc1,
+          labels.seriesVisualHeroDesc2,
+          labels.seriesVisualHeroDesc3,
+        ],
+        rotatingArtworks: art,
+        rotatingArtworkKeys: artworkKeys,
+        onOpenArtwork: (id) {
+          for (final work in store.works) {
+            if (work.id == id) { onReadWork(work); break; }
+          }
+        },
+        onOpenLibrary: () => onNavigate?.call('library'),
+        onOpenDownloads: () => onNavigate?.call('downloads'),
       ),
-    ));
-
-  Widget _home(BuildContext context, AppLocalizations l) {
-    final groups = [...store.series]
-      ..sort((a, b) => b.checkedAt.compareTo(a.checkedAt));
-    final works = store.works.where((w) => w.seriesUrl != null).toList()
-      ..sort((a, b) => b.savedAt.compareTo(a.savedAt));
-    final chapters = groups.fold<int>(0, (sum, group) => sum + group.completed);
-    final queued = groups.fold<int>(0, (sum, group) => sum + group.queued);
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _heading(context, l.seriesViewerHome),
-      const SizedBox(height: 12),
+      const SizedBox(height: 15),
       Wrap(spacing: 8, runSpacing: 8, children: [
-        Chip(avatar: const Icon(Icons.library_books_outlined, size: 18),
-          label: Text(l.seriesViewerCount + ': ' + groups.length.toString())),
-        Chip(avatar: const Icon(Icons.check_circle_outline, size: 18),
-          label: Text(l.webSeriesSaved + ': ' + chapters.toString())),
-        Chip(avatar: const Icon(Icons.download_outlined, size: 18),
-          label: Text(l.webSeriesQueued + ': ' + queued.toString())),
+        Chip(label: Text(labels.seriesViewerCount + ': ' +
+          groups.length.toString())),
+        Chip(label: Text(labels.webSeriesSaved + ': ' + saved.toString())),
+        Chip(label: Text(labels.webSeriesQueued + ': ' + pending.toString())),
       ]),
-      const SizedBox(height: 14),
-      if (works.isNotEmpty) ...[
-        Text(l.seriesViewerContinueReading,
-          style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 6),
-        Card(child: ListTile(
-          leading: const Icon(Icons.menu_book_outlined),
-          title: Text(works.first.title, maxLines: 2,
-            overflow: TextOverflow.ellipsis),
-          subtitle: Text(works.first.currentPage.toString() + ' / ' +
-            works.first.pages.toString()),
-          trailing: const Icon(Icons.play_arrow),
-          onTap: () => onReadWork(works.first),
-        )),
-        const SizedBox(height: 12),
+      const SizedBox(height: 19),
+      if (chapters.isNotEmpty) ...[
+        WebVisualLibrary(
+          key: const Key('series-continue-cover-grid'),
+          store: store,
+          title: labels.seriesViewerContinueReading,
+          subtitle: labels.seriesVisualContinueDescription,
+          icon: Icons.menu_book_rounded,
+          searchable: false, initialVisible: 4,
+          onViewAll: () => onNavigate?.call('library'),
+          items: chapters,
+          emptyMessage: labels.seriesViewerNoWorks,
+        ),
+        const SizedBox(height: 19),
       ],
-      Text(l.seriesViewerRecentlyAdded,
-        style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 8),
-      if (groups.isEmpty) Text(l.seriesViewerNoWorks),
-      for (final group in groups.take(6)) _seriesTile(group, l),
+      WebVisualLibrary(
+        key: const Key('series-home-cover-grid'),
+        store: store,
+        title: labels.seriesVisualRecent,
+        subtitle: labels.seriesVisualLibraryDescription,
+        icon: Icons.collections_bookmark_rounded,
+        searchable: false, initialVisible: 8,
+        onViewAll: () => onNavigate?.call('library'),
+        items: groups,
+        emptyMessage: labels.seriesViewerNoWorks,
+      ),
     ]);
   }
 
-  Widget _library(BuildContext context, AppLocalizations l) {
-    final groups = [...store.series]
-      ..sort((a, b) => b.checkedAt.compareTo(a.checkedAt));
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _heading(context, l.seriesViewerLibrary),
-      const SizedBox(height: 8),
-      Text(l.seriesViewerCount + ': ' + groups.length.toString(),
-        style: Theme.of(context).textTheme.bodySmall),
-      const SizedBox(height: 12),
-      if (groups.isEmpty) Text(l.seriesViewerNoWorks),
-      for (final group in groups) _seriesTile(group, l),
-    ]);
-  }
+  Widget _library(BuildContext context, AppLocalizations labels) =>
+    WebVisualLibrary(
+      key: const Key('series-full-cover-library'),
+      store: store,
+      title: labels.seriesViewerLibrary,
+      subtitle: labels.seriesVisualLibraryDescription,
+      icon: Icons.collections_bookmark_rounded,
+      items: _seriesEntries(labels),
+      emptyMessage: labels.seriesViewerNoWorks,
+    );
 
   Widget _downloads(BuildContext context, AppLocalizations l) {
     final groups = store.series.where((s) =>
@@ -107,7 +202,9 @@ class SeriesViewerPages extends StatelessWidget {
     final errors = store.errors.entries
       .where((entry) => store.isSeriesFailure(entry.key)).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _heading(context, l.seriesViewerDownloads),
+      HypSectionTitle(icon: Icons.download_rounded,
+        title: l.seriesViewerDownloads,
+        subtitle: l.webVisualDownloadsDescription),
       const SizedBox(height: 12),
       if (groups.isEmpty && jobs.isEmpty && errors.isEmpty)
         Text(l.seriesViewerNoDownloads),
@@ -199,8 +296,14 @@ class SeriesViewerPages extends StatelessWidget {
 
   Widget _settings(BuildContext context, AppLocalizations l) =>
     Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _heading(context, l.seriesViewerSettings),
+      HypSectionTitle(
+        icon: Icons.settings_rounded,
+        title: l.seriesViewerSettings,
+        subtitle: l.seriesViewerInfo),
       const SizedBox(height: 12),
+      HypPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
       SwitchListTile(
         value: store.seriesOldestFirst,
         title: Text(l.seriesViewerOldestFirst),
@@ -233,6 +336,11 @@ class SeriesViewerPages extends StatelessWidget {
         leading: const Icon(Icons.info_outline),
         title: Text(l.seriesViewerInfo),
       ),
+      ])),
+      if (Platform.isAndroid) ...[
+        const SizedBox(height: 14),
+        UpdateApkCleanupPanel(downloadInProgress: updating),
+      ],
     ]);
 
   @override
