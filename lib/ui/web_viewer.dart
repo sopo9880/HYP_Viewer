@@ -235,6 +235,15 @@ class _WebViewerPaneState extends State<WebViewerPane> {
       Text(labels.webViewerSettings,
           style: Theme.of(context).textTheme.titleLarge),
       const SizedBox(height: 12),
+      SwitchListTile(
+        value: widget.store.autoSelectImages,
+        onChanged: (v) async {
+          try { await widget.store.setAutoSelectImages(v); }
+          catch (error) { if (mounted) _error(error); }
+        },
+        title: Text(labels.webViewerAutoSelect),
+        subtitle: Text(labels.webViewerAutoSelectHelp),
+      ),
       ListTile(
         leading: const Icon(Icons.shield_outlined),
         title: Text(labels.webViewerSettingsNote),
@@ -326,7 +335,10 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
       setState(() {
         _capture = found;
         _title.text = found.title;
-        _selected..clear()..addAll(List.generate(found.images.length, (i) => i));
+        _selected.clear();
+        if (widget.store.autoSelectImages) {
+          _selected.addAll(List.generate(found.images.length, (i) => i));
+        }
       });
     } catch (error) { _error(error); }
     finally { if (mounted) setState(() => _busy = false); }
