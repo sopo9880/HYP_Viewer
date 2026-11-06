@@ -7,11 +7,15 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/reader_settings.dart';
 import '../core/web_page_capture.dart';
+import '../core/web_series_capture.dart';
+import '../core/web_series_library.dart';
 import '../core/web_viewer_store.dart';
 import '../core/windows_web_search.dart';
 import '../core/work.dart';
 import '../l10n/app_localizations.dart';
 import 'gallery_reader.dart';
+import 'web_series_selector.dart';
+import 'web_series_shelf.dart';
 
 /// WEB is independent of the HYP library, but uses the existing image reader.
 class WebViewerPane extends StatefulWidget {
@@ -208,6 +212,29 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     ],
   );
 
+  Future<void> _openSeries(WebSeriesRecord group) async {
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => WebSeriesShelf(
+        series: group,
+        onRefreshSource: () => _openSite(group.url),
+        onOpenEpisode: (episode) {
+          final savedId = episode.workId;
+          WebSavedWork? work;
+          if (savedId != null) {
+            for (final item in widget.store.works) {
+              if (item.id == savedId) { work = item; break; }
+            }
+          }
+          if (work != null) {
+            _openWork(work);
+          } else {
+            _openSite(episode.url);
+          }
+        },
+      ),
+    ));
+  }
+
   Widget _works(AppLocalizations labels, {int? count}) {
     final items = count == null ? widget.store.works :
         widget.store.works.take(count).toList();
@@ -215,8 +242,20 @@ class _WebViewerPaneState extends State<WebViewerPane> {
       Text(count == null ? labels.webViewerLibrary : labels.webViewerRecent,
           style: Theme.of(context).textTheme.titleLarge),
       const SizedBox(height: 12),
-      if (items.isEmpty) Text(labels.webViewerNoWorks),
-      for (final item in items) Card(child: ListTile(
+      if (items.isEmpty && widget.store.series.isEmpty)
+        Text(labels.webViewerNoWorks),
+      for (final group in widget.store.series)
+        Card(child: ListTile(
+          leading: const Icon(Icons.library_books_outlined),
+          title: Text(group.title),
+          subtitle: Text(labels.webSeriesStoredCount + ': ' +
+              group.completed.toString() + '/' +
+              group.episodes.length.toString()),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _openSeries(group),
+        )),
+      for (final item in items.where((w) => w.seriesUrl == null))
+        Card(child: ListTile(
         leading: const Icon(Icons.auto_stories),
         title: Text(item.title),
         subtitle: Text(item.author + ' · ' +
@@ -248,8 +287,19 @@ class _WebViewerPaneState extends State<WebViewerPane> {
       Text(labels.webViewerDownloads,
           style: Theme.of(context).textTheme.titleLarge),
       const SizedBox(height: 12),
-      if (widget.store.pending.isEmpty)
+      if (widget.store.pending.isEmpty &&
+          !widget.store.series.any((s) => s.queued > 0))
         Text(labels.webViewerEmptyDownloads),
+      for (final group in widget.store.series.where((s) => s.queued > 0 || s.failures > 0))
+        Card(child: ListTile(
+          leading: const Icon(Icons.format_list_numbered),
+          title: Text(group.title),
+          subtitle: Text(labels.webSeriesQueued + ': ' +
+            group.queued.toString() + ' · ' + labels.webSeriesSaved + ': ' +
+            group.completed.toString()),
+          trailing: const Icon(Icons.play_circle_outline),
+          onTap: () => _openSite(group.url),
+        )),
       for (final id in widget.store.pending)
         Card(child: ListTile(
           leading: const Icon(Icons.download),
