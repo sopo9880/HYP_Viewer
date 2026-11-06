@@ -411,9 +411,13 @@ class _HypDashboardState extends State<HypDashboard> {
       child: mobile
           ? Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(_viewerIcon(selected), size: 22),
-              const SizedBox(width: 7),
-              Text(selected.title),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
+              Flexible(
+                fit: FlexFit.loose,
+                child: Text(selected.title,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: 2),
               const Icon(Icons.arrow_drop_down),
             ])
           : Row(children: [
