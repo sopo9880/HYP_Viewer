@@ -64,24 +64,36 @@ class WebSeriesCapture {
       final episodes = <WebSeriesEpisodeCandidate>[];
       for (final item in rawEpisodes.take(1200)) {
         if (item is! Map) continue;
-        final rawUrl = _plain(item['url'], 2048);
-        final uri = source.resolve(rawUrl);
-        if (!OnlineSourcePolicy.isHttpsPublic(uri) ||
-            uri.host != source.host || uri.path == source.path) continue;
-        if (!unique.add(uri.toString())) continue;
-        final rawOrder = item['order'];
-        final order = rawOrder is num ? rawOrder.toInt()
-            : int.tryParse('$rawOrder') ?? (episodes.length + 1);
-        if (order < 1 || order > 10000000) continue;
-        final title = _plain(item['title']);
-        final numberMatch = RegExp(r'(\d{1,5})\s*화').allMatches(title);
-        final episodeNumber = numberMatch.isEmpty ? null
-            : int.tryParse(numberMatch.last.group(1) ?? '');
-        episodes.add(WebSeriesEpisodeCandidate(
-          url: uri, title: title.isEmpty ? 'Episode $order' : title,
-          publishedAt: _plain(item['date'], 60), siteOrder: order,
-          episodeNumber: episodeNumber,
-        ));
+        try {
+          final rawUrl = _plain(item['url'], 2048);
+          if (rawUrl.isEmpty) continue;
+          final uri = source.resolve(rawUrl);
+          if (!OnlineSourcePolicy.isHttpsPublic(uri) ||
+              uri.host != source.host || uri.path == source.path) continue;
+          // Links with credentials or session-bearing query parameters
+          // should not be persisted as a reusable episode bookmark.
+          if (uri.queryParameters.keys.any((key) =>
+              RegExp(r'token|auth|session|signature|password|'
+                  r'credential|nonce|api_key|jwt',
+                  caseSensitive: false).hasMatch(key))) continue;
+          if (!unique.add(uri.toString())) continue;
+          final rawOrder = item['order'];
+          final order = rawOrder is num ? rawOrder.toInt()
+              : int.tryParse('$rawOrder') ?? (episodes.length + 1);
+          if (order < 1 || order > 10000000) continue;
+          final title = _plain(item['title']);
+          final numberMatch = RegExp(r'(\d{1,5})\s*화').allMatches(title);
+          final episodeNumber = numberMatch.isEmpty ? null
+              : int.tryParse(numberMatch.last.group(1) ?? '');
+          episodes.add(WebSeriesEpisodeCandidate(
+            url: uri, title: title.isEmpty ? 'Episode $order' : title,
+            publishedAt: _plain(item['date'], 60), siteOrder: order,
+            episodeNumber: episodeNumber,
+          ));
+        } catch (_) {
+          // One malformed row must not invalidate all available episodes.
+          continue;
+        }
       }
       if (episodes.isEmpty) return null;
       episodes.sort((a, b) => b.siteOrder.compareTo(a.siteOrder));
