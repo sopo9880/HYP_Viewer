@@ -624,14 +624,17 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
   @override
   Widget build(BuildContext context) {
     final labels = AppLocalizations.of(context)!;
+    final compact = MediaQuery.sizeOf(context).width < 560;
     return Scaffold(
       appBar: AppBar(title: Text(_currentUrl,
           maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
-          IconButton(onPressed: () async => _web?.goBack(),
-            icon: const Icon(Icons.arrow_back), tooltip: labels.webViewerBack),
-          IconButton(onPressed: () => _web?.reload(),
-            icon: const Icon(Icons.refresh), tooltip: labels.webViewerRefresh),
+          if (!compact) ...[
+            IconButton(onPressed: () async => _web?.goBack(),
+              icon: const Icon(Icons.arrow_back), tooltip: labels.webViewerBack),
+            IconButton(onPressed: () => _web?.reload(),
+              icon: const Icon(Icons.refresh), tooltip: labels.webViewerRefresh),
+          ],
           IconButton(
             onPressed: _busy || !_loaded ? null : _saveCurrentTab,
             icon: const Icon(Icons.bookmark_add_outlined),
@@ -646,7 +649,18 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
             tooltip: labels.webViewerDetect),
         ],
       ),
-      body: Stack(children: [
+      body: Column(children: [
+        if (compact) SizedBox(height: 48, child: Row(children: [
+          IconButton(onPressed: () async => _web?.goBack(),
+            icon: const Icon(Icons.arrow_back), tooltip: labels.webViewerBack),
+          IconButton(onPressed: () async => _web?.goForward(),
+            icon: const Icon(Icons.arrow_forward)),
+          IconButton(onPressed: () => _web?.reload(),
+            icon: const Icon(Icons.refresh), tooltip: labels.webViewerRefresh),
+          Expanded(child: Text(_currentUrl, maxLines: 1,
+              overflow: TextOverflow.ellipsis)),
+        ])),
+        Expanded(child: Stack(children: [
         Positioned.fill(
           child: Platform.isWindows
             ? FutureBuilder<WebViewEnvironment?>(
@@ -683,6 +697,7 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
             color: Theme.of(context).scaffoldBackgroundColor,
             child: _preview(labels),
           )),
+      ])),
       ]),
     );
   }
