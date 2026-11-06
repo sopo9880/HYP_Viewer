@@ -54,7 +54,7 @@ class SeriesViewerPages extends StatelessWidget {
         remoteCoverUrl: group.coverUrl,
         modifiedAt: group.checkedAt,
         progress: group.episodes.isEmpty
-          ? 0 : group.completed / group.episodes.length,
+          ? 0.0 : group.completed / group.episodes.length,
         downloaded: group.completed > 0,
         icon: Icons.collections_bookmark_rounded,
         onOpen: () => onOpenSeries(group),
