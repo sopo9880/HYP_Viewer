@@ -128,8 +128,9 @@ jobs:
           - Clear individual or all WEB download failure records.
           - Retry transient transport resets and clean incomplete archives.
           - Recognize dynamically rendered webtoon reader pages in page order.
-          - Integrate WEB Series Manager: selected chapters, batch CBZ, grouped shelf.
-          - Persist series episode queues, update scans and retry/attention states.
+          - Add a third SERIES Viewer workspace with Home, Library, Downloads and Settings.
+          - Integrate Series Manager: selected chapters, batch CBZ and grouped reader shelf.
+          - Persist SERIES preferences, chapter queue, update checks and retry states.
           - Preserve existing HYP/WEB library separation and user data.
           - Android APK: signed once in main CI using persistent release signing.
           - Windows installer: built once in that same CI run.
