@@ -284,7 +284,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
       for (final error in widget.store.errors.entries.toList())
         Card(child: ListTile(
           leading: const Icon(Icons.error_outline),
-          title: Text(error.key),
+          title: Text(widget.store.failureTitles[error.key] ?? error.key),
           subtitle: Text(error.value,
               maxLines: 2, overflow: TextOverflow.ellipsis),
           onTap: () => showDialog<void>(
