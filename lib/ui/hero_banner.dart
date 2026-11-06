@@ -15,6 +15,10 @@ class HypHeroBanner extends StatefulWidget {
   final List<String?>? rotatingArtworkKeys;
   final ValueChanged<String>? onOpenArtwork;
   final ValueChanged<bool>? onHoverChanged;
+  final String viewerLabel;
+  final IconData bannerIcon;
+  final List<String>? slideTitles;
+  final List<String>? slideDescriptions;
 
   const HypHeroBanner({
     super.key,
@@ -25,6 +29,10 @@ class HypHeroBanner extends StatefulWidget {
     this.rotatingArtworkKeys,
     this.onOpenArtwork,
     this.onHoverChanged,
+    this.viewerLabel = 'HYP Viewer',
+    this.bannerIcon = Icons.auto_stories_rounded,
+    this.slideTitles,
+    this.slideDescriptions,
   });
 
   @override
@@ -66,6 +74,10 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, layout) {
         final compact = layout.maxWidth < 560;
+        final displayedTitles = widget.slideTitles?.length == 3
+            ? widget.slideTitles! : titles;
+        final displayedDescriptions = widget.slideDescriptions?.length == 3
+            ? widget.slideDescriptions! : descriptions;
         final currentArt = widget.rotatingArtworks == null
             ? (_index == 0 ? widget.artwork : null)
             : (widget.rotatingArtworks!.isEmpty ? null
@@ -137,7 +149,7 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
               right: compact ? -35 : 72,
               top: compact ? 38 : -20,
               child: Icon(
-                Icons.auto_stories_rounded,
+                widget.bannerIcon,
                 size: compact ? 174 : 266,
                 color: Colors.white.withValues(alpha: 0.11),
               ),
@@ -156,20 +168,20 @@ class _HypHeroBannerState extends State<HypHeroBanner> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.auto_stories_rounded,
+                    Icon(widget.bannerIcon,
                         color: HypColors.lightPurple, size: 19),
                     const SizedBox(width: 8),
-                    const HypText('HYP Viewer',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    HypText(widget.viewerLabel,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   ]),
                   const SizedBox(height: 11),
-                  HypText(titles[_index], style: TextStyle(
+                  HypText(displayedTitles[_index], style: TextStyle(
                     fontSize: compact ? 23 : 31,
                     fontWeight: FontWeight.w900,
                     height: 1.15,
                   )),
                   const SizedBox(height: 9),
-                  HypText(descriptions[_index], style: TextStyle(
+                  HypText(displayedDescriptions[_index], style: TextStyle(
                     fontSize: compact ? 11 : 13,
                     height: 1.4,
                     color: HypColors.text.withValues(alpha: 0.86),
