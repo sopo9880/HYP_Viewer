@@ -1641,6 +1641,17 @@ class _HypDashboardState extends State<HypDashboard> {
         children: [WebViewerPane(
           store: _webViewerStore, section: section,
           settings: widget.readerSettings,
+          updating: widget.downloadingUpdate,
+          onNavigate: (destination) {
+            final target = switch (destination) {
+              'web' => HypPage.favorites,
+              'library' => HypPage.library,
+              'downloads' => HypPage.downloads,
+              'settings' => HypPage.settings,
+              _ => HypPage.home,
+            };
+            if (_viewerMode.containsPage(target.name)) _navigate(target);
+          },
         )],
       );
     }
