@@ -116,9 +116,10 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     catch (error) { if (mounted) _error(error); }
   }
 
-  Future<void> _openSite(String url) async {
+  Future<void> _openSite(String url, {bool scanSeries = false}) async {
     await Navigator.of(context).push<void>(MaterialPageRoute(
-      builder: (_) => WebViewerBrowser(store: widget.store, initialUrl: url),
+      builder: (_) => WebViewerBrowser(store: widget.store,
+        initialUrl: url, autoScanSeries: scanSeries),
     ));
   }
 
@@ -216,7 +217,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     await Navigator.of(context).push<void>(MaterialPageRoute(
       builder: (_) => WebSeriesShelf(
         series: group,
-        onRefreshSource: () => _openSite(group.url),
+        onRefreshSource: () => _openSite(group.url, scanSeries: true),
         onOpenEpisode: (episode) {
           final savedId = episode.workId;
           WebSavedWork? work;
@@ -298,7 +299,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
             group.queued.toString() + ' · ' + labels.webSeriesSaved + ': ' +
             group.completed.toString()),
           trailing: const Icon(Icons.play_circle_outline),
-          onTap: () => _openSite(group.url),
+          onTap: () => _openSite(group.url, scanSeries: true),
         )),
       for (final id in widget.store.pending)
         Card(child: ListTile(
