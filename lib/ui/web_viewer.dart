@@ -51,18 +51,20 @@ class _WebViewerPaneState extends State<WebViewerPane> {
       SnackBar(content: Text(error.toString())));
   }
 
-  Future<void> _addSite() async {
+  Future<void> _addSite() => _editSite();
+
+  Future<void> _editSite({WebSiteBookmark? editing}) async {
     final labels = AppLocalizations.of(context)!;
-    final name = TextEditingController();
-    final address = TextEditingController(text: 'https://');
+    final name = TextEditingController(text: editing?.name ?? '');
+    final address = TextEditingController(text: editing?.url ?? 'https://');
     final confirmed = await showDialog<bool>(
       context: context, builder: (ctx) => AlertDialog(
-        title: Text(labels.webViewerAddSite),
+        title: Text(editing == null
+            ? labels.webViewerAddSite : labels.webViewerEditSite),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: name,
               decoration: InputDecoration(labelText: labels.webViewerSiteName)),
-          TextField(controller: address,
-              keyboardType: TextInputType.url,
+          TextField(controller: address, keyboardType: TextInputType.url,
               decoration: InputDecoration(labelText: labels.webViewerSiteAddress)),
         ]),
         actions: [
@@ -76,7 +78,36 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     final n = name.text, url = address.text;
     name.dispose(); address.dispose();
     if (confirmed != true) return;
-    try { await widget.store.addSite(n, url); }
+    try {
+      if (editing == null) {
+        await widget.store.addSite(n, url);
+      } else {
+        await widget.store.updateSite(editing.url, n, url);
+      }
+    } catch (error) { if (mounted) _error(error); }
+  }
+
+  Future<void> _confirmRemoveSite(WebSiteBookmark site) async {
+    final labels = AppLocalizations.of(context)!;
+    final accepted = await showDialog<bool>(
+      context: context, builder: (ctx) => AlertDialog(
+        title: Text(labels.webViewerDeleteSiteConfirm),
+        content: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(site.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text(site.url, maxLines: 3, overflow: TextOverflow.ellipsis),
+          ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: Text(labels.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true),
+              child: Text(labels.webViewerDelete)),
+        ],
+      ),
+    );
+    if (accepted != true) return;
+    try { await widget.store.removeSite(site.url); }
     catch (error) { if (mounted) _error(error); }
   }
 
@@ -137,6 +168,18 @@ class _WebViewerPaneState extends State<WebViewerPane> {
         FilledButton.icon(onPressed: _addSite, icon: const Icon(Icons.add),
             label: Text(labels.webViewerAddSite)),
       ]),
+      if (widget.store.lastTab != null) ...[
+        const SizedBox(height: 10),
+        Align(alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.history),
+            label: Text(labels.webViewerLastTab),
+            onPressed: () => _openSite(widget.store.lastTab!.url),
+          ),
+        ),
+        Text(widget.store.lastTab!.name,
+          maxLines: 1, overflow: TextOverflow.ellipsis),
+      ],
       const SizedBox(height: 14),
       if (widget.store.sites.isEmpty)
         Text(labels.webViewerEmptySites)
@@ -147,13 +190,18 @@ class _WebViewerPaneState extends State<WebViewerPane> {
             title: Text(site.name), subtitle: Text(site.url,
                 maxLines: 1, overflow: TextOverflow.ellipsis),
             onTap: () => _openSite(site.url),
-            trailing: IconButton(
-              tooltip: labels.webViewerDelete,
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () async {
-                try { await widget.store.removeSite(site.url); }
-                catch (error) { if (mounted) _error(error); }
+            trailing: PopupMenuButton<String>(
+              tooltip: labels.webViewerEditSite,
+              onSelected: (action) {
+                if (action == 'edit') _editSite(editing: site);
+                if (action == 'delete') _confirmRemoveSite(site);
               },
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'edit',
+                  child: Text(labels.webViewerEditSite)),
+                PopupMenuItem(value: 'delete',
+                  child: Text(labels.webViewerDelete)),
+              ],
             ),
           )),
     ],
@@ -224,9 +272,35 @@ class _WebViewerPaneState extends State<WebViewerPane> {
           icon: const Icon(Icons.cancel_outlined),
           label: Text(labels.webViewerCancel),
         ),
-      for (final error in widget.store.errors.entries)
-        ListTile(leading: const Icon(Icons.error_outline),
-          title: Text(error.key), subtitle: Text(error.value)),
+      if (widget.store.errors.isNotEmpty)
+        Align(alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: widget.store.clearAllFailedDownloads,
+            icon: const Icon(Icons.delete_sweep),
+            label: Text(labels.webViewerClearFailed),
+          ),
+        ),
+      for (final error in widget.store.errors.entries.toList())
+        Card(child: ListTile(
+          leading: const Icon(Icons.error_outline),
+          title: Text(error.key),
+          subtitle: Text(error.value,
+              maxLines: 2, overflow: TextOverflow.ellipsis),
+          onTap: () => showDialog<void>(
+            context: context, builder: (ctx) => AlertDialog(
+              title: Text(labels.webViewerErrorDetails),
+              content: SingleChildScrollView(
+                child: SelectableText(error.value)),
+              actions: [TextButton(onPressed: () => Navigator.pop(ctx),
+                child: Text(labels.cancel))],
+            ),
+          ),
+          trailing: IconButton(
+            tooltip: labels.webViewerClearError,
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => widget.store.clearFailedDownload(error.key),
+          ),
+        )),
     ],
   );
 
