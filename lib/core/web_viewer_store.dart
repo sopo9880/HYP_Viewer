@@ -209,10 +209,9 @@ class WebViewerStore extends ChangeNotifier {
   /// Save a browser navigation, not a new bookmark. Never persist
   /// query fields typically used for authentication or temporary signing.
   static Uri? safeHistoryUrl(String value) {
-    final parsed = Uri.tryParse(value);
-    if (parsed == null) return null;
-    // Normalize browser fragment before validating public HTTPS.
-    final uri = safeUrl(parsed.replace(fragment: '').toString());
+    // Splitting the raw URI removes the fragment completely. Creating an
+    // empty fragment with Uri.replace(fragment: '') can retain a '#' marker.
+    final uri = safeUrl(value.split('#').first);
     if (uri == null) return null;
     final filtered = <String, String>{};
     for (final entry in uri.queryParameters.entries) {
@@ -221,8 +220,7 @@ class WebViewerStore extends ChangeNotifier {
           caseSensitive: false).hasMatch(entry.key)) continue;
       filtered[entry.key] = entry.value;
     }
-    final cleaned = uri.replace(
-      queryParameters: filtered, fragment: '');
+    final cleaned = uri.replace(queryParameters: filtered);
     return safeUrl(cleaned.toString()) == null ? null : cleaned;
   }
 
