@@ -455,7 +455,8 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
   }
   Future<void> _rememberVisit(
       InAppWebViewController controller, String? rawUrl) async {
-    if (rawUrl == null || WebViewerStore.safeUrl(rawUrl) == null) return;
+    if (rawUrl == null ||
+        WebViewerStore.safeHistoryUrl(rawUrl) == null) return;
     try {
       final title = await controller.getTitle();
       final host = Uri.tryParse(rawUrl)?.host ?? rawUrl;
