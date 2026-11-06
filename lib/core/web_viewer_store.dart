@@ -180,7 +180,7 @@ class WebViewerStore extends ChangeNotifier {
     }
     sites[index] = WebSiteBookmark(
       name.trim().isEmpty ? uri.host : name.trim().substring(
-        0, name.trim().length.clamp(0, 120)), nextUrl);
+        0, name.trim().length.clamp(0, 120).toInt()), nextUrl);
     await _save();
     _notify();
   }
@@ -198,7 +198,7 @@ class WebViewerStore extends ChangeNotifier {
       filtered[entry.key] = entry.value;
     }
     final cleaned = uri.replace(
-      queryParameters: filtered.isEmpty ? null : filtered, fragment: '');
+      queryParameters: filtered, fragment: '');
     return safeUrl(cleaned.toString()) == null ? null : cleaned;
   }
 
@@ -208,7 +208,7 @@ class WebViewerStore extends ChangeNotifier {
     if (uri == null) return;
     final url = uri.toString();
     final cleanTitle = title.trim().isEmpty ? uri.host :
-        title.trim().substring(0, title.trim().length.clamp(0, 120));
+        title.trim().substring(0, title.trim().length.clamp(0, 120).toInt());
     if (recentPages.isNotEmpty &&
         recentPages.first.url == url &&
         recentPages.first.name == cleanTitle) return;
@@ -279,7 +279,8 @@ class WebViewerStore extends ChangeNotifier {
     final id = _newId();
     captures[id] = WebPageCapture(
       sourceUrl: capture.sourceUrl, title: title ?? capture.title,
-      author: capture.author, publishedAt: capture.publishedAt, images: images);
+      author: capture.author, publishedAt: capture.publishedAt,
+      expectedImages: capture.expectedImages, images: images);
     pending.add(id);
     progress[id] = 0;
     _notify();
