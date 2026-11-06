@@ -81,3 +81,37 @@ within the existing 0.x version series.
 Previous PR run #42242604931 failed one Android test: a visited HTTPS page with
 a URL fragment was rejected before the history sanitization step. In this PR
 the fragment is removed before public URL validation so the test can pass.
+
+## Three independent viewer workspaces (integrated in v0.5.1)
+The app title at the top left opens a mode picker: **HYP Viewer**,
+**WEB Viewer**, or **SERIES Viewer**. Each mode remembers its selected
+section for the current running session. No additional app is installed.
+
+- HYP keeps its original Home / Library / Reading / Downloads / History /
+  Settings structure, keyboard shortcuts and local HYP archives.
+- WEB keeps Home / Web (saved site shortcuts) / single-page Library /
+  single-page Downloads / WEB Settings. Series-specific works are not
+  duplicated in the WEB standalone Library list.
+- SERIES has its own **Home / Library / Downloads / Settings**. The mobile
+  bottom navigation displays exactly these four destinations. Desktop side
+  navigation and app-title picker use the same dashboard theme and shell.
+- SERIES Home shows series totals, completed and queued chapters, recently
+  checked series, and a resume-reading shortcut to the latest saved chapter.
+- SERIES Library groups chapters by parent series and opens the existing
+  per-chapter reader with independent page progress. Each series can be
+  rescanned from its original detail page.
+- SERIES Downloads shows persistent queued/failed chapter states, in-progress
+  page transfers, pause/cancel, and a path back to the original source for
+  manual resume. The corresponding WEB Downloads view still handles single-
+  page downloads and their separate failure logs.
+- SERIES Settings persist chapter processing order, whether unsaved episodes
+  are initially selected, and whether completed chapters are hidden in a
+  series shelf. Toggling these settings never deletes a CBZ.
+- SERIES and WEB share one WEB-only series metadata and CBZ directory.
+  They DO NOT copy downloaded files and do not migrate HYP data.
+- Automation remains opt-in: unattended app-restart downloads and access
+  restriction bypass are not implemented. Real-site checks are after release.
+
+Regression tests include the three navigation contracts, menu routing,
+the four localized SERIES pages, persistent SERIES settings and selected-
+episode queue order, and previously added Kone/webtoon/series behaviors.
