@@ -220,8 +220,12 @@ class WebViewerStore extends ChangeNotifier {
           caseSensitive: false).hasMatch(entry.key)) continue;
       filtered[entry.key] = entry.value;
     }
-    final cleaned = uri.replace(queryParameters: filtered);
-    return safeUrl(cleaned.toString()) == null ? null : cleaned;
+    // Dart's Uri.replace(queryParameters: {}) serializes an empty query
+    // as a trailing '?'. Reparse the canonical URL without that marker.
+    final serialized = uri.replace(queryParameters: filtered).toString();
+    final normalized = serialized.endsWith('?')
+        ? serialized.substring(0, serialized.length - 1) : serialized;
+    return safeUrl(normalized);
   }
 
   Future<void> recordVisitedPage(String rawUrl, String title) async {
