@@ -62,6 +62,23 @@ void main() {
     }
   });
 
+  test('empty and secret-only history queries do not retain a trailing ?', () {
+    expect(
+      WebViewerStore.safeHistoryUrl('https://example.com/another')?.toString(),
+      'https://example.com/another',
+    );
+    expect(
+      WebViewerStore.safeHistoryUrl(
+          'https://example.com/another?token=private#reader')?.toString(),
+      'https://example.com/another',
+    );
+    expect(
+      WebViewerStore.safeHistoryUrl(
+          'https://example.com/another?category=web&token=private')?.toString(),
+      'https://example.com/another?category=web',
+    );
+  });
+
   test('failure logs can be removed individually or all without deleting '
       'archive metadata', () {
     final store = WebViewerStore();
