@@ -1063,5 +1063,7 @@
   "webViewerRefresh": "Refresh",
   "webViewerDetect": "Detect images on this page",
   "webViewerRetry": "Retry",
-  "webViewerOpenExternal": "Open in external browser"
+  "webViewerOpenExternal": "Open in external browser",
+  "webViewerAutoSelect": "Select all detected images by default",
+  "webViewerAutoSelectHelp": "When off, manually select images before downloading."
 }
