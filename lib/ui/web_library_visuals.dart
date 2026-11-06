@@ -73,13 +73,13 @@ class WebCoverPreview extends StatelessWidget {
     if (cover != null) {
       return Image.memory(cover, fit: BoxFit.cover, cacheWidth: 480,
         gaplessPlayback: true,
-        errorBuilder: (_, _, _) => _fallback());
+        errorBuilder: (context, error, stackTrace) => _fallback());
     }
     final uri = WebViewerStore.safeUrl(remoteCoverUrl ?? '');
     if (uri != null) {
       return Image.network(uri.toString(), fit: BoxFit.cover,
         cacheWidth: 480,
-        errorBuilder: (_, _, _) => _fallback());
+        errorBuilder: (context, error, stackTrace) => _fallback());
     }
     return _fallback();
   }
