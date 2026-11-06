@@ -82,13 +82,10 @@ void main() {
 
   testWidgets('SERIES mode renders its four localized independent pages',
       (tester) async {
-    final dir = await Directory.systemTemp.createTemp('series-ui-test-');
-    addTearDown(() async {
-      await dir.delete(recursive: true);
-    });
-    final store = WebViewerStore(baseDirectory: dir);
+    // Widget tests run under fake async: avoid real file-system awaits here.
+    // SERIES page rendering uses empty in-memory data and does not load files.
+    final store = WebViewerStore();
     addTearDown(store.dispose);
-    await store.load();
     Widget screen(String section) => MaterialApp(
       locale: const Locale('ko'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
