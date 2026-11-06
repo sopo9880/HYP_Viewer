@@ -1065,5 +1065,20 @@
   "webViewerRetry": "Retry",
   "webViewerOpenExternal": "Open in external browser",
   "webViewerAutoSelect": "Select all detected images by default",
-  "webViewerAutoSelectHelp": "When off, manually select images before downloading."
+  "webViewerAutoSelectHelp": "When off, manually select images before downloading.",
+  "webViewerEditSite": "Edit site",
+  "webViewerDeleteSiteConfirm": "Delete this saved site button?",
+  "webViewerLastTab": "Last visited tab",
+  "webViewerRecentTabs": "Recently visited tabs",
+  "webViewerNoRecentTabs": "No recently visited pages.",
+  "webViewerSaveCurrentTab": "Save current page as site",
+  "webViewerSavedCurrentTab": "Current page saved to the Web site list.",
+  "webViewerAlreadySaved": "This site is already saved.",
+  "webViewerClearFailed": "Clear all failed logs",
+  "webViewerClearError": "Remove failure log",
+  "webViewerErrorDetails": "Failure details",
+  "webViewerMissingImages": "Some images are not loaded. Scroll the original page and detect again.",
+  "webViewerWaitingImages": "Wait for article images to load. Scroll the page and detect again.",
+  "webViewerBackToBrowser": "Return to webpage",
+  "webViewerDetectedOfTotal": "Loaded images / all pages"
 }
