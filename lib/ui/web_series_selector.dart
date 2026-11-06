@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 /// pages originate from the user-opened series detail DOM.
 class WebSeriesSelector extends StatefulWidget {
   final WebSeriesRecord series;
+  final bool selectUnsavedByDefault;
   final Future<void> Function(List<String>) onQueue;
   final VoidCallback onResume;
   final VoidCallback onClose;
@@ -14,6 +15,7 @@ class WebSeriesSelector extends StatefulWidget {
   const WebSeriesSelector({
     super.key, required this.series, required this.onQueue,
     required this.onResume, required this.onClose,
+    this.selectUnsavedByDefault = true,
   });
 
   @override
@@ -27,7 +29,11 @@ class _WebSeriesSelectorState extends State<WebSeriesSelector> {
   @override
   void initState() {
     super.initState();
-    _selectMissing();
+    if (widget.selectUnsavedByDefault) {
+      selected.addAll(widget.series.episodes.where((episode) =>
+          episode.state != 'saved' && episode.state != 'downloading' &&
+          episode.state != 'queued').map((episode) => episode.url));
+    }
   }
 
   void _selectMissing() {
