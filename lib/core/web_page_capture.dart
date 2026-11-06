@@ -60,6 +60,8 @@ class WebPageCapture {
       if (entries is! List) return null;
       final found = <WebPageImage>[];
       final seen = <String>{};
+      int number(Object? raw, int fallback) =>
+          raw is num ? raw.toInt() : int.tryParse('$raw') ?? fallback;
       for (final item in entries.take(1500)) {
         if (item is! Map) continue;
         final value = item['url'];
@@ -67,8 +69,6 @@ class WebPageCapture {
         final target = origin.resolve(value);
         if (!OnlineSourcePolicy.isHttpsPublic(target)) continue;
         if (!seen.add(target.toString())) continue;
-        int number(Object? raw, int fallback) =>
-            raw is num ? raw.toInt() : int.tryParse('$raw') ?? fallback;
         final order = number(item['order'], found.length + 1);
         if (order < 1 || order > 1500) continue;
         found.add(WebPageImage(
