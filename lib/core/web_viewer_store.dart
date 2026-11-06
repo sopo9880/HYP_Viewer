@@ -10,6 +10,8 @@ import 'gallery.dart';
 import 'gallery_download_limits.dart';
 import 'online_gallery.dart';
 import 'web_page_capture.dart';
+import 'web_series_capture.dart';
+import 'web_series_library.dart';
 
 class WebSiteBookmark {
   final String name, url;
@@ -32,18 +34,23 @@ class WebVisitedPage {
 
 class WebSavedWork {
   final String id, title, author, sourceUrl, publishedAt;
+  final String? seriesUrl, episodeUrl;
   final int pages, currentPage;
   final DateTime savedAt;
   const WebSavedWork(this.id, this.title, this.author, this.sourceUrl,
-      this.publishedAt, this.pages, this.currentPage, this.savedAt);
+      this.publishedAt, this.pages, this.currentPage, this.savedAt,
+      {this.seriesUrl, this.episodeUrl});
   WebSavedWork withPage(int page) => WebSavedWork(id, title, author, sourceUrl,
-      publishedAt, pages, page.clamp(1, pages).toInt(), savedAt);
+      publishedAt, pages, page.clamp(1, pages).toInt(), savedAt,
+      seriesUrl: seriesUrl, episodeUrl: episodeUrl);
   WebSavedWork renamed(String title) => WebSavedWork(id, title, author,
-      sourceUrl, publishedAt, pages, currentPage, savedAt);
+      sourceUrl, publishedAt, pages, currentPage, savedAt,
+      seriesUrl: seriesUrl, episodeUrl: episodeUrl);
   Map<String, dynamic> toJson() => {
     'id': id, 'title': title, 'author': author, 'sourceUrl': sourceUrl,
     'publishedAt': publishedAt, 'pages': pages, 'currentPage': currentPage,
     'savedAt': savedAt.toUtc().toIso8601String(),
+    'seriesUrl': seriesUrl, 'episodeUrl': episodeUrl,
   };
   factory WebSavedWork.fromJson(Map<String, dynamic> data) {
     final count = (data['pages'] is int ? data['pages'] as int : 1)
@@ -56,6 +63,8 @@ class WebSavedWork {
           .clamp(1, count).toInt(),
       DateTime.tryParse((data['savedAt'] ?? '').toString()) ??
           DateTime.fromMillisecondsSinceEpoch(0),
+      seriesUrl: data['seriesUrl'] is String ? data['seriesUrl'] as String : null,
+      episodeUrl: data['episodeUrl'] is String ? data['episodeUrl'] as String : null,
     );
   }
 }
@@ -68,6 +77,9 @@ class WebViewerStore extends ChangeNotifier {
   final recentPages = <WebVisitedPage>[];
   WebVisitedPage? get lastTab => recentPages.isEmpty ? null : recentPages.first;
   final works = <WebSavedWork>[];
+  final series = <WebSeriesRecord>[];
+  final _pendingSeriesJobs = <String, List<String>>{};
+  final _jobCompletions = <String, Completer<bool>>{};
   final pending = <String>[];
   final captures = <String, WebPageCapture>{};
   final progress = <String, int>{};
@@ -114,6 +126,10 @@ class WebViewerStore extends ChangeNotifier {
             .map((v) => WebVisitedPage.fromJson(Map<String, dynamic>.from(v)))
             .where((v) => safeUrl(v.url) != null)
             .take(20));
+        series..clear()..addAll((data['series'] as List? ?? [])
+            .whereType<Map>()
+            .map((v) => WebSeriesRecord.fromJson(Map<String, dynamic>.from(v)))
+            .where((v) => safeUrl(v.url) != null));
         works..clear()..addAll((data['works'] as List? ?? [])
             .whereType<Map>().map((v) =>
                 WebSavedWork.fromJson(Map<String, dynamic>.from(v)))
@@ -142,6 +158,7 @@ class WebViewerStore extends ChangeNotifier {
         'works': works.map((v) => v.toJson()).toList(),
         'autoSelectImages': autoSelectImages,
         'recentPages': recentPages.map((v) => v.toJson()).toList(),
+        'series': series.map((v) => v.toJson()).toList(),
       }), flush: true);
       if (await file.exists()) {
         if (await previous.exists()) await previous.delete();
@@ -189,7 +206,10 @@ class WebViewerStore extends ChangeNotifier {
   /// Save a browser navigation, not a new bookmark. Never persist
   /// query fields typically used for authentication or temporary signing.
   static Uri? safeHistoryUrl(String value) {
-    final uri = safeUrl(value);
+    final parsed = Uri.tryParse(value);
+    if (parsed == null) return null;
+    // Normalize browser fragment before validating public HTTPS.
+    final uri = safeUrl(parsed.replace(fragment: '').toString());
     if (uri == null) return null;
     final filtered = <String, String>{};
     for (final entry in uri.queryParameters.entries) {
@@ -247,6 +267,70 @@ class WebViewerStore extends ChangeNotifier {
     errors.clear();
     failureTitles.clear();
     _notify();
+  }
+
+  WebSeriesRecord? getSeries(String sourceUrl) {
+    final uri = Uri.tryParse(sourceUrl);
+    if (uri == null) return null;
+    final key = uri.replace(query: '', fragment: '').toString();
+    for (final entry in series) {
+      final existing = Uri.tryParse(entry.url);
+      if (existing?.replace(query: '', fragment: '').toString() == key) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  Future<int> saveSeries(WebSeriesCapture capture) async {
+    await load();
+    final existing = getSeries(capture.url.toString());
+    final added = existing == null
+        ? capture.episodes.length : existing.merge(capture);
+    if (existing == null) series.insert(0, WebSeriesRecord.fromCapture(capture));
+    await _save();
+    _notify();
+    return added;
+  }
+
+  /// Persist only selected source links, never short-lived image addresses.
+  Future<int> queueSeriesEpisodes(
+      String sourceUrl, Iterable<String> selectedUrls) async {
+    await load();
+    final entry = getSeries(sourceUrl);
+    if (entry == null) throw StateError('Series is not saved');
+    final selected = selectedUrls.toSet();
+    var added = 0;
+    for (final episode in entry.episodes) {
+      if (!selected.contains(episode.url) || episode.state == 'saved' ||
+          episode.state == 'downloading' || episode.state == 'queued') continue;
+      episode.state = 'queued';
+      episode.error = null;
+      added++;
+    }
+    if (added > 0) {
+      await _save();
+      _notify();
+    }
+    return added;
+  }
+
+  Future<void> markEpisodeNeedsAttention(
+      String seriesUrl, String episodeUrl, String reason) async {
+    final episode = getSeries(seriesUrl)?.episode(episodeUrl);
+    if (episode == null || episode.state == 'saved') return;
+    episode.state = 'needs_browser';
+    episode.error = reason.length > 500 ? reason.substring(0, 500) : reason;
+    await _save();
+    _notify();
+  }
+
+  Future<bool> waitForSeriesJob(String id) async {
+    final completion = _jobCompletions[id];
+    if (completion == null) return false;
+    final result = await completion.future;
+    _jobCompletions.remove(id);
+    return result;
   }
 
   String? findExisting(Uri url) {
