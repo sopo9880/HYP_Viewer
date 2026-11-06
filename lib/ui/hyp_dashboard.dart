@@ -47,6 +47,8 @@ import 'auto_group_wizard.dart';
 import 'work_group_card.dart';
 import 'hyp_animated_title.dart';
 import 'failed_downloads_panel.dart';
+import '../core/web_viewer_store.dart';
+import 'web_viewer.dart';
 
 enum HypPage { home, library, favorites, downloads, history, settings }
 
@@ -330,6 +332,25 @@ class _HypDashboardState extends State<HypDashboard> {
   final FocusNode _searchFocus = FocusNode();
   final FocusNode _dashboardFocus = FocusNode(debugLabel: 'dashboard-shortcuts');
   HypPage _page = HypPage.home;
+  bool _webMode = false;
+  HypPage _hypLastPage = HypPage.home;
+  HypPage _webLastPage = HypPage.favorites;
+  final WebViewerStore _webViewerStore = WebViewerStore();
+
+  void _toggleViewerMode() {
+    setState(() {
+      if (_webMode) {
+        _webLastPage = _page;
+        _page = _hypLastPage;
+      } else {
+        _hypLastPage = _page;
+        _page = _webLastPage;
+        _search.clear();
+      }
+      _webMode = !_webMode;
+    });
+  }
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey _backupSectionKey = GlobalKey();
   DateTime? _lastHomeBack;
@@ -528,6 +549,7 @@ class _HypDashboardState extends State<HypDashboard> {
     _activeRemoteSearchClient?.close();
     _activeRemoteSearchClient = null;
     _search.removeListener(_changedSearch);
+    _webViewerStore.dispose();
     _search.dispose();
     _searchFocus.dispose();
     _dashboardFocus.dispose();
@@ -867,6 +889,10 @@ class _HypDashboardState extends State<HypDashboard> {
       _scaffoldKey.currentState?.closeDrawer();
       return;
     }
+    if (_webMode && _page != HypPage.favorites) {
+      _navigate(HypPage.favorites);
+      return;
+    }
     if (_selectingWorks) {
       _toggleSelectionMode();
       return;
@@ -1128,7 +1154,14 @@ class _HypDashboardState extends State<HypDashboard> {
       ),
       appBar: desktop ? null : AppBar(
         backgroundColor: HypColors.background,
-        title: const HypText('HYP Viewer'),
+        title: InkWell(
+          key: const Key('viewer-mode-toggle-mobile'),
+          onTap: _toggleViewerMode,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(_webMode ? 'WEB Viewer' : 'HYP Viewer'),
+            const Icon(Icons.swap_horiz, size: 20),
+          ]),
+        ),
         actions: [
           IconButton(
             tooltip: AppLocalizations.of(context)!.tooltipUpdate,
@@ -1146,8 +1179,8 @@ class _HypDashboardState extends State<HypDashboard> {
         if (desktop) SizedBox(
           width: 264, child: _sidebar(closeDrawer: false)),
         Expanded(child: Column(children: [
-          if (desktop) _desktopHeader()
-          else Padding(
+          if (desktop && !_webMode) _desktopHeader()
+          else if (!_webMode) Padding(
             padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
             child: _searchField(),
           ),
@@ -1242,7 +1275,8 @@ class _HypDashboardState extends State<HypDashboard> {
         destinations: [
           NavigationDestination(icon: const Icon(Icons.favorite_outline),
             selectedIcon: const Icon(Icons.favorite),
-            label: HypI18n.t(context, '내 독서')),
+            label: _webMode ? AppLocalizations.of(context)!.webViewerSites
+                : HypI18n.t(context, '내 독서')),
           NavigationDestination(icon: const Icon(Icons.library_books_outlined),
             selectedIcon: const Icon(Icons.library_books),
             label: HypI18n.t(context, '서재')),
@@ -1274,7 +1308,10 @@ class _HypDashboardState extends State<HypDashboard> {
       ),
     ),
     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Row(children: [
+      InkWell(
+        key: const Key('viewer-mode-toggle'),
+        onTap: _toggleViewerMode,
+        child: Row(children: [
         Container(
           width: 52, height: 52,
           decoration: BoxDecoration(
@@ -1284,23 +1321,23 @@ class _HypDashboardState extends State<HypDashboard> {
               colors: [Color(0xFF443CA4), HypColors.background],
             ),
           ),
-          child: const Icon(Icons.auto_stories_rounded,
+          child: Icon(_webMode ? Icons.public_rounded : Icons.auto_stories_rounded,
             color: HypColors.lightPurple, size: 29),
         ),
         const SizedBox(width: 10),
-        const Expanded(child: Column(
+        Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            HypText('HYP Viewer', style: TextStyle(
-              fontSize: 17, fontWeight: FontWeight.w800)),
-            SizedBox(height: 3),
-            HypText('좋아하는 이야기를,\n더 가까이',
-              style: TextStyle(color: HypColors.muted, fontSize: 11)),
+            Text(_webMode ? 'WEB Viewer' : 'HYP Viewer',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 3),
+            const Icon(Icons.swap_horiz, color: HypColors.muted, size: 18),
           ],
         )),
-      ]),
+      ])),
       const SizedBox(height: 25),
-      for (final page in HypPage.values) ...[
+      for (final page in HypPage.values.where(
+        (page) => !_webMode || page != HypPage.history)) ...[
         if (page == HypPage.settings) ...[
           const SizedBox(height: 10),
           const Divider(),
@@ -1327,7 +1364,9 @@ class _HypDashboardState extends State<HypDashboard> {
                   Icon(page.icon, size: 22,
                     color: _page == page ? Colors.white : HypColors.muted),
                   const SizedBox(width: 15),
-                  HypText(page.label, style: TextStyle(
+                  Text(_webMode && page == HypPage.favorites
+                      ? AppLocalizations.of(context)!.webViewerSites
+                      : page.label, style: TextStyle(
                     fontSize: 14,
                     color: HypColors.text,
                     fontWeight: _page == page
@@ -1342,10 +1381,10 @@ class _HypDashboardState extends State<HypDashboard> {
       const Spacer(),
       const Divider(),
       const SizedBox(height: 8),
-      const HypText('오프라인 보관함',
+      if (!_webMode) const HypText('오프라인 보관함',
         style: TextStyle(color: HypColors.muted, fontSize: 12)),
       const SizedBox(height: 8),
-      LinearProgressIndicator(
+      if (!_webMode) LinearProgressIndicator(
         minHeight: 6,
         backgroundColor: HypColors.border.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(9),
@@ -1354,7 +1393,7 @@ class _HypDashboardState extends State<HypDashboard> {
                 .clamp(0.0, 1.0),
       ),
       const SizedBox(height: 8),
-      HypText(
+      if (!_webMode) HypText(
         '내 서재 ' + widget.library.works.length.toString() +
         '개 중 ' + _offlineKeys.length.toString() + '개 저장됨',
         style: const TextStyle(fontSize: 11, color: HypColors.muted),
@@ -1490,6 +1529,24 @@ class _HypDashboardState extends State<HypDashboard> {
   );
 
   Widget _contents() {
+    if (_webMode) {
+      final section = switch (_page) {
+        HypPage.home => 'home',
+        HypPage.favorites => 'web',
+        HypPage.library => 'library',
+        HypPage.downloads => 'downloads',
+        HypPage.settings => 'settings',
+        HypPage.history => 'home',
+      };
+      return ListView(
+        key: ValueKey('web-section-' + section),
+        padding: const EdgeInsets.fromLTRB(22, 18, 22, 30),
+        children: [WebViewerPane(
+          store: _webViewerStore, section: section,
+          settings: widget.readerSettings,
+        )],
+      );
+    }
     final showSearchResults = _search.text.trim().isNotEmpty ||
         _webSearchResults.isNotEmpty;
     final pageContent = showSearchResults
