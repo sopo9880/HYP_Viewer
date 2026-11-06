@@ -83,6 +83,7 @@ class WebViewerStore extends ChangeNotifier {
   final series = <WebSeriesRecord>[];
   final _pendingSeriesJobs = <String, List<String>>{};
   final _jobCompletions = <String, Completer<bool>>{};
+  final _seriesFailedJobs = <String, String>{};
   final pending = <String>[];
   final captures = <String, WebPageCapture>{};
   final progress = <String, int>{};
@@ -90,6 +91,10 @@ class WebViewerStore extends ChangeNotifier {
   final failureTitles = <String, String>{};
   bool isReady = false, downloading = false, paused = false;
   bool autoSelectImages = true;
+  // SERIES preferences are separate from the legacy HYP and WEB settings.
+  bool seriesOldestFirst = true;
+  bool seriesSelectUnsaved = true;
+  bool seriesHideCompleted = false;
   String? activeId;
   bool _disposed = false, _cancelRequested = false;
   Future<void>? _loading;
@@ -124,6 +129,9 @@ class WebViewerStore extends ChangeNotifier {
                 WebSiteBookmark.fromJson(Map<String, dynamic>.from(v)))
             .where((v) => safeUrl(v.url) != null));
         autoSelectImages = data['autoSelectImages'] != false;
+        seriesOldestFirst = data['seriesOldestFirst'] != false;
+        seriesSelectUnsaved = data['seriesSelectUnsaved'] != false;
+        seriesHideCompleted = data['seriesHideCompleted'] == true;
         recentPages..clear()..addAll((data['recentPages'] as List? ?? [])
             .whereType<Map>()
             .map((v) => WebVisitedPage.fromJson(Map<String, dynamic>.from(v)))
@@ -160,6 +168,9 @@ class WebViewerStore extends ChangeNotifier {
         'schemaVersion': 1, 'sites': sites.map((v) => v.toJson()).toList(),
         'works': works.map((v) => v.toJson()).toList(),
         'autoSelectImages': autoSelectImages,
+        'seriesOldestFirst': seriesOldestFirst,
+        'seriesSelectUnsaved': seriesSelectUnsaved,
+        'seriesHideCompleted': seriesHideCompleted,
         'recentPages': recentPages.map((v) => v.toJson()).toList(),
         'series': series.map((v) => v.toJson()).toList(),
       }), flush: true);
@@ -264,6 +275,7 @@ class WebViewerStore extends ChangeNotifier {
   /// Failure dismissal never removes downloaded work data or any CBZ.
   void clearFailedDownload(String id) {
     failureTitles.remove(id);
+    _seriesFailedJobs.remove(id);
     if (errors.remove(id) != null) _notify();
   }
 
@@ -271,6 +283,7 @@ class WebViewerStore extends ChangeNotifier {
     if (errors.isEmpty) return;
     errors.clear();
     failureTitles.clear();
+    _seriesFailedJobs.clear();
     _notify();
   }
 
@@ -355,6 +368,42 @@ class WebViewerStore extends ChangeNotifier {
     return result;
   }
 
+  bool isSeriesDownload(String id) => _pendingSeriesJobs.containsKey(id);
+  bool isSeriesFailure(String id) => _seriesFailedJobs.containsKey(id);
+  String? seriesForDownload(String id) => _pendingSeriesJobs[id]?.first;
+
+  WebSeriesEpisodeRecord? nextSeriesEpisode(String sourceUrl) {
+    final group = getSeries(sourceUrl);
+    if (group == null) return null;
+    final entries = seriesOldestFirst
+        ? group.episodes.reversed : group.episodes;
+    for (final item in entries) {
+      if (item.state == 'queued') return item;
+    }
+    return null;
+  }
+
+  Future<void> setSeriesOldestFirst(bool enabled) async {
+    await load();
+    seriesOldestFirst = enabled;
+    await _save();
+    _notify();
+  }
+
+  Future<void> setSeriesSelectUnsaved(bool enabled) async {
+    await load();
+    seriesSelectUnsaved = enabled;
+    await _save();
+    _notify();
+  }
+
+  Future<void> setSeriesHideCompleted(bool enabled) async {
+    await load();
+    seriesHideCompleted = enabled;
+    await _save();
+    _notify();
+  }
+
   String? findExisting(Uri url) {
     final identity = url.replace(query: '', fragment: '').toString();
     for (final work in works) {
@@ -428,6 +477,7 @@ class WebViewerStore extends ChangeNotifier {
         }
         await _save();
         errors.remove(id); failureTitles.remove(id);
+        _seriesFailedJobs.remove(id);
         final completion = _jobCompletions[id];
         if (completion != null && !completion.isCompleted) {
           completion.complete(true);
@@ -439,7 +489,8 @@ class WebViewerStore extends ChangeNotifier {
         if (parent != null) {
           final episode = getSeries(parent.first)?.episode(parent.last);
           episode?.state = 'failed';
-          episode?.error = 'Download failed. See the WEB download log.';
+          episode?.error = 'Download failed. See the SERIES download log.';
+          _seriesFailedJobs[id] = parent.first;
           try { await _save(); } catch (_) {}
         }
         final completion = _jobCompletions[id];
