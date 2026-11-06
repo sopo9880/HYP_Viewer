@@ -208,7 +208,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
           subtitle: LinearProgressIndicator(
             value: widget.store.captures[id]?.images.isNotEmpty == true
                 ? (widget.store.progress[id] ?? 0) /
-                  widget.store.captures[id]!.images.length : 0,
+                  widget.store.captures[id]!.images.length : 0.0,
           ),
           trailing: id == widget.store.activeId ?
               IconButton(
