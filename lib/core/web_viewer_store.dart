@@ -20,6 +20,16 @@ class WebSiteBookmark {
           (raw['url'] ?? '').toString());
 }
 
+/// Last opened tabs, stored separately from user-selected site bookmarks.
+class WebVisitedPage {
+  final String name, url;
+  const WebVisitedPage(this.name, this.url);
+  Map<String, dynamic> toJson() => {'name': name, 'url': url};
+  factory WebVisitedPage.fromJson(Map<String, dynamic> raw) =>
+      WebVisitedPage((raw['name'] ?? '').toString(),
+          (raw['url'] ?? '').toString());
+}
+
 class WebSavedWork {
   final String id, title, author, sourceUrl, publishedAt;
   final int pages, currentPage;
@@ -55,6 +65,8 @@ class WebViewerStore extends ChangeNotifier {
   final Directory? baseDirectory;
   WebViewerStore({this.baseDirectory});
   final sites = <WebSiteBookmark>[];
+  final recentPages = <WebVisitedPage>[];
+  WebVisitedPage? get lastTab => recentPages.isEmpty ? null : recentPages.first;
   final works = <WebSavedWork>[];
   final pending = <String>[];
   final captures = <String, WebPageCapture>{};
@@ -96,6 +108,11 @@ class WebViewerStore extends ChangeNotifier {
                 WebSiteBookmark.fromJson(Map<String, dynamic>.from(v)))
             .where((v) => safeUrl(v.url) != null));
         autoSelectImages = data['autoSelectImages'] != false;
+        recentPages..clear()..addAll((data['recentPages'] as List? ?? [])
+            .whereType<Map>()
+            .map((v) => WebVisitedPage.fromJson(Map<String, dynamic>.from(v)))
+            .where((v) => safeUrl(v.url) != null)
+            .take(20));
         works..clear()..addAll((data['works'] as List? ?? [])
             .whereType<Map>().map((v) =>
                 WebSavedWork.fromJson(Map<String, dynamic>.from(v)))
@@ -123,6 +140,7 @@ class WebViewerStore extends ChangeNotifier {
         'schemaVersion': 1, 'sites': sites.map((v) => v.toJson()).toList(),
         'works': works.map((v) => v.toJson()).toList(),
         'autoSelectImages': autoSelectImages,
+        'recentPages': recentPages.map((v) => v.toJson()).toList(),
       }), flush: true);
       if (await file.exists()) {
         if (await previous.exists()) await previous.delete();
@@ -149,6 +167,64 @@ class WebViewerStore extends ChangeNotifier {
     await _save();
     _notify();
   }
+  Future<void> updateSite(
+      String previousUrl, String name, String rawUrl) async {
+    await load();
+    final index = sites.indexWhere((v) => v.url == previousUrl);
+    if (index < 0) throw StateError('Saved site not found');
+    final uri = safeUrl(rawUrl);
+    if (uri == null) throw const FormatException('Public HTTPS URL required');
+    final nextUrl = uri.toString();
+    if (sites.any((v) => v.url == nextUrl && v.url != previousUrl)) {
+      throw StateError('Site URL is already saved');
+    }
+    sites[index] = WebSiteBookmark(
+      name.trim().isEmpty ? uri.host : name.trim().substring(
+        0, name.trim().length.clamp(0, 120)), nextUrl);
+    await _save();
+    _notify();
+  }
+
+  /// Save a browser navigation, not a new bookmark. Never persist
+  /// query fields typically used for authentication or temporary signing.
+  static Uri? safeHistoryUrl(String value) {
+    final uri = safeUrl(value);
+    if (uri == null) return null;
+    final filtered = <String, String>{};
+    for (final entry in uri.queryParameters.entries) {
+      if (RegExp(r'token|auth|secret|session|signature|'
+          r'password|credential|nonce|key|code|jwt|sig',
+          caseSensitive: false).hasMatch(entry.key)) continue;
+      filtered[entry.key] = entry.value;
+    }
+    final cleaned = uri.replace(
+      queryParameters: filtered.isEmpty ? null : filtered, fragment: '');
+    return safeUrl(cleaned.toString()) == null ? null : cleaned;
+  }
+
+  Future<void> recordVisitedPage(String rawUrl, String title) async {
+    await load();
+    final uri = safeHistoryUrl(rawUrl);
+    if (uri == null) return;
+    final url = uri.toString();
+    final cleanTitle = title.trim().isEmpty ? uri.host :
+        title.trim().substring(0, title.trim().length.clamp(0, 120));
+    if (recentPages.isNotEmpty &&
+        recentPages.first.url == url &&
+        recentPages.first.name == cleanTitle) return;
+    recentPages.removeWhere((v) => v.url == url);
+    recentPages.insert(0, WebVisitedPage(cleanTitle, url));
+    if (recentPages.length > 20) recentPages.removeRange(20, recentPages.length);
+    await _save();
+    _notify();
+  }
+
+  Future<void> clearRecentPages() async {
+    recentPages.clear();
+    await _save();
+    _notify();
+  }
+
   Future<void> setAutoSelectImages(bool enabled) async {
     autoSelectImages = enabled;
     await _save();
@@ -159,6 +235,17 @@ class WebViewerStore extends ChangeNotifier {
     await _save();
     _notify();
   }
+  /// Failure dismissal never removes downloaded work data or any CBZ.
+  void clearFailedDownload(String id) {
+    if (errors.remove(id) != null) _notify();
+  }
+
+  void clearAllFailedDownloads() {
+    if (errors.isEmpty) return;
+    errors.clear();
+    _notify();
+  }
+
   String? findExisting(Uri url) {
     final identity = url.replace(query: '', fragment: '').toString();
     for (final work in works) {
@@ -240,7 +327,8 @@ class WebViewerStore extends ChangeNotifier {
         if (_cancelRequested || _disposed) throw StateError('Cancelled');
         final data = await BoundedWebImages.load(client,
             source.images[i].url,
-            headers: {'Referer': source.sourceUrl.toString()},
+            headers: source.images[i].noReferrer
+                ? null : {'Referer': source.sourceUrl.toString()},
             maxBytes: GalleryDownloadLimits.defaultImageMiB *
                 GalleryDownloadLimits.mib);
         total += data.length;
@@ -264,6 +352,10 @@ class WebViewerStore extends ChangeNotifier {
     } finally {
       if (opened) { try { await encoder.close(); } catch (_) {} }
       client.close();
+      // Avoid accumulating incomplete archives after a failed transfer.
+      try {
+        if (await folder.exists()) await folder.delete(recursive: true);
+      } catch (_) {}
     }
   }
   static String? imageExtension(Uint8List data) {
