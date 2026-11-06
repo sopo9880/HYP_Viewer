@@ -72,6 +72,7 @@ class WebViewerStore extends ChangeNotifier {
   final captures = <String, WebPageCapture>{};
   final progress = <String, int>{};
   final errors = <String, String>{};
+  final failureTitles = <String, String>{};
   bool isReady = false, downloading = false, paused = false;
   bool autoSelectImages = true;
   String? activeId;
@@ -237,12 +238,14 @@ class WebViewerStore extends ChangeNotifier {
   }
   /// Failure dismissal never removes downloaded work data or any CBZ.
   void clearFailedDownload(String id) {
+    failureTitles.remove(id);
     if (errors.remove(id) != null) _notify();
   }
 
   void clearAllFailedDownloads() {
     if (errors.isEmpty) return;
     errors.clear();
+    failureTitles.clear();
     _notify();
   }
 
@@ -300,8 +303,12 @@ class WebViewerStore extends ChangeNotifier {
         works.insert(0, WebSavedWork(id, capture.title, capture.author,
           capture.sourceUrl.toString(), capture.publishedAt,
           archive.pageCount, 1, DateTime.now()));
-        await _save(); errors.remove(id);
-      } catch (error) { errors[id] = error.toString(); }
+        await _save();
+        errors.remove(id); failureTitles.remove(id);
+      } catch (error) {
+        errors[id] = error.toString();
+        failureTitles[id] = capture.title;
+      }
       finally {
         pending.removeAt(0); captures.remove(id); activeId = null; _notify();
       }
