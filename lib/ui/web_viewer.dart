@@ -16,6 +16,7 @@ import '../l10n/app_localizations.dart';
 import 'gallery_reader.dart';
 import 'web_series_selector.dart';
 import 'web_series_shelf.dart';
+import 'series_viewer_pages.dart';
 
 /// WEB is independent of the HYP library, but uses the existing image reader.
 class WebViewerPane extends StatefulWidget {
@@ -217,6 +218,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     await Navigator.of(context).push<void>(MaterialPageRoute(
       builder: (_) => WebSeriesShelf(
         series: group,
+        hideCompleted: widget.store.seriesHideCompleted,
         onRefreshSource: () => _openSite(group.url, scanSeries: true),
         onOpenEpisode: (episode) {
           final savedId = episode.workId;
@@ -237,25 +239,15 @@ class _WebViewerPaneState extends State<WebViewerPane> {
   }
 
   Widget _works(AppLocalizations labels, {int? count}) {
-    final items = count == null ? widget.store.works :
-        widget.store.works.take(count).toList();
+    final candidates = widget.store.works.where((w) => w.seriesUrl == null);
+    final items = count == null
+        ? candidates.toList() : candidates.take(count).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Text(count == null ? labels.webViewerLibrary : labels.webViewerRecent,
           style: Theme.of(context).textTheme.titleLarge),
       const SizedBox(height: 12),
-      if (items.isEmpty && widget.store.series.isEmpty)
-        Text(labels.webViewerNoWorks),
-      for (final group in widget.store.series)
-        Card(child: ListTile(
-          leading: const Icon(Icons.library_books_outlined),
-          title: Text(group.title),
-          subtitle: Text(labels.webSeriesStoredCount + ': ' +
-              group.completed.toString() + '/' +
-              group.episodes.length.toString()),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _openSeries(group),
-        )),
-      for (final item in items.where((w) => w.seriesUrl == null))
+      if (items.isEmpty) Text(labels.webViewerNoWorks),
+      for (final item in items)
         Card(child: ListTile(
         leading: const Icon(Icons.auto_stories),
         title: Text(item.title),
@@ -283,25 +275,19 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     ]);
   }
 
-  Widget _downloads(AppLocalizations labels) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+  Widget _downloads(AppLocalizations labels) {
+    final webJobs = widget.store.pending
+        .where((id) => !widget.store.isSeriesDownload(id)).toList();
+    final webErrors = widget.store.errors.entries
+        .where((entry) => !widget.store.isSeriesFailure(entry.key)).toList();
+    final active = widget.store.activeId;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Text(labels.webViewerDownloads,
-          style: Theme.of(context).textTheme.titleLarge),
+        style: Theme.of(context).textTheme.titleLarge),
       const SizedBox(height: 12),
-      if (widget.store.pending.isEmpty &&
-          !widget.store.series.any((s) => s.queued > 0))
+      if (webJobs.isEmpty && webErrors.isEmpty)
         Text(labels.webViewerEmptyDownloads),
-      for (final group in widget.store.series.where((s) => s.queued > 0 || s.failures > 0))
-        Card(child: ListTile(
-          leading: const Icon(Icons.format_list_numbered),
-          title: Text(group.title),
-          subtitle: Text(labels.webSeriesQueued + ': ' +
-            group.queued.toString() + ' · ' + labels.webSeriesSaved + ': ' +
-            group.completed.toString()),
-          trailing: const Icon(Icons.play_circle_outline),
-          onTap: () => _openSite(group.url, scanSeries: true),
-        )),
-      for (final id in widget.store.pending)
+      for (final id in webJobs)
         Card(child: ListTile(
           leading: const Icon(Icons.download),
           title: Text(widget.store.captures[id]?.title ?? id),
@@ -310,36 +296,42 @@ class _WebViewerPaneState extends State<WebViewerPane> {
                 ? (widget.store.progress[id] ?? 0) /
                   widget.store.captures[id]!.images.length : 0.0,
           ),
-          trailing: id == widget.store.activeId ?
-              IconButton(
-                tooltip: widget.store.paused
-                    ? labels.webViewerResume : labels.webViewerPause,
-                onPressed: widget.store.togglePause,
-                icon: Icon(widget.store.paused ? Icons.play_arrow : Icons.pause),
-              ) : null,
+          trailing: id == active
+              ? IconButton(
+                  tooltip: widget.store.paused
+                      ? labels.webViewerResume : labels.webViewerPause,
+                  onPressed: widget.store.togglePause,
+                  icon: Icon(widget.store.paused
+                    ? Icons.play_arrow : Icons.pause),
+                ) : null,
         )),
-      if (widget.store.activeId != null)
+      if (active != null && !widget.store.isSeriesDownload(active))
         OutlinedButton.icon(
           onPressed: widget.store.cancelCurrent,
           icon: const Icon(Icons.cancel_outlined),
           label: Text(labels.webViewerCancel),
         ),
-      if (widget.store.errors.isNotEmpty)
+      if (webErrors.isNotEmpty)
         Align(alignment: Alignment.centerRight,
           child: TextButton.icon(
-            onPressed: widget.store.clearAllFailedDownloads,
+            onPressed: () {
+              for (final entry in webErrors) {
+                widget.store.clearFailedDownload(entry.key);
+              }
+            },
             icon: const Icon(Icons.delete_sweep),
             label: Text(labels.webViewerClearFailed),
           ),
         ),
-      for (final error in widget.store.errors.entries.toList())
+      for (final error in webErrors)
         Card(child: ListTile(
           leading: const Icon(Icons.error_outline),
           title: Text(widget.store.failureTitles[error.key] ?? error.key),
-          subtitle: Text(error.value,
-              maxLines: 2, overflow: TextOverflow.ellipsis),
+          subtitle: Text(error.value, maxLines: 2,
+            overflow: TextOverflow.ellipsis),
           onTap: () => showDialog<void>(
-            context: context, builder: (ctx) => AlertDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
               title: Text(labels.webViewerErrorDetails),
               content: SingleChildScrollView(
                 child: SelectableText(error.value)),
@@ -353,8 +345,8 @@ class _WebViewerPaneState extends State<WebViewerPane> {
             onPressed: () => widget.store.clearFailedDownload(error.key),
           ),
         )),
-    ],
-  );
+    ]);
+  }
 
   Widget _settings(AppLocalizations labels) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -383,6 +375,17 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     final labels = AppLocalizations.of(context)!;
     if (!widget.store.isReady) {
       return const Center(child: CircularProgressIndicator());
+    }
+    if (widget.section.startsWith('series_')) {
+      return SeriesViewerPages(
+        store: widget.store,
+        section: widget.section,
+        onOpenSeries: (group) { _openSeries(group); },
+        onReadWork: (work) { _openWork(work); },
+        onOpenSeriesSource: (url) { _openSite(url, scanSeries: true); },
+        onOpenEpisodeSource: (url) { _openSite(url); },
+        onError: _error,
+      );
     }
     return switch (widget.section) {
       'web' => _sites(labels),
@@ -583,7 +586,7 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
   Future<void> _resumeSeries(String url) async {
     final labels = AppLocalizations.of(context)!;
     final group = widget.store.getSeries(url);
-    if (group?.nextQueued == null) {
+    if (widget.store.nextSeriesEpisode(url) == null) {
       _error(labels.webSeriesNoQueued);
       return;
     }
@@ -601,7 +604,7 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
     if (!mounted || !_batchRunning) return;
     final web = _web, url = _batchSeriesUrl;
     if (web == null || url == null) return;
-    final episode = widget.store.getSeries(url)?.nextQueued;
+    final episode = widget.store.nextSeriesEpisode(url);
     if (episode == null) {
       setState(() {
         _batchRunning = false;
@@ -633,7 +636,7 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
     final seriesUrl = _batchSeriesUrl;
     if (!_batchRunning || _batchProcessing ||
         seriesUrl == null || url == null || !mounted) return;
-    final episode = widget.store.getSeries(seriesUrl)?.nextQueued;
+    final episode = widget.store.nextSeriesEpisode(seriesUrl);
     if (episode == null) return;
     final loaded = Uri.tryParse(url);
     final expected = Uri.tryParse(episode.url);
@@ -920,6 +923,7 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
             child: WebSeriesSelector(
               key: ValueKey(_seriesRecord!.url),
               series: _seriesRecord!,
+              selectUnsavedByDefault: widget.store.seriesSelectUnsaved,
               onQueue: _queueSeries,
               onResume: () => _resumeSeries(_seriesRecord!.url),
               onClose: () => setState(() => _seriesRecord = null),
