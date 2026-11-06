@@ -33,9 +33,6 @@ class SeriesViewerPages extends StatelessWidget {
     this.updating = false,
   });
 
-  Widget _heading(BuildContext context, String label) =>
-    Text(label, style: Theme.of(context).textTheme.titleLarge);
-
   List<WebVisualEntry> _seriesEntries(AppLocalizations labels) {
     return store.series.map((group) {
       String? firstSavedId;
