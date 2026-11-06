@@ -6,21 +6,25 @@ import '../l10n/app_localizations.dart';
 /// A series is one WEB library card; individual chapters remain separate CBZs.
 class WebSeriesShelf extends StatelessWidget {
   final WebSeriesRecord series;
+  final bool hideCompleted;
   final void Function(WebSeriesEpisodeRecord) onOpenEpisode;
   final VoidCallback onRefreshSource;
 
   const WebSeriesShelf({
     super.key, required this.series, required this.onOpenEpisode,
-    required this.onRefreshSource,
+    required this.onRefreshSource, this.hideCompleted = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final labels = AppLocalizations.of(context)!;
+    final visibleEpisodes = hideCompleted
+        ? series.episodes.where((chapter) => chapter.state != 'saved').toList()
+        : series.episodes;
     return Scaffold(
       appBar: AppBar(title: Text(series.title)),
       body: ListView.builder(
-        itemCount: series.episodes.length + 1,
+        itemCount: visibleEpisodes.length + 1,
         itemBuilder: (_, i) {
           if (i == 0) {
             return Padding(padding: const EdgeInsets.all(16),
@@ -49,7 +53,7 @@ class WebSeriesShelf extends StatelessWidget {
               ),
             );
           }
-          final episode = series.episodes[i - 1];
+          final episode = visibleEpisodes[i - 1];
           final done = episode.state == 'saved' && episode.workId != null;
           final status = switch (episode.state) {
             'saved' => labels.webSeriesSaved,
