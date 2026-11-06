@@ -326,12 +326,8 @@ class WebViewerStore extends ChangeNotifier {
           await Future<void>.delayed(const Duration(milliseconds: 250));
         }
         if (_cancelRequested || _disposed) throw StateError('Cancelled');
-        final data = await BoundedWebImages.load(client,
-            source.images[i].url,
-            headers: source.images[i].noReferrer
-                ? null : {'Referer': source.sourceUrl.toString()},
-            maxBytes: GalleryDownloadLimits.defaultImageMiB *
-                GalleryDownloadLimits.mib);
+        final data = await _loadImageWithRetry(
+            client, source.images[i], source.sourceUrl);
         total += data.length;
         if (total > GalleryDownloadLimits.hardTotalMiB *
                 GalleryDownloadLimits.mib) {
@@ -359,6 +355,33 @@ class WebViewerStore extends ChangeNotifier {
       } catch (_) {}
     }
   }
+  /// Retry only transient transport failures; HTTP access denials and
+  /// invalid/non-image responses remain hard failures.
+  Future<Uint8List> _loadImageWithRetry(
+      http.Client client, WebPageImage page, Uri sourceUrl) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (_cancelRequested || _disposed) throw StateError('Cancelled');
+      try {
+        return await BoundedWebImages.load(
+          client, page.url,
+          headers: page.noReferrer ? null :
+              {'Referer': sourceUrl.toString()},
+          maxBytes: GalleryDownloadLimits.defaultImageMiB *
+              GalleryDownloadLimits.mib,
+        );
+      } on http.ClientException {
+        if (attempt >= 2) rethrow;
+      } on SocketException {
+        if (attempt >= 2) rethrow;
+      } on TimeoutException {
+        if (attempt >= 2) rethrow;
+      }
+      await Future<void>.delayed(
+          Duration(milliseconds: 400 * (attempt + 1)));
+    }
+    throw StateError('Image transport retries exhausted');
+  }
+
   static String? imageExtension(Uint8List data) {
     if (data.length < 12) return null;
     if (data[0] == 255 && data[1] == 216 && data[2] == 255) return 'jpg';
