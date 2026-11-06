@@ -353,7 +353,7 @@ class WebViewerStore extends ChangeNotifier {
     throw StateError('WEB gallery ID exhausted');
   }
   Future<String> enqueue(WebPageCapture capture, List<int> selected,
-      {String? title}) async {
+      {String? title, String? seriesUrl, String? episodeUrl}) async {
     await load();
     if (selected.isEmpty) throw const FormatException('No selected images');
     final existing = findExisting(capture.sourceUrl);
@@ -368,6 +368,15 @@ class WebViewerStore extends ChangeNotifier {
       sourceUrl: capture.sourceUrl, title: title ?? capture.title,
       author: capture.author, publishedAt: capture.publishedAt,
       expectedImages: capture.expectedImages, images: images);
+    if (seriesUrl != null && episodeUrl != null) {
+      final episode = getSeries(seriesUrl)?.episode(episodeUrl);
+      if (episode == null) throw StateError('Unknown series episode');
+      episode.state = 'downloading';
+      episode.error = null;
+      _pendingSeriesJobs[id] = [seriesUrl, episodeUrl];
+      _jobCompletions[id] = Completer<bool>();
+      await _save();
+    }
     pending.add(id);
     progress[id] = 0;
     _notify();
@@ -384,17 +393,42 @@ class WebViewerStore extends ChangeNotifier {
       activeId = id; _cancelRequested = false; _notify();
       try {
         final archive = await _download(id, capture);
+        final parent = _pendingSeriesJobs[id];
         works.insert(0, WebSavedWork(id, capture.title, capture.author,
           capture.sourceUrl.toString(), capture.publishedAt,
-          archive.pageCount, 1, DateTime.now()));
+          archive.pageCount, 1, DateTime.now(),
+          seriesUrl: parent?.first, episodeUrl: parent?.last));
+        if (parent != null) {
+          final episode = getSeries(parent.first)?.episode(parent.last);
+          episode?.state = 'saved';
+          episode?.workId = id;
+          episode?.error = null;
+        }
         await _save();
         errors.remove(id); failureTitles.remove(id);
+        final completion = _jobCompletions[id];
+        if (completion != null && !completion.isCompleted) {
+          completion.complete(true);
+        }
       } catch (error) {
         errors[id] = error.toString();
         failureTitles[id] = capture.title;
+        final parent = _pendingSeriesJobs[id];
+        if (parent != null) {
+          final episode = getSeries(parent.first)?.episode(parent.last);
+          episode?.state = 'failed';
+          episode?.error = error.toString();
+          try { await _save(); } catch (_) {}
+        }
+        final completion = _jobCompletions[id];
+        if (completion != null && !completion.isCompleted) {
+          completion.complete(false);
+        }
       }
       finally {
-        pending.removeAt(0); captures.remove(id); activeId = null; _notify();
+        pending.removeAt(0); captures.remove(id);
+        _pendingSeriesJobs.remove(id);
+        activeId = null; _notify();
       }
     }
     downloading = false;
@@ -502,6 +536,15 @@ class WebViewerStore extends ChangeNotifier {
     final gallery = await galleries;
     await gallery.delete(id);
     works.removeWhere((v) => v.id == id);
+    for (final group in series) {
+      for (final episode in group.episodes) {
+        if (episode.workId == id) {
+          episode.workId = null;
+          episode.state = 'available';
+          episode.error = null;
+        }
+      }
+    }
     await _save(); _notify();
   }
   @override void dispose() {
