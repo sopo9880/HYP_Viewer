@@ -338,6 +338,7 @@ class _HypDashboardState extends State<HypDashboard> {
   final WebViewerStore _webViewerStore = WebViewerStore();
 
   void _toggleViewerMode() {
+    if (!_webMode && _search.text.isNotEmpty) _search.clear();
     setState(() {
       if (_webMode) {
         _webLastPage = _page;
@@ -345,7 +346,6 @@ class _HypDashboardState extends State<HypDashboard> {
       } else {
         _hypLastPage = _page;
         _page = _webLastPage;
-        _search.clear();
       }
       _webMode = !_webMode;
     });
@@ -1180,6 +1180,15 @@ class _HypDashboardState extends State<HypDashboard> {
           width: 264, child: _sidebar(closeDrawer: false)),
         Expanded(child: Column(children: [
           if (desktop && !_webMode) _desktopHeader()
+          else if (desktop && _webMode)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(21, 10, 22, 8),
+              child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                _toolIcon(Icons.system_update_alt_rounded,
+                    AppLocalizations.of(context)!.tooltipUpdate,
+                    widget.onCheckRelease),
+              ]),
+            )
           else if (!_webMode) Padding(
             padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
             child: _searchField(),
