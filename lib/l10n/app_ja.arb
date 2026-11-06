@@ -1063,5 +1063,7 @@
   "webViewerRefresh": "再読み込み",
   "webViewerDetect": "現在のページの画像を検出",
   "webViewerRetry": "再試行",
-  "webViewerOpenExternal": "外部ブラウザーで開く"
+  "webViewerOpenExternal": "外部ブラウザーで開く",
+  "webViewerAutoSelect": "検出画像を初期状態ですべて選択",
+  "webViewerAutoSelectHelp": "オフの場合は、ダウンロードする画像を手動で選択します。"
 }
