@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -394,6 +395,96 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
     ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error.toString())));
   }
+  Future<void> _rememberVisit(
+      InAppWebViewController controller, String? rawUrl) async {
+    if (rawUrl == null || WebViewerStore.safeUrl(rawUrl) == null) return;
+    try {
+      final title = await controller.getTitle();
+      final host = Uri.tryParse(rawUrl)?.host ?? rawUrl;
+      await widget.store.recordVisitedPage(rawUrl, title ?? host);
+    } catch (_) {
+      // Navigation must continue even if a title is unavailable.
+    }
+  }
+
+  Future<void> _saveCurrentTab() async {
+    final labels = AppLocalizations.of(context)!;
+    final uri = WebViewerStore.safeUrl(_currentUrl);
+    if (uri == null || !_loaded || _web == null) return;
+    try {
+      if (widget.store.sites.any((site) => site.url == uri.toString())) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(labels.webViewerAlreadySaved)));
+        return;
+      }
+      final pageTitle = await _web!.getTitle();
+      if (!mounted) return;
+      final suggested = pageTitle?.trim().isNotEmpty == true
+          ? pageTitle!.trim() : uri.host;
+      final name = TextEditingController(text: suggested);
+      final accepted = await showDialog<bool>(
+        context: context, builder: (ctx) => AlertDialog(
+          title: Text(labels.webViewerSaveCurrentTab),
+          content: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(uri.toString(), maxLines: 3,
+                overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 10),
+              TextField(controller: name,
+                decoration: InputDecoration(
+                  labelText: labels.webViewerSiteName)),
+            ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: Text(labels.cancel)),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true),
+              child: Text(labels.webViewerSave)),
+          ],
+        ),
+      );
+      final chosen = name.text;
+      name.dispose();
+      if (accepted != true) return;
+      await widget.store.addSite(chosen, uri.toString());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(labels.webViewerSavedCurrentTab)));
+    } catch (error) { _error(error); }
+  }
+
+  Future<void> _openRecentTabs() async {
+    final labels = AppLocalizations.of(context)!;
+    final pages = widget.store.recentPages.toList();
+    final selected = await showModalBottomSheet<String>(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => SafeArea(child: SizedBox(
+        height: MediaQuery.sizeOf(ctx).height * 0.65,
+        child: Column(children: [
+          ListTile(title: Text(labels.webViewerRecentTabs)),
+          if (pages.isEmpty)
+            Expanded(child: Center(child: Text(labels.webViewerNoRecentTabs)))
+          else
+            Expanded(child: ListView.builder(
+              itemCount: pages.length,
+              itemBuilder: (_, i) => ListTile(
+                leading: const Icon(Icons.history),
+                title: Text(pages[i].name, maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                subtitle: Text(pages[i].url, maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                onTap: () => Navigator.pop(ctx, pages[i].url),
+              ),
+            )),
+        ]),
+      )),
+    );
+    if (selected == null || !mounted) return;
+    await Navigator.of(context).pushReplacement<void, void>(
+      MaterialPageRoute(builder: (_) => WebViewerBrowser(
+        store: widget.store, initialUrl: selected)),
+    );
+  }
+
   Future<void> _captureImages() async {
     final web = _web;
     if (web == null || !_loaded || _busy) return;
@@ -402,8 +493,13 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
       final raw = await web.evaluateJavascript(
           source: WebPageCapture.captureJavaScript);
       final found = WebPageCapture.parse(raw);
-      if (found == null || found.images.isEmpty) {
+      if (found == null) {
         throw const FormatException('No public article images found');
+      }
+      if (found.images.isEmpty) {
+        throw FormatException(found.expectedImages > 0
+            ? AppLocalizations.of(context)!.webViewerWaitingImages
+            : 'No public article images found');
       }
       if (!mounted) return;
       setState(() {
@@ -447,10 +543,12 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
         _loaded = true;
         _currentUrl = url?.toString() ?? _currentUrl;
       });
+      unawaited(_rememberVisit(controller, url?.toString()));
     },
-    onUpdateVisitedHistory: (_, url, __) {
+    onUpdateVisitedHistory: (controller, url, __) {
       if (mounted) setState(() => _currentUrl =
           url?.toString() ?? _currentUrl);
+      unawaited(_rememberVisit(controller, url?.toString()));
     },
     shouldOverrideUrlLoading: (_, action) async {
       final url = action.request.url?.toString() ?? '';
@@ -467,16 +565,27 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
         controller: _title,
         decoration: InputDecoration(labelText: labels.webViewerPageTitle),
       )),
+      if (capture.expectedImages > capture.images.length)
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(labels.webViewerMissingImages,
+            style: TextStyle(color: Theme.of(context).colorScheme.error))),
       Row(children: [
         const SizedBox(width: 10),
-        Expanded(child: Text(labels.webViewerFoundImages +
-            ': ' + capture.images.length.toString())),
+        Expanded(child: Text(
+          labels.webViewerDetectedOfTotal + ': ' +
+          capture.images.length.toString() + ' / ' +
+          capture.expectedImages.toString())),
         TextButton(onPressed: () => setState(() {
           _selected..clear()..addAll(List.generate(capture.images.length, (i) => i));
         }), child: Text(labels.webViewerSelectAll)),
         TextButton(onPressed: () => setState(_selected.clear),
             child: Text(labels.webViewerDeselectAll)),
       ]),
+      TextButton.icon(
+        onPressed: () => setState(() => _capture = null),
+        icon: const Icon(Icons.arrow_back),
+        label: Text(labels.webViewerBackToBrowser),
+      ),
       Expanded(child: GridView.builder(
         padding: const EdgeInsets.all(10),
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -497,7 +606,7 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
                   setState(() => value == true
                       ? _selected.add(i) : _selected.remove(i)))),
               Positioned(left: 3, bottom: 2,
-                child: Text((i + 1).toString())),
+                child: Text(capture.images[i].order.toString())),
             ]),
           );
         },
@@ -524,41 +633,57 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
           IconButton(onPressed: () => _web?.reload(),
             icon: const Icon(Icons.refresh), tooltip: labels.webViewerRefresh),
           IconButton(
+            onPressed: _busy || !_loaded ? null : _saveCurrentTab,
+            icon: const Icon(Icons.bookmark_add_outlined),
+            tooltip: labels.webViewerSaveCurrentTab),
+          IconButton(
+            onPressed: _openRecentTabs,
+            icon: const Icon(Icons.history),
+            tooltip: labels.webViewerRecentTabs),
+          IconButton(
             onPressed: _busy || !_loaded ? null : _captureImages,
             icon: const Icon(Icons.image_search),
             tooltip: labels.webViewerDetect),
         ],
       ),
-      body: _capture != null ? _preview(labels) :
-        Platform.isWindows
-          ? FutureBuilder<WebViewEnvironment?>(
-            future: _environment,
-            builder: (_, state) {
-              if (state.hasError) {
-                return Center(child: Column(mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(state.error.toString()),
-                    TextButton(
-                      onPressed: () {
-                        WindowsWebSearchRuntime.retryFailedInitialization();
-                        setState(() => _environment =
-                            WindowsWebSearchRuntime.environment);
-                      },
-                      child: Text(labels.webViewerRetry),
-                    ),
-                    TextButton(onPressed: () =>
-                        launchUrl(Uri.parse(widget.initialUrl),
-                            mode: LaunchMode.externalApplication),
-                      child: Text(labels.webViewerOpenExternal)),
-                  ],
-                ));
-              }
-              if (state.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              return _browser(state.data);
-            },
-          ) : _browser(null),
+      body: Stack(children: [
+        Positioned.fill(
+          child: Platform.isWindows
+            ? FutureBuilder<WebViewEnvironment?>(
+              future: _environment,
+              builder: (_, state) {
+                if (state.hasError) {
+                  return Center(child: Column(mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(state.error.toString()),
+                      TextButton(
+                        onPressed: () {
+                          WindowsWebSearchRuntime.retryFailedInitialization();
+                          setState(() => _environment =
+                              WindowsWebSearchRuntime.environment);
+                        },
+                        child: Text(labels.webViewerRetry),
+                      ),
+                      TextButton(onPressed: () =>
+                          launchUrl(Uri.parse(widget.initialUrl),
+                              mode: LaunchMode.externalApplication),
+                        child: Text(labels.webViewerOpenExternal)),
+                    ],
+                  ));
+                }
+                if (state.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                return _browser(state.data);
+              },
+            ) : _browser(null),
+        ),
+        if (_capture != null)
+          Positioned.fill(child: ColoredBox(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: _preview(labels),
+          )),
+      ]),
     );
   }
 }
