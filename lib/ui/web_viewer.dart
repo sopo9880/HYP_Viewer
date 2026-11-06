@@ -412,8 +412,9 @@ class _WebViewerPaneState extends State<WebViewerPane> {
 class WebViewerBrowser extends StatefulWidget {
   final WebViewerStore store;
   final String initialUrl;
+  final bool autoScanSeries;
   const WebViewerBrowser({super.key, required this.store,
-      required this.initialUrl});
+      required this.initialUrl, this.autoScanSeries = false});
   @override
   State<WebViewerBrowser> createState() => _WebViewerBrowserState();
 }
@@ -426,6 +427,11 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
   WebPageCapture? _capture;
   final Set<int> _selected = {};
   final _title = TextEditingController();
+  WebSeriesRecord? _seriesRecord;
+  String? _batchSeriesUrl;
+  bool _batchRunning = false;
+  bool _batchProcessing = false;
+  bool _autoScanAttempted = false;
 
   @override
   void initState() {
@@ -437,6 +443,7 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
   }
   @override
   void dispose() {
+    _batchRunning = false;
     _title.dispose();
     super.dispose();
   }
@@ -535,6 +542,150 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
     );
   }
 
+  Future<void> _scanSeries() async {
+    final web = _web;
+    if (!_loaded || web == null || _busy || _batchRunning) return;
+    final labels = AppLocalizations.of(context)!;
+    setState(() => _busy = true);
+    try {
+      final raw = await web.evaluateJavascript(
+        source: WebSeriesCapture.captureJavaScript);
+      final snapshot = WebSeriesCapture.parse(raw);
+      if (snapshot == null) throw FormatException(labels.webSeriesNoSeries);
+      final newCount = await widget.store.saveSeries(snapshot);
+      final group = widget.store.getSeries(snapshot.url.toString());
+      if (group == null) throw StateError(labels.webSeriesNoSeries);
+      if (!mounted) return;
+      setState(() {
+        _seriesRecord = group;
+        _capture = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(labels.webSeriesNewCount + ': ' + newCount.toString()),
+      ));
+    } catch (error) {
+      _error(error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _queueSeries(List<String> selectedUrls) async {
+    final group = _seriesRecord;
+    if (group == null) return;
+    await widget.store.queueSeriesEpisodes(group.url, selectedUrls);
+    if (!mounted) return;
+    await _resumeSeries(group.url);
+  }
+
+  Future<void> _resumeSeries(String url) async {
+    final labels = AppLocalizations.of(context)!;
+    final group = widget.store.getSeries(url);
+    if (group?.nextQueued == null) {
+      _error(labels.webSeriesNoQueued);
+      return;
+    }
+    setState(() {
+      _seriesRecord = null;
+      _capture = null;
+      _batchSeriesUrl = group!.url;
+      _batchRunning = true;
+      _batchProcessing = false;
+    });
+    await _advanceSeries();
+  }
+
+  Future<void> _advanceSeries() async {
+    if (!mounted || !_batchRunning) return;
+    final web = _web, url = _batchSeriesUrl;
+    if (web == null || url == null) return;
+    final episode = widget.store.getSeries(url)?.nextQueued;
+    if (episode == null) {
+      setState(() {
+        _batchRunning = false;
+        _batchSeriesUrl = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(AppLocalizations.of(context)!.webSeriesCompleted),
+      ));
+      return;
+    }
+    final target = WebViewerStore.safeUrl(episode.url);
+    if (target == null) {
+      await widget.store.markEpisodeNeedsAttention(
+          url, episode.url, 'Invalid public HTTPS episode URL');
+      await _advanceSeries();
+      return;
+    }
+    try {
+      await web.loadUrl(urlRequest: URLRequest(url: WebUri(target.toString())));
+    } catch (error) {
+      await widget.store.markEpisodeNeedsAttention(
+          url, episode.url, error.toString());
+      if (mounted) setState(() => _batchRunning = false);
+    }
+  }
+
+  Future<void> _onSeriesPageLoad(
+      InAppWebViewController controller, String? url) async {
+    final seriesUrl = _batchSeriesUrl;
+    if (!_batchRunning || _batchProcessing ||
+        seriesUrl == null || url == null || !mounted) return;
+    final episode = widget.store.getSeries(seriesUrl)?.nextQueued;
+    if (episode == null) return;
+    final loaded = Uri.tryParse(url);
+    final expected = Uri.tryParse(episode.url);
+    if (loaded == null || expected == null ||
+        loaded.replace(fragment: '').toString() !=
+          expected.replace(fragment: '').toString()) return;
+    _batchProcessing = true;
+    final labels = AppLocalizations.of(context)!;
+    try {
+      // Allow site scripts and ordinary lazy image paint to settle.
+      await Future<void>.delayed(const Duration(milliseconds: 850));
+      if (!_batchRunning || !mounted) return;
+      final raw = await controller.evaluateJavascript(
+          source: WebPageCapture.captureJavaScript);
+      final capture = WebPageCapture.parse(raw);
+      if (capture == null || capture.images.isEmpty ||
+          capture.expectedImages > capture.images.length) {
+        await widget.store.markEpisodeNeedsAttention(
+            seriesUrl, episode.url, labels.webSeriesPageIncomplete);
+        if (mounted) {
+          setState(() => _batchRunning = false);
+          _error(labels.webSeriesPageIncomplete);
+        }
+        return;
+      }
+      // Preserve the unique, verified episode identity instead of a
+      // possibly series-level canonical URL.
+      final verified = WebPageCapture(
+        sourceUrl: expected, title: episode.title,
+        author: capture.author, publishedAt: episode.date,
+        expectedImages: capture.expectedImages, images: capture.images,
+      );
+      final id = await widget.store.enqueue(verified,
+          List.generate(verified.images.length, (i) => i),
+          title: episode.title, seriesUrl: seriesUrl,
+          episodeUrl: episode.url);
+      // Only one active chapter at a time; success means CBZ validated.
+      await widget.store.waitForSeriesJob(id);
+    } catch (error) {
+      await widget.store.markEpisodeNeedsAttention(
+          seriesUrl, episode.url, error.toString());
+    } finally {
+      _batchProcessing = false;
+    }
+    if (_batchRunning && mounted) await _advanceSeries();
+  }
+
+  void _stopSeries() {
+    setState(() {
+      _batchRunning = false;
+      _batchSeriesUrl = null;
+    });
+  }
+
   Future<void> _captureImages() async {
     final web = _web;
     if (web == null || !_loaded || _busy) return;
@@ -594,6 +745,12 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
         _currentUrl = url?.toString() ?? _currentUrl;
       });
       unawaited(_rememberVisit(controller, url?.toString()));
+      if (_batchRunning) {
+        unawaited(_onSeriesPageLoad(controller, url?.toString()));
+      } else if (widget.autoScanSeries && !_autoScanAttempted) {
+        _autoScanAttempted = true;
+        unawaited(_scanSeries());
+      }
     },
     onUpdateVisitedHistory: (controller, url, __) {
       if (mounted) setState(() => _currentUrl =
@@ -694,9 +851,17 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
             icon: const Icon(Icons.history),
             tooltip: labels.webViewerRecentTabs),
           IconButton(
-            onPressed: _busy || !_loaded ? null : _captureImages,
+            onPressed: _busy || !_loaded || _batchRunning ? null : _captureImages,
             icon: const Icon(Icons.image_search),
             tooltip: labels.webViewerDetect),
+          IconButton(
+            onPressed: _busy || !_loaded || _batchRunning ? null : _scanSeries,
+            icon: const Icon(Icons.format_list_numbered),
+            tooltip: labels.webSeriesCapture),
+          if (_batchRunning) IconButton(
+            onPressed: _stopSeries,
+            icon: const Icon(Icons.stop_circle_outlined),
+            tooltip: labels.webSeriesPause),
         ],
       ),
       body: Column(children: [
@@ -746,6 +911,17 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
           Positioned.fill(child: ColoredBox(
             color: Theme.of(context).scaffoldBackgroundColor,
             child: _preview(labels),
+          )),
+        if (_seriesRecord != null)
+          Positioned.fill(child: ColoredBox(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: WebSeriesSelector(
+              key: ValueKey(_seriesRecord!.url),
+              series: _seriesRecord!,
+              onQueue: _queueSeries,
+              onResume: () => _resumeSeries(_seriesRecord!.url),
+              onClose: () => setState(() => _seriesRecord = null),
+            ),
           )),
       ])),
       ]),
