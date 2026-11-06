@@ -61,6 +61,7 @@ class WebViewerStore extends ChangeNotifier {
   final progress = <String, int>{};
   final errors = <String, String>{};
   bool isReady = false, downloading = false, paused = false;
+  bool autoSelectImages = true;
   String? activeId;
   bool _disposed = false, _cancelRequested = false;
   Future<void>? _loading;
@@ -94,6 +95,7 @@ class WebViewerStore extends ChangeNotifier {
             .whereType<Map>().map((v) =>
                 WebSiteBookmark.fromJson(Map<String, dynamic>.from(v)))
             .where((v) => safeUrl(v.url) != null));
+        autoSelectImages = data['autoSelectImages'] != false;
         works..clear()..addAll((data['works'] as List? ?? [])
             .whereType<Map>().map((v) =>
                 WebSavedWork.fromJson(Map<String, dynamic>.from(v)))
@@ -120,6 +122,7 @@ class WebViewerStore extends ChangeNotifier {
       await temp.writeAsString(jsonEncode({
         'schemaVersion': 1, 'sites': sites.map((v) => v.toJson()).toList(),
         'works': works.map((v) => v.toJson()).toList(),
+        'autoSelectImages': autoSelectImages,
       }), flush: true);
       if (await file.exists()) {
         if (await previous.exists()) await previous.delete();
@@ -143,6 +146,11 @@ class WebViewerStore extends ChangeNotifier {
     if (sites.any((v) => v.url == uri.toString())) return;
     sites.add(WebSiteBookmark(
       name.trim().isEmpty ? uri.host : name.trim(), uri.toString()));
+    await _save();
+    _notify();
+  }
+  Future<void> setAutoSelectImages(bool enabled) async {
+    autoSelectImages = enabled;
     await _save();
     _notify();
   }
@@ -232,6 +240,7 @@ class WebViewerStore extends ChangeNotifier {
         if (_cancelRequested || _disposed) throw StateError('Cancelled');
         final data = await BoundedWebImages.load(client,
             source.images[i].url,
+            headers: {'Referer': source.sourceUrl.toString()},
             maxBytes: GalleryDownloadLimits.defaultImageMiB *
                 GalleryDownloadLimits.mib);
         total += data.length;
