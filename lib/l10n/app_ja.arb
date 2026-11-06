@@ -1065,5 +1065,20 @@
   "webViewerRetry": "再試行",
   "webViewerOpenExternal": "外部ブラウザーで開く",
   "webViewerAutoSelect": "検出画像を初期状態ですべて選択",
-  "webViewerAutoSelectHelp": "オフの場合は、ダウンロードする画像を手動で選択します。"
+  "webViewerAutoSelectHelp": "オフの場合は、ダウンロードする画像を手動で選択します。",
+  "webViewerEditSite": "サイトを編集",
+  "webViewerDeleteSiteConfirm": "この保存済みサイトを削除しますか？",
+  "webViewerLastTab": "最後に開いたタブ",
+  "webViewerRecentTabs": "最近開いたタブ",
+  "webViewerNoRecentTabs": "閲覧履歴はありません。",
+  "webViewerSaveCurrentTab": "現在のページをサイトに保存",
+  "webViewerSavedCurrentTab": "現在のページをサイト一覧に保存しました。",
+  "webViewerAlreadySaved": "このサイトはすでに登録されています。",
+  "webViewerClearFailed": "失敗ログをすべて削除",
+  "webViewerClearError": "失敗ログを削除",
+  "webViewerErrorDetails": "エラーの詳細",
+  "webViewerMissingImages": "まだ読み込まれていない画像があります。元のページをスクロールして再検出してください。",
+  "webViewerWaitingImages": "画像の読み込みを待ち、ページをスクロールして再検出してください。",
+  "webViewerBackToBrowser": "ウェブページに戻る",
+  "webViewerDetectedOfTotal": "読み込み済み画像 / 全ページ"
 }
