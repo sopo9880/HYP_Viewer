@@ -27,7 +27,7 @@ class WebSavedWork {
   const WebSavedWork(this.id, this.title, this.author, this.sourceUrl,
       this.publishedAt, this.pages, this.currentPage, this.savedAt);
   WebSavedWork withPage(int page) => WebSavedWork(id, title, author, sourceUrl,
-      publishedAt, pages, page.clamp(1, pages), savedAt);
+      publishedAt, pages, page.clamp(1, pages).toInt(), savedAt);
   WebSavedWork renamed(String title) => WebSavedWork(id, title, author,
       sourceUrl, publishedAt, pages, currentPage, savedAt);
   Map<String, dynamic> toJson() => {
@@ -37,13 +37,13 @@ class WebSavedWork {
   };
   factory WebSavedWork.fromJson(Map<String, dynamic> data) {
     final count = (data['pages'] is int ? data['pages'] as int : 1)
-        .clamp(1, GalleryArchive.maxPages);
+        .clamp(1, GalleryArchive.maxPages).toInt();
     return WebSavedWork(
       (data['id'] ?? '').toString(), (data['title'] ?? '').toString(),
       (data['author'] ?? '').toString(), (data['sourceUrl'] ?? '').toString(),
       (data['publishedAt'] ?? '').toString(), count,
       (data['currentPage'] is int ? data['currentPage'] as int : 1)
-          .clamp(1, count),
+          .clamp(1, count).toInt(),
       DateTime.tryParse((data['savedAt'] ?? '').toString()) ??
           DateTime.fromMillisecondsSinceEpoch(0),
     );
