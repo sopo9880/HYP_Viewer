@@ -68,7 +68,7 @@ void main() {
     store.errors['111'] = 'connection reset';
     store.errors['222'] = 'response 403';
     store.clearFailedDownload('111');
-    expect(store.errors.keys, ['222']);
+    expect(store.errors.keys.toList(), ['222']);
     store.clearAllFailedDownloads();
     expect(store.errors, isEmpty);
     expect(store.works, isEmpty);
