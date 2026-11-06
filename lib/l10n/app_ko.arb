@@ -1063,5 +1063,7 @@
   "webViewerRefresh": "새로고침",
   "webViewerDetect": "현재 페이지 이미지 감지",
   "webViewerRetry": "다시 시도",
-  "webViewerOpenExternal": "외부 브라우저에서 열기"
+  "webViewerOpenExternal": "외부 브라우저에서 열기",
+  "webViewerAutoSelect": "발견한 이미지 자동 전체 선택",
+  "webViewerAutoSelectHelp": "끄면 이미지를 직접 선택해야 다운로드할 수 있어."
 }
