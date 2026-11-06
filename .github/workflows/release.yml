@@ -122,6 +122,12 @@ jobs:
 
           CI source commit: $SOURCE_SHA
 
+          - WEB/Series Home: reuse the original HYP hero banner with local CBZ artwork.
+          - WEB/Series Library: actual cover-image grids, reading progress, title search and sorting.
+          - Generate small cover previews from stored WEB CBZs; lazily convert legacy works.
+          - HYP/WEB/SERIES Settings: scan and safely remove old app-owned APK files.
+          - Automatically clean all old updater APKs after Android confirms installation.
+          - Protect pending/active installers, original HYP/WEB CBZs and user settings.
           - WEB Viewer sites: confirmation before deletion and editable names/URLs.
           - Save the current browser page as a WEB site button.
           - Reopen the last tab or choose from recently visited pages.
