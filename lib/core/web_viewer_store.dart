@@ -46,6 +46,9 @@ class WebSavedWork {
   WebSavedWork renamed(String title) => WebSavedWork(id, title, author,
       sourceUrl, publishedAt, pages, currentPage, savedAt,
       seriesUrl: seriesUrl, episodeUrl: episodeUrl);
+  WebSavedWork grouped(String parent, String episode) => WebSavedWork(
+      id, title, author, sourceUrl, publishedAt, pages, currentPage,
+      savedAt, seriesUrl: parent, episodeUrl: episode);
   Map<String, dynamic> toJson() => {
     'id': id, 'title': title, 'author': author, 'sourceUrl': sourceUrl,
     'publishedAt': publishedAt, 'pages': pages, 'currentPage': currentPage,
@@ -288,6 +291,23 @@ class WebViewerStore extends ChangeNotifier {
     final added = existing == null
         ? capture.episodes.length : existing.merge(capture);
     if (existing == null) series.insert(0, WebSeriesRecord.fromCapture(capture));
+    final group = getSeries(capture.url.toString())!;
+    // Reuse single-episode CBZs saved before series support was introduced.
+    for (final episode in group.episodes) {
+      if (episode.workId != null) continue;
+      final uri = Uri.tryParse(episode.url);
+      if (uri == null) continue;
+      final id = findExisting(uri);
+      if (id == null) continue;
+      final index = works.indexWhere((w) => w.id == id);
+      if (index < 0) continue;
+      episode.workId = id;
+      episode.state = 'saved';
+      episode.error = null;
+      if (works[index].seriesUrl == null) {
+        works[index] = works[index].grouped(group.url, episode.url);
+      }
+    }
     await _save();
     _notify();
     return added;
@@ -417,7 +437,7 @@ class WebViewerStore extends ChangeNotifier {
         if (parent != null) {
           final episode = getSeries(parent.first)?.episode(parent.last);
           episode?.state = 'failed';
-          episode?.error = error.toString();
+          episode?.error = 'Download failed. See the WEB download log.';
           try { await _save(); } catch (_) {}
         }
         final completion = _jobCompletions[id];
