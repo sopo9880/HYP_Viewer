@@ -97,8 +97,14 @@ class WebCoverPreview extends StatelessWidget {
 class WebVisualCard extends StatelessWidget {
   final WebViewerStore store;
   final WebVisualEntry entry;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onSelect;
+  final VoidCallback? onLongPress;
   const WebVisualCard({
     super.key, required this.store, required this.entry,
+    this.selectionMode = false, this.selected = false,
+    this.onSelect, this.onLongPress,
   });
 
   @override
@@ -110,12 +116,16 @@ class WebVisualCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         key: Key('web-visual-card-' + entry.id),
-        onTap: entry.onOpen,
+        onTap: selectionMode ? onSelect : entry.onOpen,
+        onLongPress: onLongPress,
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(15),
             border: Border.all(
-              color: HypColors.border.withValues(alpha: 0.7)),
+              width: selectionMode && selected ? 2 : 1,
+              color: selectionMode && selected
+                  ? HypColors.lightPurple
+                  : HypColors.border.withValues(alpha: 0.7)),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -126,7 +136,13 @@ class WebVisualCard extends StatelessWidget {
                   remoteCoverUrl: entry.remoteCoverUrl,
                   fallbackIcon: entry.icon,
                 ),
-                if (entry.downloaded)
+                if (selectionMode)
+                  Positioned(left: 8, top: 8,
+                    child: Icon(selected ? Icons.check_circle_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                      color: selected ? HypColors.lightPurple : Colors.white,
+                      size: 26)),
+                if (entry.downloaded && !selectionMode)
                   const Positioned(left: 8, top: 8,
                     child: Icon(Icons.offline_pin_rounded,
                       color: HypColors.success, size: 20)),
@@ -207,12 +223,14 @@ class WebVisualLibrary extends StatefulWidget {
   final int initialVisible;
   final VoidCallback? onViewAll;
   final String emptyMessage;
+  final Future<void> Function(List<WebVisualEntry>)? onDeleteSelected;
 
   const WebVisualLibrary({
     super.key, required this.store, required this.title,
     required this.subtitle, required this.icon, required this.items,
     required this.emptyMessage, this.searchable = true,
     this.initialVisible = 36, this.onViewAll,
+    this.onDeleteSelected,
   });
 
   @override
@@ -223,6 +241,30 @@ class _WebVisualLibraryState extends State<WebVisualLibrary> {
   String _query = '';
   WebVisualSort _sort = WebVisualSort.newest;
   int _visible = 36;
+  bool _reverse = false;
+  bool _selecting = false;
+  final Set<String> _selectedIds = {};
+
+  void _toggleSelection() => setState(() {
+    _selecting = !_selecting;
+    _selectedIds.clear();
+  });
+
+  void _toggleSelected(String id) => setState(() {
+    if (!_selectedIds.add(id)) _selectedIds.remove(id);
+  });
+
+  Future<void> _deleteSelected() async {
+    final action = widget.onDeleteSelected;
+    if (action == null || _selectedIds.isEmpty) return;
+    final selected = widget.items.where((entry) =>
+        _selectedIds.contains(entry.id)).toList();
+    await action(selected);
+    if (mounted) setState(() {
+      _selectedIds.clear();
+      _selecting = false;
+    });
+  }
 
   @override
   void initState() {
@@ -249,7 +291,7 @@ class _WebVisualLibraryState extends State<WebVisualLibrary> {
           .compareTo(b.title.toLowerCase()),
       WebVisualSort.progress => b.progress.compareTo(a.progress),
     });
-    return entries;
+    return _reverse ? entries.reversed.toList() : entries;
   }
 
   @override
@@ -268,6 +310,30 @@ class _WebVisualLibraryState extends State<WebVisualLibrary> {
           onAction: widget.onViewAll,
         ),
         const SizedBox(height: 13),
+        if (widget.onDeleteSelected != null) ...[
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            OutlinedButton.icon(
+              key: const Key('web-library-select-mode'),
+              onPressed: _toggleSelection,
+              icon: Icon(_selecting ? Icons.close : Icons.checklist_outlined),
+              label: Text(_selecting ? '선택 종료' : '선택'),
+            ),
+            if (_selecting) ...[
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _selectedIds
+                  ..clear()..addAll(all.map((e) => e.id))),
+                icon: const Icon(Icons.select_all),
+                label: const Text('전체 선택'),
+              ),
+              FilledButton.icon(
+                onPressed: _selectedIds.isEmpty ? null : _deleteSelected,
+                icon: const Icon(Icons.delete_outline),
+                label: Text('선택 삭제 (${_selectedIds.length})'),
+              ),
+            ],
+          ]),
+          const SizedBox(height: 12),
+        ],
         if (widget.searchable) ...[
           LayoutBuilder(builder: (context, constraints) {
             final field = TextField(
@@ -298,12 +364,22 @@ class _WebVisualLibraryState extends State<WebVisualLibrary> {
             );
             if (constraints.maxWidth < 520) {
               return Column(crossAxisAlignment: CrossAxisAlignment.start,
-                children: [field, const SizedBox(height: 6), sort]);
+                children: [field, const SizedBox(height: 6),
+                  Row(children: [sort, IconButton(
+                    tooltip: '정렬 방향 변경',
+                    onPressed: () => setState(() => _reverse = !_reverse),
+                    icon: Icon(_reverse ? Icons.arrow_upward : Icons.arrow_downward),
+                  )])]);
             }
             return Row(children: [
               Expanded(child: field),
               const SizedBox(width: 14),
               sort,
+              IconButton(
+                tooltip: '정렬 방향 변경',
+                onPressed: () => setState(() => _reverse = !_reverse),
+                icon: Icon(_reverse ? Icons.arrow_upward : Icons.arrow_downward),
+              ),
             ]);
           }),
           const SizedBox(height: 15),
@@ -331,7 +407,14 @@ class _WebVisualLibraryState extends State<WebVisualLibrary> {
                 childAspectRatio: columns == 1 ? 1.15 : 0.68,
               ),
               itemBuilder: (context, index) => WebVisualCard(
-                store: widget.store, entry: shown[index]),
+                store: widget.store, entry: shown[index],
+                selectionMode: _selecting,
+                selected: _selectedIds.contains(shown[index].id),
+                onSelect: () => _toggleSelected(shown[index].id),
+                onLongPress: widget.onDeleteSelected == null ? null : () {
+                  if (!_selecting) setState(() => _selecting = true);
+                  _toggleSelected(shown[index].id);
+                }),
             );
           }),
         if (all.length > shown.length)
