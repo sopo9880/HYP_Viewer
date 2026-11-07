@@ -19,6 +19,7 @@ import 'web_series_selector.dart';
 import 'web_series_shelf.dart';
 import 'series_viewer_pages.dart';
 import 'web_library_visuals.dart';
+import 'web_visit_history.dart';
 import 'hero_banner.dart';
 import 'hyp_theme.dart';
 import 'update_apk_cleanup_panel.dart';
@@ -216,7 +217,11 @@ class _WebViewerPaneState extends State<WebViewerPane> {
           child: OutlinedButton.icon(
             icon: const Icon(Icons.history),
             label: Text(labels.webViewerLastTab),
-            onPressed: () => _openSite(widget.store.lastTab!.url),
+            onPressed: () async {
+              final url = await WebVisitHistorySheet.open(
+                  context, widget.store);
+              if (url != null && mounted) await _openSite(url);
+            },
           ),
         ),
         Text(widget.store.lastTab!.name,
@@ -678,31 +683,7 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
   }
 
   Future<void> _openRecentTabs() async {
-    final labels = AppLocalizations.of(context)!;
-    final pages = widget.store.recentPages.toList();
-    final selected = await showModalBottomSheet<String>(
-      context: context, isScrollControlled: true,
-      builder: (ctx) => SafeArea(child: SizedBox(
-        height: MediaQuery.sizeOf(ctx).height * 0.65,
-        child: Column(children: [
-          ListTile(title: Text(labels.webViewerRecentTabs)),
-          if (pages.isEmpty)
-            Expanded(child: Center(child: Text(labels.webViewerNoRecentTabs)))
-          else
-            Expanded(child: ListView.builder(
-              itemCount: pages.length,
-              itemBuilder: (_, i) => ListTile(
-                leading: const Icon(Icons.history),
-                title: Text(pages[i].name, maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-                subtitle: Text(pages[i].url, maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-                onTap: () => Navigator.pop(ctx, pages[i].url),
-              ),
-            )),
-        ]),
-      )),
-    );
+    final selected = await WebVisitHistorySheet.open(context, widget.store);
     if (selected == null || !mounted) return;
     await Navigator.of(context).pushReplacement<void, void>(
       MaterialPageRoute(builder: (_) => WebViewerBrowser(
