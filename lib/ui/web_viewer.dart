@@ -518,7 +518,9 @@ class _WebViewerPaneState extends State<WebViewerPane> {
         title: labels.webViewerSettings,
         subtitle: labels.webViewerSettingsInfo),
       const SizedBox(height: 12),
-      HypPanel(child: Column(
+      HypPanel(child: Material(
+        type: MaterialType.transparency,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SwitchListTile(
             value: widget.store.autoSelectImages,
@@ -534,7 +536,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
             title: Text(labels.webViewerSettingsNote),
           ),
         ],
-      )),
+      ))),
       if (Platform.isAndroid) ...[
         const SizedBox(height: 14),
         UpdateApkCleanupPanel(downloadInProgress: widget.updating),
