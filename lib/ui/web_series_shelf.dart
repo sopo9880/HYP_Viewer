@@ -9,10 +9,13 @@ class WebSeriesShelf extends StatelessWidget {
   final bool hideCompleted;
   final void Function(WebSeriesEpisodeRecord) onOpenEpisode;
   final VoidCallback onRefreshSource;
+  final void Function(WebSeriesEpisodeRecord)? onOpenEpisodeSource;
+  final void Function(WebSeriesEpisodeRecord)? onDeleteEpisode;
 
   const WebSeriesShelf({
     super.key, required this.series, required this.onOpenEpisode,
-    required this.onRefreshSource, this.hideCompleted = false,
+    required this.onRefreshSource, this.onOpenEpisodeSource,
+    this.onDeleteEpisode, this.hideCompleted = false,
   });
 
   @override
@@ -69,8 +72,26 @@ class WebSeriesShelf extends StatelessWidget {
             subtitle: Text([episode.date, status].where(
               (s) => s.isNotEmpty).join(' · ')),
             onTap: () => onOpenEpisode(episode),
-            trailing: Icon(done ? Icons.chrome_reader_mode_outlined
-              : Icons.open_in_browser),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(done ? Icons.chrome_reader_mode_outlined
+                : Icons.open_in_browser),
+              if (onDeleteEpisode != null || onOpenEpisodeSource != null)
+                PopupMenuButton<String>(
+                  tooltip: '회차 관리',
+                  onSelected: (action) {
+                    if (action == 'web') onOpenEpisodeSource?.call(episode);
+                    if (action == 'delete') onDeleteEpisode?.call(episode);
+                  },
+                  itemBuilder: (_) => [
+                    if (onOpenEpisodeSource != null)
+                      const PopupMenuItem(value: 'web',
+                        child: Text('웹으로 열기')),
+                    if (onDeleteEpisode != null)
+                      const PopupMenuItem(value: 'delete',
+                        child: Text('회차 삭제')),
+                  ],
+                ),
+            ]),
           );
         },
       ),

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -9,7 +8,6 @@ import '../l10n/app_localizations.dart';
 import 'hero_banner.dart';
 import 'hyp_theme.dart';
 import 'web_library_visuals.dart';
-import 'update_apk_cleanup_panel.dart';
 
 /// Four dedicated SERIES screens backed by the same WEB store and CBZs.
 /// The wrapper dashboard owns the store, so mode changes never copy data.
@@ -21,6 +19,11 @@ class SeriesViewerPages extends StatelessWidget {
   final void Function(String) onOpenSeriesSource;
   final void Function(String) onOpenEpisodeSource;
   final void Function(Object) onError;
+  final void Function(WebSeriesRecord)? onRenameSeries;
+  final void Function(WebSeriesRecord)? onDeleteSeries;
+  final void Function(WebSavedWork)? onDeleteChapter;
+  final Future<void> Function(List<WebVisualEntry>)? onDeleteSelectedSeries;
+  final Future<void> Function(List<WebVisualEntry>)? onDeleteSelectedChapters;
   final Map<String, Uint8List?> heroCovers;
   final ValueChanged<String>? onNavigate;
   final bool updating;
@@ -30,6 +33,8 @@ class SeriesViewerPages extends StatelessWidget {
     required this.onOpenSeries, required this.onReadWork,
     required this.onOpenSeriesSource, required this.onOpenEpisodeSource,
     required this.onError, this.heroCovers = const {}, this.onNavigate,
+    this.onRenameSeries, this.onDeleteSeries, this.onDeleteChapter,
+    this.onDeleteSelectedSeries, this.onDeleteSelectedChapters,
     this.updating = false,
   });
 
@@ -61,10 +66,14 @@ class SeriesViewerPages extends StatelessWidget {
         actions: {
           'open': labels.webViewerRead,
           'source': labels.webSeriesCheckUpdates,
+          'rename': labels.webViewerRename,
+          'delete': labels.webViewerDelete,
         },
         onAction: (action) {
           if (action == 'open') onOpenSeries(group);
           if (action == 'source') onOpenSeriesSource(group.url);
+          if (action == 'rename') onRenameSeries?.call(group);
+          if (action == 'delete') onDeleteSeries?.call(group);
         },
       );
     }).toList();
@@ -96,10 +105,12 @@ class SeriesViewerPages extends StatelessWidget {
         actions: {
           'read': labels.webViewerRead,
           'source': labels.webViewerSource,
+          'delete': labels.webViewerDelete,
         },
         onAction: (action) {
           if (action == 'read') onReadWork(work);
           if (action == 'source') onOpenEpisodeSource(work.sourceUrl);
+          if (action == 'delete') onDeleteChapter?.call(work);
         },
       );
     }).toList();
@@ -187,6 +198,7 @@ class SeriesViewerPages extends StatelessWidget {
       subtitle: labels.seriesVisualLibraryDescription,
       icon: Icons.collections_bookmark_rounded,
       items: _seriesEntries(labels),
+      onDeleteSelected: onDeleteSelectedSeries,
       emptyMessage: labels.seriesViewerNoWorks,
     );
 
@@ -288,6 +300,17 @@ class SeriesViewerPages extends StatelessWidget {
               onPressed: () => onOpenEpisodeSource(chapter.url),
             ),
           ),
+      const SizedBox(height: 15),
+      WebVisualLibrary(
+        key: const Key('series-downloaded-cover-grid'),
+        store: store,
+        title: '다운로드한 회차',
+        subtitle: l.webVisualDownloadsDescription,
+        icon: Icons.library_books_rounded,
+        items: _chapterEntries(l),
+        onDeleteSelected: onDeleteSelectedChapters,
+        emptyMessage: l.seriesViewerNoDownloads,
+      ),
     ]);
   }
 
@@ -336,10 +359,6 @@ class SeriesViewerPages extends StatelessWidget {
         title: Text(l.seriesViewerInfo),
       ),
       ]))),
-      if (Platform.isAndroid) ...[
-        const SizedBox(height: 14),
-        UpdateApkCleanupPanel(downloadInProgress: updating),
-      ],
     ]);
 
   @override
