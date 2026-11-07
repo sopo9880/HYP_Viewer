@@ -50,6 +50,7 @@ import 'failed_downloads_panel.dart';
 import '../core/web_viewer_store.dart';
 import '../core/viewer_mode.dart';
 import 'web_viewer.dart';
+import 'update_apk_cleanup_panel.dart';
 
 enum HypPage { home, library, favorites, downloads, history, settings }
 
@@ -1640,6 +1641,17 @@ class _HypDashboardState extends State<HypDashboard> {
         children: [WebViewerPane(
           store: _webViewerStore, section: section,
           settings: widget.readerSettings,
+          updating: widget.downloadingUpdate,
+          onNavigate: (destination) {
+            final target = switch (destination) {
+              'web' => HypPage.favorites,
+              'library' => HypPage.library,
+              'downloads' => HypPage.downloads,
+              'settings' => HypPage.settings,
+              _ => HypPage.home,
+            };
+            if (_viewerMode.containsPage(target.name)) _navigate(target);
+          },
         )],
       );
     }
@@ -4323,6 +4335,11 @@ class _HypDashboardState extends State<HypDashboard> {
             icon: const Icon(Icons.system_update_alt_rounded),
             label: const HypText('업데이트 확인'),
           ),
+          if (Platform.isAndroid) ...[
+            const SizedBox(height: 16),
+            UpdateApkCleanupPanel(
+              downloadInProgress: widget.downloadingUpdate),
+          ],
         ],
       )),
     ],

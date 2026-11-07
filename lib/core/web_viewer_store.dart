@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'gallery.dart';
+import 'cover_store.dart';
 import 'gallery_download_limits.dart';
 import 'online_gallery.dart';
 import 'web_page_capture.dart';
@@ -84,6 +85,8 @@ class WebViewerStore extends ChangeNotifier {
   final _pendingSeriesJobs = <String, List<String>>{};
   final _jobCompletions = <String, Completer<bool>>{};
   final _seriesFailedJobs = <String, String>{};
+  final _coverFutures = <String, Future<Uint8List?>>{};
+  Future<void> _coverTail = Future<void>.value();
   final pending = <String>[];
   final captures = <String, WebPageCapture>{};
   final progress = <String, int>{};
@@ -110,6 +113,34 @@ class WebViewerStore extends ChangeNotifier {
   }
   Future<GalleryStore> get galleries async =>
       GalleryStore(baseDirectory: await root);
+
+  /// Local thumbnails share the WEB tree, never the HYP cover folder.
+  /// Legacy archives are decoded lazily one at a time to bound peak memory.
+  Future<Uint8List?> coverFor(String workId) {
+    if (!RegExp(r'^\d{1,12}$').hasMatch(workId)) {
+      return Future<Uint8List?>.value(null);
+    }
+    return _coverFutures.putIfAbsent(workId, () async {
+      final covers = CoverStore(baseDirectory: await root);
+      try {
+        final saved = await covers.read(workId);
+        if (saved != null) return saved;
+      } catch (_) {}
+      final job = _coverTail.then((_) async {
+        try {
+          final saved = await covers.read(workId);
+          if (saved != null) return saved;
+          final archive = await (await galleries).read(workId);
+          return await covers.save(workId, archive.pageBytes(0));
+        } catch (_) {
+          return null;
+        }
+      });
+      _coverTail = job.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+      return job;
+    });
+  }
+
   Future<File> get _file async => File(
       (await root).path + Platform.pathSeparator + 'web_library.json');
 
@@ -542,6 +573,13 @@ class WebViewerStore extends ChangeNotifier {
       await encoder.close(); opened = false;
       final gallery = await galleries;
       final result = await gallery.importFile(id, zip.path);
+      try {
+        await CoverStore(baseDirectory: await root)
+            .save(id, result.pageBytes(0));
+      } catch (_) {
+        // Preview failures must not invalidate successfully stored CBZs.
+      }
+      _coverFutures.remove(id);
       await folder.delete(recursive: true);
       return result;
     } finally {
@@ -608,6 +646,12 @@ class WebViewerStore extends ChangeNotifier {
   Future<void> removeWork(String id) async {
     final gallery = await galleries;
     await gallery.delete(id);
+    _coverFutures.remove(id);
+    try {
+      await CoverStore(baseDirectory: await root).deleteAllForWork(id);
+    } catch (_) {
+      // Preview cleanup is best-effort, independent of saved metadata.
+    }
     works.removeWhere((v) => v.id == id);
     for (final group in series) {
       for (final episode in group.episodes) {

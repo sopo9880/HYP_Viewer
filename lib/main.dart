@@ -50,6 +50,7 @@ import 'core/shares.dart';
 import 'core/social_share_text.dart';
 import 'core/storage.dart';
 import 'core/updates.dart';
+import 'core/update_apk_cleanup.dart';
 import 'core/work.dart';
 import 'core/blacklist.dart';
 import 'core/reading_history.dart';
@@ -499,7 +500,23 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       if (mounted) {
         setState(() => appVersion = 'v' + hypReleaseVersion +
             ' (build ' + info.buildNumber + ')');
-        await _checkPendingInstallation(hypReleaseVersion);
+        await _checkPendingInstallation(info.version);
+        // Only a genuinely installed Android version permits cleanup.
+        // A pending newer APK is protected by UpdateApkCleanup.canCleanup.
+        if (Platform.isAndroid && info.version == hypReleaseVersion) {
+          try {
+            final removed = await const UpdateApkCleanup().cleanup(
+              installedVersion: info.version,
+              downloadInProgress: downloadingUpdate,
+            );
+            if (mounted && removed.removed > 0) {
+              _status('지난 업데이트 APK ' +
+                removed.removed.toString() + '개를 안전하게 정리했어.');
+            }
+          } catch (_) {
+            // Storage cleanup must never block starting the app.
+          }
+        }
       }
     } catch (_) {
       // Test hosts and unsupported platforms may not supply package metadata.

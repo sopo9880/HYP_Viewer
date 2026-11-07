@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -17,24 +18,54 @@ import 'gallery_reader.dart';
 import 'web_series_selector.dart';
 import 'web_series_shelf.dart';
 import 'series_viewer_pages.dart';
+import 'web_library_visuals.dart';
+import 'hero_banner.dart';
+import 'hyp_theme.dart';
+import 'update_apk_cleanup_panel.dart';
 
 /// WEB is independent of the HYP library, but uses the existing image reader.
 class WebViewerPane extends StatefulWidget {
   final WebViewerStore store;
   final String section;
   final ReaderSettings settings;
+  final ValueChanged<String>? onNavigate;
+  final bool updating;
   const WebViewerPane({super.key, required this.store,
-      required this.section, required this.settings});
+      required this.section, required this.settings,
+      this.onNavigate, this.updating = false});
   @override
   State<WebViewerPane> createState() => _WebViewerPaneState();
 }
 
 class _WebViewerPaneState extends State<WebViewerPane> {
+  final _heroCovers = <String, Uint8List?>{};
+  final _heroLoading = <String>{};
+
+  void _primeHeroCovers() {
+    if (!mounted || !widget.store.isReady) return;
+    final seriesMode = widget.section.startsWith('series_');
+    final candidates = widget.store.works.where((work) =>
+        seriesMode ? work.seriesUrl != null : work.seriesUrl == null).toList()
+      ..sort((a, b) => b.savedAt.compareTo(a.savedAt));
+    for (final work in candidates.take(3)) {
+      if (_heroCovers.containsKey(work.id) || !_heroLoading.add(work.id)) {
+        continue;
+      }
+      widget.store.coverFor(work.id).then((bytes) {
+        if (mounted) setState(() => _heroCovers[work.id] = bytes);
+      }).catchError((Object _) {
+        if (mounted) setState(() => _heroCovers[work.id] = null);
+      }).whenComplete(() => _heroLoading.remove(work.id));
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     widget.store.addListener(_changed);
-    widget.store.load().catchError((Object error) {
+    widget.store.load().then((_) {
+      _primeHeroCovers();
+    }).catchError((Object error) {
       if (mounted) _error(error);
     });
   }
@@ -51,7 +82,11 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     widget.store.removeListener(_changed);
     super.dispose();
   }
-  void _changed() { if (mounted) setState(() {}); }
+  void _changed() {
+    if (!mounted) return;
+    setState(() {});
+    _primeHeroCovers();
+  }
   void _error(Object error) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(error.toString())));
@@ -238,39 +273,165 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     ));
   }
 
-  Widget _works(AppLocalizations labels, {int? count}) {
-    final candidates = widget.store.works.where((w) => w.seriesUrl == null);
-    final items = count == null
-        ? candidates.toList() : candidates.take(count).toList();
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text(count == null ? labels.webViewerLibrary : labels.webViewerRecent,
-          style: Theme.of(context).textTheme.titleLarge),
-      const SizedBox(height: 12),
-      if (items.isEmpty) Text(labels.webViewerNoWorks),
-      for (final item in items)
-        Card(child: ListTile(
-        leading: const Icon(Icons.auto_stories),
-        title: Text(item.title),
-        subtitle: Text(item.author + ' · ' +
-          item.currentPage.toString() + '/' + item.pages.toString()),
-        onTap: () => _openWork(item),
-        trailing: PopupMenuButton<String>(
-          onSelected: (action) async {
-            if (action == 'read') { await _openWork(item); }
-            if (action == 'rename') { await _rename(item); }
-            if (action == 'source') { await _openSite(item.sourceUrl); }
-            if (action == 'delete') {
-              try { await widget.store.removeWork(item.id); }
-              catch (error) { if (mounted) _error(error); }
-            }
+  Future<void> _confirmRemoveWork(WebSavedWork work) async {
+    final labels = AppLocalizations.of(context)!;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(labels.webViewerDelete),
+        content: Text(work.title),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+            child: Text(labels.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true),
+            child: Text(labels.webViewerDelete)),
+        ],
+      ),
+    );
+    if (accepted != true) return;
+    try {
+      await widget.store.removeWork(work.id);
+    } catch (error) {
+      if (mounted) _error(error);
+    }
+  }
+
+  List<WebVisualEntry> _workEntries(AppLocalizations labels) {
+    return widget.store.works.where((work) => work.seriesUrl == null).map(
+      (work) {
+        final progress = work.pages <= 1
+            ? 0.0 : ((work.currentPage - 1) / (work.pages - 1))
+                .clamp(0.0, 1.0).toDouble();
+        return WebVisualEntry(
+          id: work.id, title: work.title,
+          subtitle: work.author.isEmpty ? work.sourceUrl : work.author,
+          detail: work.currentPage.toString() + ' / ' + work.pages.toString(),
+          coverWorkId: work.id, modifiedAt: work.savedAt,
+          progress: progress, downloaded: true,
+          icon: Icons.auto_stories_rounded,
+          onOpen: () { _openWork(work); },
+          actions: {
+            'read': labels.webViewerRead,
+            'rename': labels.webViewerRename,
+            'source': labels.webViewerSource,
+            'delete': labels.webViewerDelete,
           },
-          itemBuilder: (_) => [
-            PopupMenuItem(value: 'read', child: Text(labels.webViewerRead)),
-            PopupMenuItem(value: 'rename', child: Text(labels.webViewerRename)),
-            PopupMenuItem(value: 'source', child: Text(labels.webViewerSource)),
-            PopupMenuItem(value: 'delete', child: Text(labels.webViewerDelete)),
-          ],
+          onAction: (action) {
+            if (action == 'read') _openWork(work);
+            if (action == 'rename') _rename(work);
+            if (action == 'source') _openSite(work.sourceUrl);
+            if (action == 'delete') _confirmRemoveWork(work);
+          },
+        );
+      },
+    ).toList();
+  }
+
+  Widget _works(AppLocalizations labels) => WebVisualLibrary(
+    key: const Key('web-full-cover-library'),
+    store: widget.store,
+    title: labels.webViewerLibrary,
+    subtitle: labels.webVisualLibraryDescription,
+    icon: Icons.library_books_rounded,
+    items: _workEntries(labels),
+    emptyMessage: labels.webViewerNoWorks,
+  );
+
+  Widget _home(AppLocalizations labels) {
+    final entries = _workEntries(labels)
+      ..sort((a, b) => b.modifiedAt.compareTo(a.modifiedAt));
+    final continueEntries = entries.where((work) => work.progress > 0).toList()
+      ..sort((a, b) => b.modifiedAt.compareTo(a.modifiedAt));
+    final heroIds = entries.take(3).map((work) => work.id).toList();
+    final artwork = List<Uint8List?>.generate(
+      3, (index) => index < heroIds.length
+        ? _heroCovers[heroIds[index]] : null);
+    final keys = List<String?>.generate(
+      3, (index) => index < heroIds.length ? heroIds[index] : null);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      HypHeroBanner(
+        viewerLabel: 'WEB Viewer',
+        bannerIcon: Icons.public_rounded,
+        slideTitles: [
+          labels.webVisualHeroTitle1,
+          labels.webVisualHeroTitle2,
+          labels.webVisualHeroTitle3,
+        ],
+        slideDescriptions: [
+          labels.webVisualHeroDesc1,
+          labels.webVisualHeroDesc2,
+          labels.webVisualHeroDesc3,
+        ],
+        rotatingArtworks: artwork,
+        rotatingArtworkKeys: keys,
+        onOpenArtwork: (id) {
+          for (final work in widget.store.works) {
+            if (work.id == id) { _openWork(work); break; }
+          }
+        },
+        onOpenLibrary: () => widget.onNavigate?.call('library'),
+        onOpenDownloads: () => widget.onNavigate?.call('downloads'),
+      ),
+      const SizedBox(height: 20),
+      if (continueEntries.isNotEmpty) ...[
+        WebVisualLibrary(
+          key: const Key('web-continue-reading'),
+          store: widget.store,
+          title: labels.webVisualContinue,
+          subtitle: labels.webVisualContinueDescription,
+          icon: Icons.chrome_reader_mode_outlined,
+          searchable: false, initialVisible: 4,
+          onViewAll: () => widget.onNavigate?.call('library'),
+          items: continueEntries,
+          emptyMessage: labels.webViewerNoWorks,
         ),
+        const SizedBox(height: 20),
+      ],
+      WebVisualLibrary(
+        key: const Key('web-home-cover-grid'),
+        store: widget.store,
+        title: labels.webVisualRecent,
+        subtitle: labels.webVisualRecentDescription,
+        icon: Icons.library_books_rounded,
+        searchable: false, initialVisible: 8,
+        onViewAll: () => widget.onNavigate?.call('library'),
+        items: entries,
+        emptyMessage: labels.webViewerNoWorks,
+      ),
+      const SizedBox(height: 20),
+      HypSectionTitle(
+        icon: Icons.public_rounded,
+        title: labels.webViewerSites,
+        subtitle: labels.webVisualLibraryDescription,
+        actionLabel: labels.webVisualViewAll,
+        onAction: () => widget.onNavigate?.call('web'),
+      ),
+      const SizedBox(height: 10),
+      HypPanel(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(spacing: 8, runSpacing: 6, children: [
+            for (final site in widget.store.sites.take(6))
+              ActionChip(
+                avatar: const Icon(Icons.public, size: 17),
+                label: Text(site.name),
+                onPressed: () => _openSite(site.url),
+              ),
+            ActionChip(
+              avatar: const Icon(Icons.add, size: 17),
+              label: Text(labels.webViewerAddSite),
+              onPressed: _addSite,
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Text(labels.webVisualDownloadsDescription,
+            style: Theme.of(context).textTheme.bodySmall),
+          TextButton.icon(
+            onPressed: () => widget.onNavigate?.call('downloads'),
+            icon: const Icon(Icons.download_outlined),
+            label: Text(labels.webViewerDownloads),
+          ),
+        ],
       )),
     ]);
   }
@@ -282,8 +443,11 @@ class _WebViewerPaneState extends State<WebViewerPane> {
         .where((entry) => !widget.store.isSeriesFailure(entry.key)).toList();
     final active = widget.store.activeId;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text(labels.webViewerDownloads,
-        style: Theme.of(context).textTheme.titleLarge),
+      HypSectionTitle(
+        icon: Icons.download_rounded,
+        title: labels.webViewerDownloads,
+        subtitle: labels.webVisualDownloadsDescription,
+      ),
       const SizedBox(height: 12),
       if (webJobs.isEmpty && webErrors.isEmpty)
         Text(labels.webViewerEmptyDownloads),
@@ -350,23 +514,33 @@ class _WebViewerPaneState extends State<WebViewerPane> {
 
   Widget _settings(AppLocalizations labels) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text(labels.webViewerSettings,
-          style: Theme.of(context).textTheme.titleLarge),
+      HypSectionTitle(icon: Icons.settings_rounded,
+        title: labels.webViewerSettings,
+        subtitle: labels.webViewerSettingsInfo),
       const SizedBox(height: 12),
-      SwitchListTile(
-        value: widget.store.autoSelectImages,
-        onChanged: (v) async {
-          try { await widget.store.setAutoSelectImages(v); }
-          catch (error) { if (mounted) _error(error); }
-        },
-        title: Text(labels.webViewerAutoSelect),
-        subtitle: Text(labels.webViewerAutoSelectHelp),
-      ),
-      ListTile(
-        leading: const Icon(Icons.shield_outlined),
-        title: Text(labels.webViewerSettingsNote),
-      ),
-      Text(labels.webViewerSettingsInfo),
+      HypPanel(child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SwitchListTile(
+            value: widget.store.autoSelectImages,
+            onChanged: (v) async {
+              try { await widget.store.setAutoSelectImages(v); }
+              catch (error) { if (mounted) _error(error); }
+            },
+            title: Text(labels.webViewerAutoSelect),
+            subtitle: Text(labels.webViewerAutoSelectHelp),
+          ),
+          ListTile(
+            leading: const Icon(Icons.shield_outlined),
+            title: Text(labels.webViewerSettingsNote),
+          ),
+        ],
+      ))),
+      if (Platform.isAndroid) ...[
+        const SizedBox(height: 14),
+        UpdateApkCleanupPanel(downloadInProgress: widget.updating),
+      ],
     ],
   );
 
@@ -385,6 +559,9 @@ class _WebViewerPaneState extends State<WebViewerPane> {
         onOpenSeriesSource: (url) { _openSite(url, scanSeries: true); },
         onOpenEpisodeSource: (url) { _openSite(url); },
         onError: _error,
+        heroCovers: _heroCovers,
+        onNavigate: widget.onNavigate,
+        updating: widget.updating,
       );
     }
     return switch (widget.section) {
@@ -392,21 +569,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
       'library' => _works(labels),
       'downloads' => _downloads(labels),
       'settings' => _settings(labels),
-      _ => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(labels.webViewerHome,
-            style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 10),
-        Card(child: ListTile(
-          leading: const Icon(Icons.public),
-          title: Text(labels.webViewerSites),
-          subtitle: Text(widget.store.sites.length.toString()),
-          onTap: _addSite,
-          trailing: IconButton(onPressed: _addSite,
-            icon: const Icon(Icons.add)),
-        )),
-        const SizedBox(height: 10),
-        _works(labels, count: 8),
-      ]),
+      _ => _home(labels),
     };
   }
 }
