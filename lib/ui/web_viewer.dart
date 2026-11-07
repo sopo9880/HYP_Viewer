@@ -630,6 +630,17 @@ class _WebViewerPaneState extends State<WebViewerPane> {
             onPressed: () => widget.store.clearFailedDownload(error.key),
           ),
         )),
+      const SizedBox(height: 16),
+      WebVisualLibrary(
+        key: const Key('web-downloaded-cover-grid'),
+        store: widget.store,
+        title: '다운로드한 작품',
+        subtitle: labels.webVisualDownloadsDescription,
+        icon: Icons.library_books_rounded,
+        items: _workEntries(labels),
+        onDeleteSelected: _deleteWorksBatch,
+        emptyMessage: labels.webViewerNoWorks,
+      ),
     ]);
   }
 
@@ -702,8 +713,10 @@ class WebViewerBrowser extends StatefulWidget {
   final WebViewerStore store;
   final String initialUrl;
   final bool autoScanSeries;
+  final String? seriesUrl, episodeUrl;
   const WebViewerBrowser({super.key, required this.store,
-      required this.initialUrl, this.autoScanSeries = false});
+      required this.initialUrl, this.autoScanSeries = false,
+      this.seriesUrl, this.episodeUrl});
   @override
   State<WebViewerBrowser> createState() => _WebViewerBrowserState();
 }
@@ -721,6 +734,10 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
   bool _batchRunning = false;
   bool _batchProcessing = false;
   bool _autoScanAttempted = false;
+  bool _seriesOfferBusy = false, _seriesOfferShown = false;
+  bool _seriesSaveQueued = false;
+  DateTime? _lastSeriesScrollCheck;
+  String? _webLoadIssue;
 
   @override
   void initState() {
@@ -992,18 +1009,157 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
     finally { if (mounted) setState(() => _busy = false); }
   }
 
+  bool get _isSeriesChapter =>
+      widget.seriesUrl != null && widget.episodeUrl != null;
+
+  bool get _stillOnSeriesChapter {
+    if (!_isSeriesChapter) return false;
+    final expected = Uri.tryParse(widget.episodeUrl!);
+    final current = Uri.tryParse(_currentUrl);
+    return expected != null && current != null &&
+        expected.host == current.host && expected.path == current.path;
+  }
+
+  /// A user scroll to the end is only a suggestion; no download begins
+  /// before an explicit confirmation and a complete ordered DOM snapshot.
+  Future<void> _checkSeriesReadPosition(
+      InAppWebViewController controller) async {
+    if (!_isSeriesChapter || !_loaded || !_stillOnSeriesChapter ||
+        _seriesSaveQueued || _seriesOfferShown || _seriesOfferBusy) return;
+    final now = DateTime.now();
+    if (_lastSeriesScrollCheck != null &&
+        now.difference(_lastSeriesScrollCheck!) <
+            const Duration(milliseconds: 1100)) return;
+    _lastSeriesScrollCheck = now;
+    try {
+      final value = await controller.evaluateJavascript(source: r'''(function(){
+        var d = document.documentElement, b = document.body;
+        var height = Math.max(d.scrollHeight, b ? b.scrollHeight : 0);
+        return window.scrollY > 100 && window.scrollY + window.innerHeight
+          >= height - 100;
+      })()''');
+      if (value == true || value.toString() == 'true') {
+        await _offerSeriesSave();
+      }
+    } catch (_) {
+      // Nested scroll containers and other sites can use the manual action.
+    }
+  }
+
+  Future<void> _offerSeriesSave({bool manual = false}) async {
+    if (!_isSeriesChapter || !_loaded || !_stillOnSeriesChapter ||
+        _seriesOfferBusy || _seriesSaveQueued ||
+        (_seriesOfferShown && !manual)) return;
+    final group = widget.store.getSeries(widget.seriesUrl!);
+    final episode = group?.episode(widget.episodeUrl!);
+    if (group == null || episode == null ||
+        {'saved', 'queued', 'downloading'}.contains(episode.state)) return;
+    final web = _web;
+    if (web == null) return;
+    _seriesOfferBusy = true;
+    try {
+      final raw = await web.evaluateJavascript(
+          source: WebPageCapture.captureJavaScript);
+      final capture = WebPageCapture.parse(raw);
+      if (capture == null || capture.images.isEmpty ||
+          capture.expectedImages > capture.images.length) {
+        if (manual) _error('회차 이미지가 아직 모두 로딩되지 않았어. 끝까지 스크롤한 뒤 다시 시도해줘.');
+        return;
+      }
+      if (!mounted) return;
+      _seriesOfferShown = true;
+      final accepted = await showDialog<bool>(context: context,
+        builder: (dialog) => AlertDialog(
+          title: const Text('읽은 회차를 저장할까?'),
+          content: Text('현재 회차에서 이미지 ' +
+              capture.images.length.toString() +
+              '장을 확인했어. 오프라인 CBZ로 저장할까?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog, false),
+              child: const Text('나중에')),
+            FilledButton(onPressed: () => Navigator.pop(dialog, true),
+              child: const Text('이미지 저장')),
+          ],
+        ));
+      if (accepted != true || !mounted) return;
+      final verified = WebPageCapture(
+        sourceUrl: Uri.parse(widget.episodeUrl!),
+        title: episode.title,
+        author: capture.author,
+        publishedAt: episode.date,
+        expectedImages: capture.expectedImages,
+        images: capture.images,
+      );
+      await widget.store.enqueue(verified,
+        List<int>.generate(verified.images.length, (index) => index),
+        title: episode.title,
+        seriesUrl: group.url, episodeUrl: episode.url);
+      _seriesSaveQueued = true;
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('회차 이미지 ' + verified.images.length.toString() +
+            '장 다운로드를 시작했어. 완료되면 다음부터 로컬로 열려.'),
+      ));
+    } catch (error) {
+      _seriesOfferShown = false;
+      _error(error);
+    } finally {
+      _seriesOfferBusy = false;
+    }
+  }
+
+  Future<void> _openCurrentInChrome() async {
+    final target = WebViewerStore.safeUrl(_currentUrl);
+    if (target == null) return;
+    try {
+      await launchUrl(target, mode: LaunchMode.externalApplication);
+    } catch (error) { _error(error); }
+  }
+
+  void _showWebIssue() {
+    final issue = _webLoadIssue;
+    if (issue == null) return;
+    showDialog<void>(context: context, builder: (dialog) => AlertDialog(
+      title: const Text('웹 이미지/페이지 로딩 오류'),
+      content: SelectableText(issue),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialog),
+          child: const Text('닫기')),
+        FilledButton(onPressed: () {
+          Navigator.pop(dialog);
+          _openCurrentInChrome();
+        }, child: const Text('Chrome으로 열기')),
+      ],
+    ));
+  }
+
   Widget _browser(WebViewEnvironment? environment) => InAppWebView(
     webViewEnvironment: environment,
     initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
     initialSettings: InAppWebViewSettings(
-      javaScriptEnabled: true, useShouldOverrideUrlLoading: true,
+      javaScriptEnabled: true,
+      domStorageEnabled: true,
+      loadsImagesAutomatically: true,
+      blockNetworkImage: false,
+      thirdPartyCookiesEnabled: true,
+      useShouldOverrideUrlLoading: true,
       useShouldInterceptRequest: false, supportMultipleWindows: false,
       javaScriptCanOpenWindowsAutomatically: false,
       contentBlockers: const <ContentBlocker>[],
     ),
     onWebViewCreated: (controller) => _web = controller,
+    onScrollChanged: (controller, x, y) {
+      unawaited(_checkSeriesReadPosition(controller));
+    },
+    onReceivedError: (controller, request, error) {
+      if (!mounted || _webLoadIssue != null) return;
+      final resource = request.isForMainFrame == true ? '페이지' : '이미지/리소스';
+      setState(() => _webLoadIssue = resource + ' (' +
+          request.url.host + '): ' + error.description);
+    },
     onLoadStart: (_, __) {
-      if (mounted) setState(() { _loaded = false; _capture = null; });
+      if (mounted) setState(() {
+        _loaded = false; _capture = null; _webLoadIssue = null;
+      });
     },
     onLoadStop: (controller, url) {
       if (mounted) setState(() {
@@ -1116,6 +1272,24 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
             onPressed: _openRecentTabs,
             icon: const Icon(Icons.history),
             tooltip: labels.webViewerRecentTabs),
+          PopupMenuButton<String>(
+            tooltip: '웹 및 회차 관리',
+            onSelected: (action) {
+              if (action == 'save') _offerSeriesSave(manual: true);
+              if (action == 'chrome') _openCurrentInChrome();
+              if (action == 'error') _showWebIssue();
+            },
+            itemBuilder: (_) => [
+              if (_isSeriesChapter)
+                const PopupMenuItem(value: 'save',
+                  child: Text('읽기 완료 · 회차 저장')),
+              const PopupMenuItem(value: 'chrome',
+                child: Text('Chrome으로 열기')),
+              if (_webLoadIssue != null)
+                const PopupMenuItem(value: 'error',
+                  child: Text('웹 로딩 오류 확인')),
+            ],
+          ),
           IconButton(
             onPressed: _busy || !_loaded || _batchRunning ? null : _captureImages,
             icon: const Icon(Icons.image_search),
