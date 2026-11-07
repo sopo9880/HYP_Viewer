@@ -153,14 +153,17 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     catch (error) { if (mounted) _error(error); }
   }
 
-  Future<void> _openSite(String url, {bool scanSeries = false}) async {
+  Future<void> _openSite(String url, {bool scanSeries = false,
+      String? seriesUrl, String? episodeUrl}) async {
     await Navigator.of(context).push<void>(MaterialPageRoute(
       builder: (_) => WebViewerBrowser(store: widget.store,
-        initialUrl: url, autoScanSeries: scanSeries),
+        initialUrl: url, autoScanSeries: scanSeries,
+        seriesUrl: seriesUrl, episodeUrl: episodeUrl),
     ));
   }
 
-  Future<void> _openWork(WebSavedWork item) async {
+  Future<void> _openWork(WebSavedWork item,
+      {bool seriesFallback = false}) async {
     try {
       final gallery = await widget.store.galleries;
       final archive = await gallery.read(item.id);
@@ -178,7 +181,16 @@ class _WebViewerPaneState extends State<WebViewerPane> {
           onOpenInBrowser: (_) => _openSite(item.sourceUrl),
         ),
       ));
-    } catch (error) { if (mounted) _error(error); }
+    } catch (error) {
+      if (!mounted) return;
+      if (seriesFallback && item.seriesUrl != null) {
+        _error('로컬 CBZ를 읽을 수 없어 웹으로 전환해. $error');
+        await _openSite(item.sourceUrl,
+          seriesUrl: item.seriesUrl, episodeUrl: item.episodeUrl);
+      } else {
+        _error(error);
+      }
+    }
   }
 
   Future<void> _rename(WebSavedWork item) async {
@@ -260,6 +272,9 @@ class _WebViewerPaneState extends State<WebViewerPane> {
         series: group,
         hideCompleted: widget.store.seriesHideCompleted,
         onRefreshSource: () => _openSite(group.url, scanSeries: true),
+        onOpenEpisodeSource: (episode) => _openSite(episode.url,
+          seriesUrl: group.url, episodeUrl: episode.url),
+        onDeleteEpisode: (episode) => _confirmRemoveEpisode(group, episode),
         onOpenEpisode: (episode) {
           final savedId = episode.workId;
           WebSavedWork? work;
@@ -269,13 +284,113 @@ class _WebViewerPaneState extends State<WebViewerPane> {
             }
           }
           if (work != null) {
-            _openWork(work);
+            _openWork(work, seriesFallback: true);
           } else {
-            _openSite(episode.url);
+            _openSite(episode.url,
+              seriesUrl: group.url, episodeUrl: episode.url);
           }
         },
       ),
     ));
+  }
+
+  Future<void> _renameSeries(WebSeriesRecord group) async {
+    final controller = TextEditingController(text: group.title);
+    final value = await showDialog<String>(context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('시리즈 이름 변경'),
+        content: TextField(controller: controller, autofocus: true),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog),
+            child: const Text('취소')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, controller.text),
+            child: const Text('저장')),
+        ],
+      ));
+    controller.dispose();
+    if (value == null) return;
+    try { await widget.store.renameSeries(group.url, value); }
+    catch (error) { if (mounted) _error(error); }
+  }
+
+  Future<void> _deleteSeriesBatch(List<WebVisualEntry> items) async {
+    final groups = items.map((item) => item.id)
+      .where((id) => id.startsWith('series-'))
+      .map((id) => widget.store.getSeries(id.substring(7)))
+      .whereType<WebSeriesRecord>().toList();
+    if (groups.isEmpty) return;
+    final choice = await showDialog<String>(context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('시리즈 삭제 (${groups.length}개)'),
+        content: const Text('시리즈 항목만 삭제하면 기존 CBZ와 독서 진행도는 WEB 서재에 남아. 파일도 함께 삭제할 수 있어.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog),
+            child: const Text('취소')),
+          TextButton(onPressed: () => Navigator.pop(dialog, 'keep'),
+            child: const Text('시리즈만 삭제')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, 'files'),
+            child: const Text('파일까지 삭제')),
+        ],
+      ));
+    if (choice == null) return;
+    try {
+      for (final group in groups) {
+        await widget.store.removeSeries(group.url,
+          deleteFiles: choice == 'files');
+      }
+    } catch (error) { if (mounted) _error(error); }
+  }
+
+  Future<void> _confirmRemoveSeries(WebSeriesRecord group) =>
+    _deleteSeriesBatch([WebVisualEntry(
+      id: 'series-' + group.url, title: group.title,
+      subtitle: '', detail: '', modifiedAt: group.checkedAt,
+      progress: 0, downloaded: false, icon: Icons.collections_bookmark,
+      onOpen: () {},
+    )]);
+
+  Future<void> _confirmRemoveEpisode(WebSeriesRecord group,
+      WebSeriesEpisodeRecord episode) async {
+    final choice = await showDialog<String>(context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('회차 삭제'),
+        content: Text(episode.title + '\n기존 이미지 파일은 유지하거나 함께 삭제할 수 있어.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog),
+            child: const Text('취소')),
+          TextButton(onPressed: () => Navigator.pop(dialog, 'keep'),
+            child: const Text('항목만 삭제')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, 'files'),
+            child: const Text('파일까지 삭제')),
+        ],
+      ));
+    if (choice == null) return;
+    try { await widget.store.removeSeriesEpisode(group.url, episode.url,
+      deleteFile: choice == 'files'); }
+    catch (error) { if (mounted) _error(error); }
+  }
+
+  Future<void> _deleteWorksBatch(List<WebVisualEntry> entries) async {
+    if (entries.isEmpty) return;
+    final accepted = await showDialog<bool>(context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('저장된 회차/작품 ${entries.length}개 삭제'),
+        content: const Text('선택한 CBZ와 표지 파일이 실제로 삭제돼. 다른 작품은 유지돼.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('취소')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('파일 삭제')),
+        ],
+      ));
+    if (accepted != true) return;
+    try {
+      for (final entry in entries) {
+        final id = entry.id.startsWith('chapter-')
+            ? entry.id.substring(8) : entry.id;
+        await widget.store.removeWork(id);
+      }
+    } catch (error) { if (mounted) _error(error); }
   }
 
   Future<void> _confirmRemoveWork(WebSavedWork work) async {
@@ -339,6 +454,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     subtitle: labels.webVisualLibraryDescription,
     icon: Icons.library_books_rounded,
     items: _workEntries(labels),
+    onDeleteSelected: _deleteWorksBatch,
     emptyMessage: labels.webViewerNoWorks,
   );
 
@@ -542,10 +658,6 @@ class _WebViewerPaneState extends State<WebViewerPane> {
           ),
         ],
       ))),
-      if (Platform.isAndroid) ...[
-        const SizedBox(height: 14),
-        UpdateApkCleanupPanel(downloadInProgress: widget.updating),
-      ],
     ],
   );
 
@@ -560,7 +672,12 @@ class _WebViewerPaneState extends State<WebViewerPane> {
         store: widget.store,
         section: widget.section,
         onOpenSeries: (group) { _openSeries(group); },
-        onReadWork: (work) { _openWork(work); },
+        onReadWork: (work) { _openWork(work, seriesFallback: true); },
+        onRenameSeries: _renameSeries,
+        onDeleteSeries: _confirmRemoveSeries,
+        onDeleteChapter: _confirmRemoveWork,
+        onDeleteSelectedSeries: _deleteSeriesBatch,
+        onDeleteSelectedChapters: _deleteWorksBatch,
         onOpenSeriesSource: (url) { _openSite(url, scanSeries: true); },
         onOpenEpisodeSource: (url) { _openSite(url); },
         onError: _error,
@@ -570,7 +687,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
       );
     }
     return switch (widget.section) {
-      'web' => _sites(labels),
+      'web' || 'series_web' => _sites(labels),
       'library' => _works(labels),
       'downloads' => _downloads(labels),
       'settings' => _settings(labels),
