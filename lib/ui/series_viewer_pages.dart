@@ -298,7 +298,9 @@ class SeriesViewerPages extends StatelessWidget {
         title: l.seriesViewerSettings,
         subtitle: l.seriesViewerInfo),
       const SizedBox(height: 12),
-      HypPanel(child: Column(
+      HypPanel(child: Material(
+        type: MaterialType.transparency,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
       SwitchListTile(
@@ -333,7 +335,7 @@ class SeriesViewerPages extends StatelessWidget {
         leading: const Icon(Icons.info_outline),
         title: Text(l.seriesViewerInfo),
       ),
-      ])),
+      ]))),
       if (Platform.isAndroid) ...[
         const SizedBox(height: 14),
         UpdateApkCleanupPanel(downloadInProgress: updating),
