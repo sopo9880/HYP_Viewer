@@ -1285,12 +1285,12 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
             },
             itemBuilder: (_) => [
               if (_isSeriesChapter)
-                const PopupMenuItem(value: 'save',
+                PopupMenuItem(value: 'save',
                   child: Text(labels.seriesFinishAndSave)),
-              const PopupMenuItem(value: 'chrome',
+              PopupMenuItem(value: 'chrome',
                 child: Text(labels.webViewerOpenChrome)),
               if (_webLoadIssue != null)
-                const PopupMenuItem(value: 'error',
+                PopupMenuItem(value: 'error',
                   child: Text(labels.webViewerShowLoadError)),
             ],
           ),
