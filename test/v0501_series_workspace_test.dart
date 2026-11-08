@@ -31,14 +31,15 @@ void main() {
       'home', 'favorites', 'library', 'downloads', 'settings',
     ]);
     expect(ViewerMode.series.pages, [
-      'home', 'library', 'downloads', 'settings',
+      'home', 'favorites', 'library', 'downloads', 'settings',
     ]);
     expect(ViewerMode.series.mobilePages, [
-      'home', 'library', 'downloads', 'settings',
+      'favorites', 'library', 'home', 'downloads', 'settings',
     ]);
     expect(ViewerMode.web.initialPage, 'favorites');
     expect(ViewerMode.series.initialPage, 'home');
-    expect(ViewerMode.series.containsPage('favorites'), isFalse);
+    expect(ViewerMode.series.containsPage('favorites'), isTrue);
+    expect(ViewerMode.series.contentSection('favorites'), 'series_web');
     expect(ViewerMode.series.containsPage('history'), isFalse);
     expect(ViewerMode.web.containsPage('favorites'), isTrue);
     expect(ViewerMode.hyp.containsPage('history'), isTrue);
@@ -80,7 +81,7 @@ void main() {
     }
   });
 
-  testWidgets('SERIES mode renders its four localized independent pages',
+  testWidgets('SERIES mode renders its dedicated pages',
       (tester) async {
     // Widget tests run under fake async: avoid real file-system awaits here.
     // SERIES page rendering uses empty in-memory data and does not load files.
