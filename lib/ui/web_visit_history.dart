@@ -36,16 +36,17 @@ class _WebVisitHistorySheetState extends State<WebVisitHistorySheet> {
   }
 
   Future<void> _clearAll() async {
+    final labels = AppLocalizations.of(context)!;
     final accepted = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: const Text('방문 기록 전체 삭제'),
-        content: const Text('기록만 삭제되며 저장된 작품과 CBZ는 유지돼.'),
+        title: Text(labels.webVisitClearAllTitle),
+        content: Text(labels.webVisitClearAllHelp),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialog, false),
-            child: const Text('취소')),
+            child: Text(labels.cancel)),
           FilledButton(onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('전체 삭제')),
+            child: Text(labels.webVisitClearAll)),
         ],
       ),
     );
@@ -73,7 +74,7 @@ class _WebVisitHistorySheetState extends State<WebVisitHistorySheet> {
             TextButton.icon(
               onPressed: _clearAll,
               icon: const Icon(Icons.delete_sweep_outlined),
-              label: const Text('전체 삭제'),
+              label: Text(labels.webVisitClearAll),
             ),
         ]),
       ),
@@ -81,9 +82,9 @@ class _WebVisitHistorySheetState extends State<WebVisitHistorySheet> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         child: TextField(
           key: const Key('web-history-search'),
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             prefixIcon: Icon(Icons.search),
-            hintText: '제목 또는 주소로 방문 기록 검색',
+            hintText: labels.webVisitSearch,
             border: OutlineInputBorder(),
           ),
           onChanged: (value) => setState(() => _query = value),
@@ -91,7 +92,7 @@ class _WebVisitHistorySheetState extends State<WebVisitHistorySheet> {
       ),
       Expanded(child: pages.isEmpty
         ? Center(child: Text(term.isEmpty
-            ? labels.webViewerNoRecentTabs : '검색 결과가 없어.'))
+            ? labels.webViewerNoRecentTabs : labels.webVisitNoSearchResults))
         : ListView.separated(
             itemCount: pages.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
@@ -114,7 +115,7 @@ class _WebVisitHistorySheetState extends State<WebVisitHistorySheet> {
                 ),
                 onTap: () => Navigator.pop(context, item.url),
                 trailing: IconButton(
-                  tooltip: '방문 기록 삭제',
+                  tooltip: labels.webVisitDelete,
                   icon: const Icon(Icons.delete_outline),
                   onPressed: () async {
                     await widget.store.removeRecentPage(item.url);

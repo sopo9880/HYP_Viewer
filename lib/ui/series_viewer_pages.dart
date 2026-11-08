@@ -304,7 +304,7 @@ class SeriesViewerPages extends StatelessWidget {
       WebVisualLibrary(
         key: const Key('series-downloaded-cover-grid'),
         store: store,
-        title: '다운로드한 회차',
+        title: l.seriesDownloadedChapters,
         subtitle: l.webVisualDownloadsDescription,
         icon: Icons.library_books_rounded,
         items: _chapterEntries(l),

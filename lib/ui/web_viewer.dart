@@ -295,16 +295,17 @@ class _WebViewerPaneState extends State<WebViewerPane> {
   }
 
   Future<void> _renameSeries(WebSeriesRecord group) async {
+    final labels = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: group.title);
     final value = await showDialog<String>(context: context,
       builder: (dialog) => AlertDialog(
-        title: const Text('시리즈 이름 변경'),
+        title: Text(labels.seriesRename),
         content: TextField(controller: controller, autofocus: true),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialog),
-            child: const Text('취소')),
+            child: Text(labels.cancel)),
           FilledButton(onPressed: () => Navigator.pop(dialog, controller.text),
-            child: const Text('저장')),
+            child: Text(labels.webViewerSave)),
         ],
       ));
     controller.dispose();
@@ -314,6 +315,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
   }
 
   Future<void> _deleteSeriesBatch(List<WebVisualEntry> items) async {
+    final labels = AppLocalizations.of(context)!;
     final groups = items.map((item) => item.id)
       .where((id) => id.startsWith('series-'))
       .map((id) => widget.store.getSeries(id.substring(7)))
@@ -321,15 +323,15 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     if (groups.isEmpty) return;
     final choice = await showDialog<String>(context: context,
       builder: (dialog) => AlertDialog(
-        title: Text('시리즈 삭제 (${groups.length}개)'),
-        content: const Text('시리즈 항목만 삭제하면 기존 CBZ와 독서 진행도는 WEB 서재에 남아. 파일도 함께 삭제할 수 있어.'),
+        title: Text(labels.seriesDeleteCount(groups.length)),
+        content: Text(labels.seriesDeleteHelp),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialog),
-            child: const Text('취소')),
+            child: Text(labels.cancel)),
           TextButton(onPressed: () => Navigator.pop(dialog, 'keep'),
-            child: const Text('시리즈만 삭제')),
+            child: Text(labels.seriesRemoveOnly)),
           FilledButton(onPressed: () => Navigator.pop(dialog, 'files'),
-            child: const Text('파일까지 삭제')),
+            child: Text(labels.seriesRemoveWithFiles)),
         ],
       ));
     if (choice == null) return;
@@ -351,17 +353,18 @@ class _WebViewerPaneState extends State<WebViewerPane> {
 
   Future<void> _confirmRemoveEpisode(WebSeriesRecord group,
       WebSeriesEpisodeRecord episode) async {
+    final labels = AppLocalizations.of(context)!;
     final choice = await showDialog<String>(context: context,
       builder: (dialog) => AlertDialog(
-        title: const Text('회차 삭제'),
-        content: Text(episode.title + '\n기존 이미지 파일은 유지하거나 함께 삭제할 수 있어.'),
+        title: Text(labels.seriesDeleteChapter),
+        content: Text(episode.title + '\n' + labels.seriesEpisodeDeleteHelp),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialog),
-            child: const Text('취소')),
+            child: Text(labels.cancel)),
           TextButton(onPressed: () => Navigator.pop(dialog, 'keep'),
-            child: const Text('항목만 삭제')),
+            child: Text(labels.seriesRemoveChapterOnly)),
           FilledButton(onPressed: () => Navigator.pop(dialog, 'files'),
-            child: const Text('파일까지 삭제')),
+            child: Text(labels.seriesRemoveWithFiles)),
         ],
       ));
     if (choice == null) return;
@@ -372,15 +375,16 @@ class _WebViewerPaneState extends State<WebViewerPane> {
 
   Future<void> _deleteWorksBatch(List<WebVisualEntry> entries) async {
     if (entries.isEmpty) return;
+    final labels = AppLocalizations.of(context)!;
     final accepted = await showDialog<bool>(context: context,
       builder: (dialog) => AlertDialog(
-        title: Text('저장된 회차/작품 ${entries.length}개 삭제'),
-        content: const Text('선택한 CBZ와 표지 파일이 실제로 삭제돼. 다른 작품은 유지돼.'),
+        title: Text(labels.seriesDeleteSavedCount(entries.length)),
+        content: Text(labels.seriesDeleteSavedHelp),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialog, false),
-            child: const Text('취소')),
+            child: Text(labels.cancel)),
           FilledButton(onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('파일 삭제')),
+            child: Text(labels.seriesDeleteFiles)),
         ],
       ));
     if (accepted != true) return;
@@ -634,7 +638,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
       WebVisualLibrary(
         key: const Key('web-downloaded-cover-grid'),
         store: widget.store,
-        title: '다운로드한 작품',
+        title: labels.webDownloadedWorks,
         subtitle: labels.webVisualDownloadsDescription,
         icon: Icons.library_books_rounded,
         items: _workEntries(labels),
@@ -1064,22 +1068,21 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
       final capture = WebPageCapture.parse(raw);
       if (capture == null || capture.images.isEmpty ||
           capture.expectedImages > capture.images.length) {
-        if (manual) _error('회차 이미지가 아직 모두 로딩되지 않았어. 끝까지 스크롤한 뒤 다시 시도해줘.');
+        if (manual) _error(AppLocalizations.of(context)!.seriesImagesIncomplete);
         return;
       }
       if (!mounted) return;
+      final labels = AppLocalizations.of(context)!;
       _seriesOfferShown = true;
       final accepted = await showDialog<bool>(context: context,
         builder: (dialog) => AlertDialog(
-          title: const Text('읽은 회차를 저장할까?'),
-          content: Text('현재 회차에서 이미지 ' +
-              capture.images.length.toString() +
-              '장을 확인했어. 오프라인 CBZ로 저장할까?'),
+          title: Text(labels.seriesSaveAfterReading),
+          content: Text(labels.seriesSaveImagesPrompt(capture.images.length)),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialog, false),
-              child: const Text('나중에')),
+              child: Text(labels.seriesSaveLater)),
             FilledButton(onPressed: () => Navigator.pop(dialog, true),
-              child: const Text('이미지 저장')),
+              child: Text(labels.seriesSaveImages)),
           ],
         ));
       if (accepted != true || !mounted) return;
@@ -1097,8 +1100,7 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
         seriesUrl: group.url, episodeUrl: episode.url);
       _seriesSaveQueued = true;
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('회차 이미지 ' + verified.images.length.toString() +
-            '장 다운로드를 시작했어. 완료되면 다음부터 로컬로 열려.'),
+        content: Text(labels.seriesDownloadStarted(verified.images.length)),
       ));
     } catch (error) {
       _seriesOfferShown = false;
@@ -1119,16 +1121,17 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
   void _showWebIssue() {
     final issue = _webLoadIssue;
     if (issue == null) return;
+    final labels = AppLocalizations.of(context)!;
     showDialog<void>(context: context, builder: (dialog) => AlertDialog(
-      title: const Text('웹 이미지/페이지 로딩 오류'),
+      title: Text(labels.webViewerResourceError),
       content: SelectableText(issue),
       actions: [
         TextButton(onPressed: () => Navigator.pop(dialog),
-          child: const Text('닫기')),
+          child: Text(MaterialLocalizations.of(dialog).closeButtonLabel)),
         FilledButton(onPressed: () {
           Navigator.pop(dialog);
           _openCurrentInChrome();
-        }, child: const Text('Chrome으로 열기')),
+        }, child: Text(labels.webViewerOpenChrome)),
       ],
     ));
   }
@@ -1274,7 +1277,7 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
             icon: const Icon(Icons.history),
             tooltip: labels.webViewerRecentTabs),
           PopupMenuButton<String>(
-            tooltip: '웹 및 회차 관리',
+            tooltip: labels.seriesWebManage,
             onSelected: (action) {
               if (action == 'save') _offerSeriesSave(manual: true);
               if (action == 'chrome') _openCurrentInChrome();
@@ -1283,12 +1286,12 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
             itemBuilder: (_) => [
               if (_isSeriesChapter)
                 const PopupMenuItem(value: 'save',
-                  child: Text('읽기 완료 · 회차 저장')),
+                  child: Text(labels.seriesFinishAndSave)),
               const PopupMenuItem(value: 'chrome',
-                child: Text('Chrome으로 열기')),
+                child: Text(labels.webViewerOpenChrome)),
               if (_webLoadIssue != null)
                 const PopupMenuItem(value: 'error',
-                  child: Text('웹 로딩 오류 확인')),
+                  child: Text(labels.webViewerShowLoadError)),
             ],
           ),
           IconButton(

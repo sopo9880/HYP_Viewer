@@ -77,18 +77,18 @@ class WebSeriesShelf extends StatelessWidget {
                 : Icons.open_in_browser),
               if (onDeleteEpisode != null || onOpenEpisodeSource != null)
                 PopupMenuButton<String>(
-                  tooltip: '회차 관리',
+                  tooltip: labels.seriesChapterManage,
                   onSelected: (action) {
                     if (action == 'web') onOpenEpisodeSource?.call(episode);
                     if (action == 'delete') onDeleteEpisode?.call(episode);
                   },
                   itemBuilder: (_) => [
                     if (onOpenEpisodeSource != null)
-                      const PopupMenuItem(value: 'web',
-                        child: Text('웹으로 열기')),
+                      PopupMenuItem(value: 'web',
+                        child: Text(labels.seriesOpenInWeb)),
                     if (onDeleteEpisode != null)
-                      const PopupMenuItem(value: 'delete',
-                        child: Text('회차 삭제')),
+                      PopupMenuItem(value: 'delete',
+                        child: Text(labels.seriesDeleteChapter)),
                   ],
                 ),
             ]),

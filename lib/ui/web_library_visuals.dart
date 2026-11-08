@@ -316,19 +316,19 @@ class _WebVisualLibraryState extends State<WebVisualLibrary> {
               key: const Key('web-library-select-mode'),
               onPressed: _toggleSelection,
               icon: Icon(_selecting ? Icons.close : Icons.checklist_outlined),
-              label: Text(_selecting ? '선택 종료' : '선택'),
+              label: Text(_selecting ? labels.webVisualSelectionEnd : labels.webVisualSelect),
             ),
             if (_selecting) ...[
               OutlinedButton.icon(
                 onPressed: () => setState(() => _selectedIds
                   ..clear()..addAll(all.map((e) => e.id))),
                 icon: const Icon(Icons.select_all),
-                label: const Text('전체 선택'),
+                label: Text(labels.webViewerSelectAll),
               ),
               FilledButton.icon(
                 onPressed: _selectedIds.isEmpty ? null : _deleteSelected,
                 icon: const Icon(Icons.delete_outline),
-                label: Text('선택 삭제 (${_selectedIds.length})'),
+                label: Text(labels.webVisualDeleteSelectedCount(_selectedIds.length)),
               ),
             ],
           ]),
@@ -366,7 +366,7 @@ class _WebVisualLibraryState extends State<WebVisualLibrary> {
               return Column(crossAxisAlignment: CrossAxisAlignment.start,
                 children: [field, const SizedBox(height: 6),
                   Row(children: [sort, IconButton(
-                    tooltip: '정렬 방향 변경',
+                    tooltip: labels.webVisualReverseSort,
                     onPressed: () => setState(() => _reverse = !_reverse),
                     icon: Icon(_reverse ? Icons.arrow_upward : Icons.arrow_downward),
                   )])]);
@@ -376,7 +376,7 @@ class _WebVisualLibraryState extends State<WebVisualLibrary> {
               const SizedBox(width: 14),
               sort,
               IconButton(
-                tooltip: '정렬 방향 변경',
+                tooltip: labels.webVisualReverseSort,
                 onPressed: () => setState(() => _reverse = !_reverse),
                 icon: Icon(_reverse ? Icons.arrow_upward : Icons.arrow_downward),
               ),
