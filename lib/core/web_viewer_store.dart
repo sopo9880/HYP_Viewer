@@ -176,7 +176,7 @@ class WebViewerStore extends ChangeNotifier {
             .whereType<Map>()
             .map((v) => WebVisitedPage.fromJson(Map<String, dynamic>.from(v)))
             .where((v) => safeUrl(v.url) != null)
-            .take(20));
+            .take(200));
         series..clear()..addAll((data['series'] as List? ?? [])
             .whereType<Map>()
             .map((v) => WebSeriesRecord.fromJson(Map<String, dynamic>.from(v)))
@@ -286,12 +286,16 @@ class WebViewerStore extends ChangeNotifier {
     final url = uri.toString();
     final cleanTitle = title.trim().isEmpty ? uri.host :
         title.trim().substring(0, title.trim().length.clamp(0, 120).toInt());
+    final now = DateTime.now().toUtc();
+    // Suppress duplicate WebView callbacks, but refresh a genuine revisit.
     if (recentPages.isNotEmpty &&
         recentPages.first.url == url &&
-        recentPages.first.name == cleanTitle) return;
+        recentPages.first.name == cleanTitle &&
+        recentPages.first.visitedAt != null &&
+        now.difference(recentPages.first.visitedAt!).inSeconds < 60) return;
     recentPages.removeWhere((v) => v.url == url);
     recentPages.insert(0, WebVisitedPage(cleanTitle, url,
-        visitedAt: DateTime.now().toUtc()));
+        visitedAt: now));
     if (recentPages.length > 200) {
       recentPages.removeRange(200, recentPages.length);
     }
