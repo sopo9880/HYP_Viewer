@@ -1164,5 +1164,76 @@
   "seriesVisualHeroTitle3": "Find the next chapter\nwhen it arrives",
   "seriesVisualHeroDesc1": "Keep downloaded and pending\nchapters together by series.",
   "seriesVisualHeroDesc2": "See each series cover\nwith its saved chapters.",
-  "seriesVisualHeroDesc3": "Revisit the source page\nto check for new chapters."
+  "seriesVisualHeroDesc3": "Revisit the source page\nto check for new chapters.",
+  "seriesRename": "Rename series",
+  "seriesDeleteCount": "Delete {count} series",
+  "@seriesDeleteCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seriesDeleteHelp": "Removing only the series keeps its CBZ files and reading progress in the WEB library. You can also delete the files.",
+  "seriesRemoveOnly": "Remove series only",
+  "seriesRemoveWithFiles": "Delete with files",
+  "seriesDeleteChapter": "Delete chapter",
+  "seriesEpisodeDeleteHelp": "You can keep the saved images or delete them too.",
+  "seriesRemoveChapterOnly": "Remove entry only",
+  "seriesDeleteSavedCount": "Delete {count} saved chapters/works",
+  "@seriesDeleteSavedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seriesDeleteSavedHelp": "The selected CBZ and cover files will be deleted. Other works stay untouched.",
+  "seriesDeleteFiles": "Delete files",
+  "seriesChapterManage": "Manage chapter",
+  "seriesOpenInWeb": "Open on web",
+  "seriesSaveAfterReading": "Save the chapter you read?",
+  "seriesSaveImagesPrompt": "Found {count} images in this chapter. Save them as an offline CBZ?",
+  "@seriesSaveImagesPrompt": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seriesSaveLater": "Later",
+  "seriesSaveImages": "Save images",
+  "seriesDownloadStarted": "Started downloading {count} chapter images. Once complete, future reads will use the local copy.",
+  "@seriesDownloadStarted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seriesImagesIncomplete": "Not all chapter images have loaded. Scroll to the end and try again.",
+  "webViewerResourceError": "Web page/image loading issue",
+  "webViewerOpenChrome": "Open in Chrome",
+  "webViewerShowLoadError": "View web loading issue",
+  "seriesWebManage": "Web and chapter actions",
+  "seriesFinishAndSave": "Finish reading · Save chapter",
+  "webVisitClearAllTitle": "Clear all visit history",
+  "webVisitClearAllHelp": "Only visit history will be cleared. Saved works and CBZ files remain.",
+  "webVisitClearAll": "Clear all",
+  "webVisitSearch": "Search visit history by title or URL",
+  "webVisitDelete": "Delete visit entry",
+  "webVisitNoSearchResults": "No matching visit history.",
+  "webVisualSelectionEnd": "Exit selection",
+  "webVisualSelect": "Select",
+  "webVisualDeleteSelectedCount": "Delete selected ({count})",
+  "@webVisualDeleteSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "webVisualReverseSort": "Reverse sort order",
+  "webDownloadedWorks": "Downloaded works",
+  "seriesDownloadedChapters": "Downloaded chapters"
 }
