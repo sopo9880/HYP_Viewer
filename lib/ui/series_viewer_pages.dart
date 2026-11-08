@@ -210,12 +210,16 @@ class SeriesViewerPages extends StatelessWidget {
     final jobs = store.pending.where(store.isSeriesDownload).toList();
     final errors = store.errors.entries
       .where((entry) => store.isSeriesFailure(entry.key)).toList();
+    final downloadedChapters = _chapterEntries(l);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       HypSectionTitle(icon: Icons.download_rounded,
         title: l.seriesViewerDownloads,
         subtitle: l.webVisualDownloadsDescription),
       const SizedBox(height: 12),
-      if (groups.isEmpty && jobs.isEmpty && errors.isEmpty)
+      // When the download shelf is empty it already shows this message.
+      // Avoid two identical placeholders for a completely empty library.
+      if (groups.isEmpty && jobs.isEmpty && errors.isEmpty &&
+          downloadedChapters.isNotEmpty)
         Text(l.seriesViewerNoDownloads),
       for (final group in groups)
         Card(child: ListTile(
@@ -307,7 +311,7 @@ class SeriesViewerPages extends StatelessWidget {
         title: l.seriesDownloadedChapters,
         subtitle: l.webVisualDownloadsDescription,
         icon: Icons.library_books_rounded,
-        items: _chapterEntries(l),
+        items: downloadedChapters,
         onDeleteSelected: onDeleteSelectedChapters,
         emptyMessage: l.seriesViewerNoDownloads,
       ),
