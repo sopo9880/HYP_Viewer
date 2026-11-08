@@ -678,7 +678,8 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     if (!widget.store.isReady) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (widget.section.startsWith('series_')) {
+    if (widget.section.startsWith('series_') &&
+        widget.section != 'series_web') {
       return SeriesViewerPages(
         store: widget.store,
         section: widget.section,
