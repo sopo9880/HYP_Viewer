@@ -22,7 +22,6 @@ import 'web_library_visuals.dart';
 import 'web_visit_history.dart';
 import 'hero_banner.dart';
 import 'hyp_theme.dart';
-import 'update_apk_cleanup_panel.dart';
 
 /// WEB is independent of the HYP library, but uses the existing image reader.
 class WebViewerPane extends StatefulWidget {
