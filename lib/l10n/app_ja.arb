@@ -1164,5 +1164,76 @@
   "seriesVisualHeroTitle3": "次の話も\n見つけやすく",
   "seriesVisualHeroDesc1": "保存済みと待機中の話を\n作品ごとに確認。",
   "seriesVisualHeroDesc2": "シリーズの表紙と\n保存した話数を表示。",
-  "seriesVisualHeroDesc3": "元の作品ページを開いて\n新着話を確認できます。"
+  "seriesVisualHeroDesc3": "元の作品ページを開いて\n新着話を確認できます。",
+  "seriesRename": "シリーズ名を変更",
+  "seriesDeleteCount": "シリーズを{count}件削除",
+  "@seriesDeleteCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seriesDeleteHelp": "シリーズのみ削除した場合、CBZと読書進捗はWEBライブラリに残ります。ファイルも削除できます。",
+  "seriesRemoveOnly": "シリーズのみ削除",
+  "seriesRemoveWithFiles": "ファイルも削除",
+  "seriesDeleteChapter": "話を削除",
+  "seriesEpisodeDeleteHelp": "保存済み画像を残すか、一緒に削除できます。",
+  "seriesRemoveChapterOnly": "項目のみ削除",
+  "seriesDeleteSavedCount": "保存済みの話・作品を{count}件削除",
+  "@seriesDeleteSavedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seriesDeleteSavedHelp": "選択したCBZと表紙を削除します。他の作品は残ります。",
+  "seriesDeleteFiles": "ファイルを削除",
+  "seriesChapterManage": "話を管理",
+  "seriesOpenInWeb": "ウェブで開く",
+  "seriesSaveAfterReading": "読んだ話を保存しますか？",
+  "seriesSaveImagesPrompt": "この話で画像{count}枚を確認しました。オフラインCBZとして保存しますか？",
+  "@seriesSaveImagesPrompt": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seriesSaveLater": "後で",
+  "seriesSaveImages": "画像を保存",
+  "seriesDownloadStarted": "話の画像{count}枚のダウンロードを開始しました。完了後はローカルで読めます。",
+  "@seriesDownloadStarted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seriesImagesIncomplete": "話の画像がまだすべて読み込まれていません。最後までスクロールして再試行してください。",
+  "webViewerResourceError": "ウェブページ・画像の読み込みエラー",
+  "webViewerOpenChrome": "Chromeで開く",
+  "webViewerShowLoadError": "ウェブ読み込みエラーを確認",
+  "seriesWebManage": "ウェブ・話の操作",
+  "seriesFinishAndSave": "読了・話を保存",
+  "webVisitClearAllTitle": "閲覧履歴をすべて削除",
+  "webVisitClearAllHelp": "閲覧履歴のみ削除します。保存済み作品とCBZは残ります。",
+  "webVisitClearAll": "すべて削除",
+  "webVisitSearch": "タイトルまたはURLで閲覧履歴を検索",
+  "webVisitDelete": "閲覧履歴を削除",
+  "webVisitNoSearchResults": "一致する閲覧履歴はありません。",
+  "webVisualSelectionEnd": "選択を終了",
+  "webVisualSelect": "選択",
+  "webVisualDeleteSelectedCount": "選択項目を削除（{count}件）",
+  "@webVisualDeleteSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "webVisualReverseSort": "並べ替えの順序を反転",
+  "webDownloadedWorks": "ダウンロード済み作品",
+  "seriesDownloadedChapters": "ダウンロード済みの話"
 }

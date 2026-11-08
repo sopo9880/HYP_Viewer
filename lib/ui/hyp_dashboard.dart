@@ -384,7 +384,8 @@ class _HypDashboardState extends State<HypDashboard> {
         HypPage.library => l.seriesViewerLibrary,
         HypPage.downloads => l.seriesViewerDownloads,
         HypPage.settings => l.seriesViewerSettings,
-        HypPage.favorites || HypPage.history => page.label,
+        HypPage.favorites => l.webViewerSites,
+        HypPage.history => page.label,
       },
     };
   }
@@ -461,7 +462,8 @@ class _HypDashboardState extends State<HypDashboard> {
       onDestinationSelected: (index) => _navigate(pages[index]),
       destinations: pages.map((page) => NavigationDestination(
         icon: Icon(switch (page) {
-          HypPage.favorites => Icons.favorite_outline,
+          HypPage.favorites => _viewerMode == ViewerMode.hyp
+              ? Icons.favorite_outline : Icons.public_outlined,
           HypPage.library => Icons.library_books_outlined,
           HypPage.home => Icons.home_outlined,
           HypPage.downloads => Icons.download_outlined,
@@ -469,7 +471,8 @@ class _HypDashboardState extends State<HypDashboard> {
           HypPage.history => Icons.history_outlined,
         }),
         selectedIcon: Icon(switch (page) {
-          HypPage.favorites => Icons.favorite,
+          HypPage.favorites => _viewerMode == ViewerMode.hyp
+              ? Icons.favorite : Icons.public,
           HypPage.library => Icons.library_books,
           HypPage.home => Icons.home_rounded,
           HypPage.downloads => Icons.download,
@@ -637,7 +640,15 @@ class _HypDashboardState extends State<HypDashboard> {
       _preloadInput.text = widget.readerSettings.preloadPages.toString();
     }
     if (oldWidget.navigationEpoch != widget.navigationEpoch) {
+      // Android shares always return to the original HYP Finder home.
+      // The incoming text/images remain owned by LibraryHome.
+      _lastViewerPages[ViewerMode.hyp] = HypPage.home;
+      _viewerMode = ViewerMode.hyp;
       _page = HypPage.home;
+      _openedGroupId = null;
+      _selectingWorks = false;
+      _selectedWorkIds.clear();
+      _selectedGroupIds.clear();
       _search.clear();
     }
     if (oldWidget.libraryNavigationEpoch != widget.libraryNavigationEpoch) {
@@ -1633,6 +1644,27 @@ class _HypDashboardState extends State<HypDashboard> {
   );
 
   Widget _contents() {
+    // General settings and all existing HYP maintenance tools stay shared.
+    // WEB/SERIES-only controls are appended beneath this common screen.
+    if (_page == HypPage.settings) {
+      return ListView(
+        key: ValueKey('shared-settings-' + _viewerMode.name),
+        padding: const EdgeInsets.fromLTRB(22, 18, 22, 30),
+        children: [
+          _settingsContent(),
+          if (_viewerMode != ViewerMode.hyp) ...[
+            const SizedBox(height: 16),
+            WebViewerPane(
+              store: _webViewerStore,
+              section: _viewerMode == ViewerMode.series
+                  ? 'series_settings' : 'settings',
+              settings: widget.readerSettings,
+              updating: widget.downloadingUpdate,
+            ),
+          ],
+        ],
+      );
+    }
     if (_viewerMode != ViewerMode.hyp) {
       final section = _viewerMode.contentSection(_page.name);
       return ListView(

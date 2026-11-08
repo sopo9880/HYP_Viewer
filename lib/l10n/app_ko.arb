@@ -1164,5 +1164,76 @@
   "seriesVisualHeroTitle3": "기다리던 다음 화를\n다시 찾아서",
   "seriesVisualHeroDesc1": "작품별로 다운로드한 회차와\n남은 회차를 확인해.",
   "seriesVisualHeroDesc2": "작품 대표 표지와\n저장한 회차를 함께 보여줘.",
-  "seriesVisualHeroDesc3": "원본 작품 페이지를 다시 열어\n신규 회차를 확인할 수 있어."
+  "seriesVisualHeroDesc3": "원본 작품 페이지를 다시 열어\n신규 회차를 확인할 수 있어.",
+  "seriesRename": "시리즈 이름 변경",
+  "seriesDeleteCount": "시리즈 {count}개 삭제",
+  "@seriesDeleteCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seriesDeleteHelp": "시리즈만 삭제하면 기존 CBZ와 독서 진행도는 WEB 서재에 남아. 파일을 함께 삭제할 수도 있어.",
+  "seriesRemoveOnly": "시리즈만 삭제",
+  "seriesRemoveWithFiles": "파일까지 삭제",
+  "seriesDeleteChapter": "회차 삭제",
+  "seriesEpisodeDeleteHelp": "기존 이미지 파일을 보존하거나 함께 삭제할 수 있어.",
+  "seriesRemoveChapterOnly": "항목만 삭제",
+  "seriesDeleteSavedCount": "저장된 회차/작품 {count}개 삭제",
+  "@seriesDeleteSavedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seriesDeleteSavedHelp": "선택한 CBZ와 표지 파일이 삭제돼. 다른 작품은 유지돼.",
+  "seriesDeleteFiles": "파일 삭제",
+  "seriesChapterManage": "회차 관리",
+  "seriesOpenInWeb": "웹으로 열기",
+  "seriesSaveAfterReading": "읽은 회차를 저장할까?",
+  "seriesSaveImagesPrompt": "현재 회차에서 이미지 {count}장을 확인했어. 오프라인 CBZ로 저장할까?",
+  "@seriesSaveImagesPrompt": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seriesSaveLater": "나중에",
+  "seriesSaveImages": "이미지 저장",
+  "seriesDownloadStarted": "회차 이미지 {count}장 다운로드를 시작했어. 완료되면 다음부터 로컬로 열려.",
+  "@seriesDownloadStarted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "seriesImagesIncomplete": "회차 이미지가 아직 모두 로딩되지 않았어. 끝까지 스크롤한 뒤 다시 시도해줘.",
+  "webViewerResourceError": "웹 이미지/페이지 로딩 오류",
+  "webViewerOpenChrome": "Chrome으로 열기",
+  "webViewerShowLoadError": "웹 로딩 오류 확인",
+  "seriesWebManage": "웹 및 회차 관리",
+  "seriesFinishAndSave": "읽기 완료 · 회차 저장",
+  "webVisitClearAllTitle": "방문 기록 전체 삭제",
+  "webVisitClearAllHelp": "기록만 삭제되며 저장된 작품과 CBZ는 유지돼.",
+  "webVisitClearAll": "전체 삭제",
+  "webVisitSearch": "제목 또는 주소로 방문 기록 검색",
+  "webVisitDelete": "방문 기록 삭제",
+  "webVisitNoSearchResults": "검색 결과가 없어.",
+  "webVisualSelectionEnd": "선택 종료",
+  "webVisualSelect": "선택",
+  "webVisualDeleteSelectedCount": "선택 삭제 ({count})",
+  "@webVisualDeleteSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "webVisualReverseSort": "정렬 방향 변경",
+  "webDownloadedWorks": "다운로드한 작품",
+  "seriesDownloadedChapters": "다운로드한 회차"
 }

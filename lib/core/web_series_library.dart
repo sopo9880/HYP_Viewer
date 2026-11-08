@@ -54,11 +54,13 @@ class WebSeriesRecord {
   String author;
   String coverUrl;
   DateTime checkedAt;
+  bool titleCustomized;
   final List<WebSeriesEpisodeRecord> episodes;
 
   WebSeriesRecord({
     required this.url, required this.title, required this.author,
     required this.coverUrl, required this.checkedAt, required this.episodes,
+    this.titleCustomized = false,
   });
 
   factory WebSeriesRecord.fromCapture(WebSeriesCapture captured) =>
@@ -84,6 +86,7 @@ class WebSeriesRecord {
       coverUrl: (data['coverUrl'] ?? '').toString(),
       checkedAt: DateTime.tryParse((data['checkedAt'] ?? '').toString()) ??
           DateTime.fromMillisecondsSinceEpoch(0),
+      titleCustomized: data['titleCustomized'] == true,
       episodes: records,
     );
   }
@@ -91,7 +94,7 @@ class WebSeriesRecord {
   /// Refresh live listing without dropping saved works or missing older
   /// rows due to partial lists/pagination.
   int merge(WebSeriesCapture captured) {
-    title = captured.title;
+    if (!titleCustomized) title = captured.title;
     author = captured.author;
     coverUrl = captured.coverUrl?.toString() ?? coverUrl;
     checkedAt = DateTime.now();
@@ -138,6 +141,7 @@ class WebSeriesRecord {
   Map<String, dynamic> toJson() => {
     'url': url, 'title': title, 'author': author, 'coverUrl': coverUrl,
     'checkedAt': checkedAt.toUtc().toIso8601String(),
+    'titleCustomized': titleCustomized,
     'episodes': episodes.map((e) => e.toJson()).toList(),
   };
 }

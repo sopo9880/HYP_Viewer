@@ -25,7 +25,7 @@ extension ViewerModeNavigation on ViewerMode {
       'home', 'favorites', 'library', 'downloads', 'settings',
     ],
     ViewerMode.series => const [
-      'home', 'library', 'downloads', 'settings',
+      'home', 'favorites', 'library', 'downloads', 'settings',
     ],
   };
 
@@ -34,7 +34,7 @@ extension ViewerModeNavigation on ViewerMode {
     ViewerMode.hyp || ViewerMode.web => const [
       'favorites', 'library', 'home', 'downloads', 'settings',
     ],
-    ViewerMode.series => const ['home', 'library', 'downloads', 'settings'],
+    ViewerMode.series => const ['favorites', 'library', 'home', 'downloads', 'settings'],
   };
 
   bool containsPage(String page) => pages.contains(page);
@@ -49,6 +49,7 @@ extension ViewerModeNavigation on ViewerMode {
       _ => 'home',
     },
     ViewerMode.series => switch (page) {
+      'favorites' => 'series_web',
       'library' => 'series_library',
       'downloads' => 'series_downloads',
       'settings' => 'series_settings',

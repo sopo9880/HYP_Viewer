@@ -26,11 +26,16 @@ class WebSiteBookmark {
 /// Last opened tabs, stored separately from user-selected site bookmarks.
 class WebVisitedPage {
   final String name, url;
-  const WebVisitedPage(this.name, this.url);
-  Map<String, dynamic> toJson() => {'name': name, 'url': url};
-  factory WebVisitedPage.fromJson(Map<String, dynamic> raw) =>
-      WebVisitedPage((raw['name'] ?? '').toString(),
-          (raw['url'] ?? '').toString());
+  final DateTime? visitedAt;
+  const WebVisitedPage(this.name, this.url, {this.visitedAt});
+  Map<String, dynamic> toJson() => {
+    'name': name, 'url': url,
+    if (visitedAt != null) 'visitedAt': visitedAt!.toUtc().toIso8601String(),
+  };
+  factory WebVisitedPage.fromJson(Map<String, dynamic> raw) => WebVisitedPage(
+    (raw['name'] ?? '').toString(), (raw['url'] ?? '').toString(),
+    visitedAt: DateTime.tryParse((raw['visitedAt'] ?? '').toString()),
+  );
 }
 
 class WebSavedWork {
@@ -50,6 +55,10 @@ class WebSavedWork {
   WebSavedWork grouped(String parent, String episode) => WebSavedWork(
       id, title, author, sourceUrl, publishedAt, pages, currentPage,
       savedAt, seriesUrl: parent, episodeUrl: episode);
+  /// Detach a CBZ from a deleted series while keeping the book and progress.
+  WebSavedWork ungrouped() => WebSavedWork(
+      id, title, author, sourceUrl, publishedAt, pages, currentPage,
+      savedAt);
   Map<String, dynamic> toJson() => {
     'id': id, 'title': title, 'author': author, 'sourceUrl': sourceUrl,
     'publishedAt': publishedAt, 'pages': pages, 'currentPage': currentPage,
@@ -167,7 +176,7 @@ class WebViewerStore extends ChangeNotifier {
             .whereType<Map>()
             .map((v) => WebVisitedPage.fromJson(Map<String, dynamic>.from(v)))
             .where((v) => safeUrl(v.url) != null)
-            .take(20));
+            .take(200));
         series..clear()..addAll((data['series'] as List? ?? [])
             .whereType<Map>()
             .map((v) => WebSeriesRecord.fromJson(Map<String, dynamic>.from(v)))
@@ -277,18 +286,32 @@ class WebViewerStore extends ChangeNotifier {
     final url = uri.toString();
     final cleanTitle = title.trim().isEmpty ? uri.host :
         title.trim().substring(0, title.trim().length.clamp(0, 120).toInt());
+    final now = DateTime.now().toUtc();
+    // Suppress duplicate WebView callbacks, but refresh a genuine revisit.
     if (recentPages.isNotEmpty &&
         recentPages.first.url == url &&
-        recentPages.first.name == cleanTitle) return;
+        recentPages.first.name == cleanTitle &&
+        recentPages.first.visitedAt != null &&
+        now.difference(recentPages.first.visitedAt!).inSeconds < 60) return;
     recentPages.removeWhere((v) => v.url == url);
-    recentPages.insert(0, WebVisitedPage(cleanTitle, url));
-    if (recentPages.length > 20) recentPages.removeRange(20, recentPages.length);
+    recentPages.insert(0, WebVisitedPage(cleanTitle, url,
+        visitedAt: now));
+    if (recentPages.length > 200) {
+      recentPages.removeRange(200, recentPages.length);
+    }
     await _save();
     _notify();
   }
 
   Future<void> clearRecentPages() async {
     recentPages.clear();
+    await _save();
+    _notify();
+  }
+
+  Future<void> removeRecentPage(String url) async {
+    await load();
+    recentPages.removeWhere((page) => page.url == url);
     await _save();
     _notify();
   }
@@ -329,6 +352,73 @@ class WebViewerStore extends ChangeNotifier {
       }
     }
     return null;
+  }
+
+  /// Rename only this group, preserving original chapter URLs and CBZ data.
+  Future<void> renameSeries(String url, String title) async {
+    await load();
+    final group = getSeries(url);
+    final value = title.trim();
+    if (group == null || value.isEmpty) return;
+    group.title = value;
+    group.titleCustomized = true;
+    await _save();
+    _notify();
+  }
+
+  bool _seriesTransferActive(WebSeriesRecord group) =>
+    group.episodes.any((episode) => episode.state == 'downloading') ||
+    _pendingSeriesJobs.values.any((pair) => pair.first == group.url);
+
+  /// Remove a whole group; by default its CBZs remain in WEB as ungrouped works.
+  Future<void> removeSeries(String url, {bool deleteFiles = false}) async {
+    await load();
+    final group = getSeries(url);
+    if (group == null) return;
+    if (_seriesTransferActive(group)) {
+      throw StateError('먼저 진행 중인 시리즈 다운로드를 중지해줘.');
+    }
+    final ids = group.episodes.map((e) => e.workId)
+        .whereType<String>().toSet();
+    if (deleteFiles) {
+      for (final id in ids) {
+        await removeWork(id);
+      }
+    } else {
+      for (var i = 0; i < works.length; i++) {
+        if (works[i].seriesUrl == group.url) {
+          works[i] = works[i].ungrouped();
+        }
+      }
+    }
+    series.remove(group);
+    await _save();
+    _notify();
+  }
+
+  /// Remove a row from a series without touching other chapters.
+  Future<void> removeSeriesEpisode(String url, String chapterUrl,
+      {bool deleteFile = false}) async {
+    await load();
+    final group = getSeries(url);
+    final episode = group?.episode(chapterUrl);
+    if (group == null || episode == null) return;
+    if (episode.state == 'downloading' ||
+        _pendingSeriesJobs.values.any((pair) =>
+            pair.first == group.url && pair.last == episode.url)) {
+      throw StateError('다운로드 중인 회차는 중지한 다음 삭제해줘.');
+    }
+    final id = episode.workId;
+    if (id != null && deleteFile) {
+      await removeWork(id);
+    } else if (id != null) {
+      for (var i = 0; i < works.length; i++) {
+        if (works[i].id == id) works[i] = works[i].ungrouped();
+      }
+    }
+    group.episodes.remove(episode);
+    await _save();
+    _notify();
   }
 
   Future<int> saveSeries(WebSeriesCapture capture) async {

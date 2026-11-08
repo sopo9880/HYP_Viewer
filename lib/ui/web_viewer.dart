@@ -19,9 +19,9 @@ import 'web_series_selector.dart';
 import 'web_series_shelf.dart';
 import 'series_viewer_pages.dart';
 import 'web_library_visuals.dart';
+import 'web_visit_history.dart';
 import 'hero_banner.dart';
 import 'hyp_theme.dart';
-import 'update_apk_cleanup_panel.dart';
 
 /// WEB is independent of the HYP library, but uses the existing image reader.
 class WebViewerPane extends StatefulWidget {
@@ -152,14 +152,17 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     catch (error) { if (mounted) _error(error); }
   }
 
-  Future<void> _openSite(String url, {bool scanSeries = false}) async {
+  Future<void> _openSite(String url, {bool scanSeries = false,
+      String? seriesUrl, String? episodeUrl}) async {
     await Navigator.of(context).push<void>(MaterialPageRoute(
       builder: (_) => WebViewerBrowser(store: widget.store,
-        initialUrl: url, autoScanSeries: scanSeries),
+        initialUrl: url, autoScanSeries: scanSeries,
+        seriesUrl: seriesUrl, episodeUrl: episodeUrl),
     ));
   }
 
-  Future<void> _openWork(WebSavedWork item) async {
+  Future<void> _openWork(WebSavedWork item,
+      {bool seriesFallback = false}) async {
     try {
       final gallery = await widget.store.galleries;
       final archive = await gallery.read(item.id);
@@ -177,7 +180,16 @@ class _WebViewerPaneState extends State<WebViewerPane> {
           onOpenInBrowser: (_) => _openSite(item.sourceUrl),
         ),
       ));
-    } catch (error) { if (mounted) _error(error); }
+    } catch (error) {
+      if (!mounted) return;
+      if (seriesFallback && item.seriesUrl != null) {
+        _error('로컬 CBZ를 읽을 수 없어 웹으로 전환해. $error');
+        await _openSite(item.sourceUrl,
+          seriesUrl: item.seriesUrl, episodeUrl: item.episodeUrl);
+      } else {
+        _error(error);
+      }
+    }
   }
 
   Future<void> _rename(WebSavedWork item) async {
@@ -216,7 +228,11 @@ class _WebViewerPaneState extends State<WebViewerPane> {
           child: OutlinedButton.icon(
             icon: const Icon(Icons.history),
             label: Text(labels.webViewerLastTab),
-            onPressed: () => _openSite(widget.store.lastTab!.url),
+            onPressed: () async {
+              final url = await WebVisitHistorySheet.open(
+                  context, widget.store);
+              if (url != null && mounted) await _openSite(url);
+            },
           ),
         ),
         Text(widget.store.lastTab!.name,
@@ -255,6 +271,9 @@ class _WebViewerPaneState extends State<WebViewerPane> {
         series: group,
         hideCompleted: widget.store.seriesHideCompleted,
         onRefreshSource: () => _openSite(group.url, scanSeries: true),
+        onOpenEpisodeSource: (episode) => _openSite(episode.url,
+          seriesUrl: group.url, episodeUrl: episode.url),
+        onDeleteEpisode: (episode) => _confirmRemoveEpisode(group, episode),
         onOpenEpisode: (episode) {
           final savedId = episode.workId;
           WebSavedWork? work;
@@ -264,13 +283,117 @@ class _WebViewerPaneState extends State<WebViewerPane> {
             }
           }
           if (work != null) {
-            _openWork(work);
+            _openWork(work, seriesFallback: true);
           } else {
-            _openSite(episode.url);
+            _openSite(episode.url,
+              seriesUrl: group.url, episodeUrl: episode.url);
           }
         },
       ),
     ));
+  }
+
+  Future<void> _renameSeries(WebSeriesRecord group) async {
+    final labels = AppLocalizations.of(context)!;
+    final controller = TextEditingController(text: group.title);
+    final value = await showDialog<String>(context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(labels.seriesRename),
+        content: TextField(controller: controller, autofocus: true),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog),
+            child: Text(labels.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(dialog, controller.text),
+            child: Text(labels.webViewerSave)),
+        ],
+      ));
+    controller.dispose();
+    if (value == null) return;
+    try { await widget.store.renameSeries(group.url, value); }
+    catch (error) { if (mounted) _error(error); }
+  }
+
+  Future<void> _deleteSeriesBatch(List<WebVisualEntry> items) async {
+    final labels = AppLocalizations.of(context)!;
+    final groups = items.map((item) => item.id)
+      .where((id) => id.startsWith('series-'))
+      .map((id) => widget.store.getSeries(id.substring(7)))
+      .whereType<WebSeriesRecord>().toList();
+    if (groups.isEmpty) return;
+    final choice = await showDialog<String>(context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(labels.seriesDeleteCount(groups.length)),
+        content: Text(labels.seriesDeleteHelp),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog),
+            child: Text(labels.cancel)),
+          TextButton(onPressed: () => Navigator.pop(dialog, 'keep'),
+            child: Text(labels.seriesRemoveOnly)),
+          FilledButton(onPressed: () => Navigator.pop(dialog, 'files'),
+            child: Text(labels.seriesRemoveWithFiles)),
+        ],
+      ));
+    if (choice == null) return;
+    try {
+      for (final group in groups) {
+        await widget.store.removeSeries(group.url,
+          deleteFiles: choice == 'files');
+      }
+    } catch (error) { if (mounted) _error(error); }
+  }
+
+  Future<void> _confirmRemoveSeries(WebSeriesRecord group) =>
+    _deleteSeriesBatch([WebVisualEntry(
+      id: 'series-' + group.url, title: group.title,
+      subtitle: '', detail: '', modifiedAt: group.checkedAt,
+      progress: 0, downloaded: false, icon: Icons.collections_bookmark,
+      onOpen: () {},
+    )]);
+
+  Future<void> _confirmRemoveEpisode(WebSeriesRecord group,
+      WebSeriesEpisodeRecord episode) async {
+    final labels = AppLocalizations.of(context)!;
+    final choice = await showDialog<String>(context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(labels.seriesDeleteChapter),
+        content: Text(episode.title + '\n' + labels.seriesEpisodeDeleteHelp),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog),
+            child: Text(labels.cancel)),
+          TextButton(onPressed: () => Navigator.pop(dialog, 'keep'),
+            child: Text(labels.seriesRemoveChapterOnly)),
+          FilledButton(onPressed: () => Navigator.pop(dialog, 'files'),
+            child: Text(labels.seriesRemoveWithFiles)),
+        ],
+      ));
+    if (choice == null) return;
+    try { await widget.store.removeSeriesEpisode(group.url, episode.url,
+      deleteFile: choice == 'files'); }
+    catch (error) { if (mounted) _error(error); }
+  }
+
+  Future<void> _deleteWorksBatch(List<WebVisualEntry> entries) async {
+    if (entries.isEmpty) return;
+    final labels = AppLocalizations.of(context)!;
+    final accepted = await showDialog<bool>(context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(labels.seriesDeleteSavedCount(entries.length)),
+        content: Text(labels.seriesDeleteSavedHelp),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false),
+            child: Text(labels.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(dialog, true),
+            child: Text(labels.seriesDeleteFiles)),
+        ],
+      ));
+    if (accepted != true) return;
+    try {
+      for (final entry in entries) {
+        final id = entry.id.startsWith('chapter-')
+            ? entry.id.substring(8) : entry.id;
+        await widget.store.removeWork(id);
+      }
+    } catch (error) { if (mounted) _error(error); }
   }
 
   Future<void> _confirmRemoveWork(WebSavedWork work) async {
@@ -334,6 +457,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     subtitle: labels.webVisualLibraryDescription,
     icon: Icons.library_books_rounded,
     items: _workEntries(labels),
+    onDeleteSelected: _deleteWorksBatch,
     emptyMessage: labels.webViewerNoWorks,
   );
 
@@ -509,6 +633,17 @@ class _WebViewerPaneState extends State<WebViewerPane> {
             onPressed: () => widget.store.clearFailedDownload(error.key),
           ),
         )),
+      const SizedBox(height: 16),
+      WebVisualLibrary(
+        key: const Key('web-downloaded-cover-grid'),
+        store: widget.store,
+        title: labels.webDownloadedWorks,
+        subtitle: labels.webVisualDownloadsDescription,
+        icon: Icons.library_books_rounded,
+        items: _workEntries(labels),
+        onDeleteSelected: _deleteWorksBatch,
+        emptyMessage: labels.webViewerNoWorks,
+      ),
     ]);
   }
 
@@ -537,10 +672,6 @@ class _WebViewerPaneState extends State<WebViewerPane> {
           ),
         ],
       ))),
-      if (Platform.isAndroid) ...[
-        const SizedBox(height: 14),
-        UpdateApkCleanupPanel(downloadInProgress: widget.updating),
-      ],
     ],
   );
 
@@ -550,12 +681,18 @@ class _WebViewerPaneState extends State<WebViewerPane> {
     if (!widget.store.isReady) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (widget.section.startsWith('series_')) {
+    if (widget.section.startsWith('series_') &&
+        widget.section != 'series_web') {
       return SeriesViewerPages(
         store: widget.store,
         section: widget.section,
         onOpenSeries: (group) { _openSeries(group); },
-        onReadWork: (work) { _openWork(work); },
+        onReadWork: (work) { _openWork(work, seriesFallback: true); },
+        onRenameSeries: _renameSeries,
+        onDeleteSeries: _confirmRemoveSeries,
+        onDeleteChapter: _confirmRemoveWork,
+        onDeleteSelectedSeries: _deleteSeriesBatch,
+        onDeleteSelectedChapters: _deleteWorksBatch,
         onOpenSeriesSource: (url) { _openSite(url, scanSeries: true); },
         onOpenEpisodeSource: (url) { _openSite(url); },
         onError: _error,
@@ -565,7 +702,7 @@ class _WebViewerPaneState extends State<WebViewerPane> {
       );
     }
     return switch (widget.section) {
-      'web' => _sites(labels),
+      'web' || 'series_web' => _sites(labels),
       'library' => _works(labels),
       'downloads' => _downloads(labels),
       'settings' => _settings(labels),
@@ -580,8 +717,10 @@ class WebViewerBrowser extends StatefulWidget {
   final WebViewerStore store;
   final String initialUrl;
   final bool autoScanSeries;
+  final String? seriesUrl, episodeUrl;
   const WebViewerBrowser({super.key, required this.store,
-      required this.initialUrl, this.autoScanSeries = false});
+      required this.initialUrl, this.autoScanSeries = false,
+      this.seriesUrl, this.episodeUrl});
   @override
   State<WebViewerBrowser> createState() => _WebViewerBrowserState();
 }
@@ -599,6 +738,10 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
   bool _batchRunning = false;
   bool _batchProcessing = false;
   bool _autoScanAttempted = false;
+  bool _seriesOfferBusy = false, _seriesOfferShown = false;
+  bool _seriesSaveQueued = false;
+  DateTime? _lastSeriesScrollCheck;
+  String? _webLoadIssue;
 
   @override
   void initState() {
@@ -678,31 +821,7 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
   }
 
   Future<void> _openRecentTabs() async {
-    final labels = AppLocalizations.of(context)!;
-    final pages = widget.store.recentPages.toList();
-    final selected = await showModalBottomSheet<String>(
-      context: context, isScrollControlled: true,
-      builder: (ctx) => SafeArea(child: SizedBox(
-        height: MediaQuery.sizeOf(ctx).height * 0.65,
-        child: Column(children: [
-          ListTile(title: Text(labels.webViewerRecentTabs)),
-          if (pages.isEmpty)
-            Expanded(child: Center(child: Text(labels.webViewerNoRecentTabs)))
-          else
-            Expanded(child: ListView.builder(
-              itemCount: pages.length,
-              itemBuilder: (_, i) => ListTile(
-                leading: const Icon(Icons.history),
-                title: Text(pages[i].name, maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-                subtitle: Text(pages[i].url, maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-                onTap: () => Navigator.pop(ctx, pages[i].url),
-              ),
-            )),
-        ]),
-      )),
-    );
+    final selected = await WebVisitHistorySheet.open(context, widget.store);
     if (selected == null || !mounted) return;
     await Navigator.of(context).pushReplacement<void, void>(
       MaterialPageRoute(builder: (_) => WebViewerBrowser(
@@ -894,18 +1013,156 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
     finally { if (mounted) setState(() => _busy = false); }
   }
 
+  bool get _isSeriesChapter =>
+      widget.seriesUrl != null && widget.episodeUrl != null;
+
+  bool get _stillOnSeriesChapter {
+    if (!_isSeriesChapter) return false;
+    final expected = Uri.tryParse(widget.episodeUrl!);
+    final current = Uri.tryParse(_currentUrl);
+    return expected != null && current != null &&
+        expected.host == current.host && expected.path == current.path;
+  }
+
+  /// A user scroll to the end is only a suggestion; no download begins
+  /// before an explicit confirmation and a complete ordered DOM snapshot.
+  Future<void> _checkSeriesReadPosition(
+      InAppWebViewController controller) async {
+    if (!_isSeriesChapter || !_loaded || !_stillOnSeriesChapter ||
+        _seriesSaveQueued || _seriesOfferShown || _seriesOfferBusy) return;
+    final now = DateTime.now();
+    if (_lastSeriesScrollCheck != null &&
+        now.difference(_lastSeriesScrollCheck!) <
+            const Duration(milliseconds: 1100)) return;
+    _lastSeriesScrollCheck = now;
+    try {
+      final value = await controller.evaluateJavascript(source: r'''(function(){
+        var d = document.documentElement, b = document.body;
+        var height = Math.max(d.scrollHeight, b ? b.scrollHeight : 0);
+        return window.scrollY > 100 && window.scrollY + window.innerHeight
+          >= height - 100;
+      })()''');
+      if (value == true || value.toString() == 'true') {
+        await _offerSeriesSave();
+      }
+    } catch (_) {
+      // Nested scroll containers and other sites can use the manual action.
+    }
+  }
+
+  Future<void> _offerSeriesSave({bool manual = false}) async {
+    if (!_isSeriesChapter || !_loaded || !_stillOnSeriesChapter ||
+        _seriesOfferBusy || _seriesSaveQueued ||
+        (_seriesOfferShown && !manual)) return;
+    final group = widget.store.getSeries(widget.seriesUrl!);
+    final episode = group?.episode(widget.episodeUrl!);
+    if (group == null || episode == null ||
+        {'saved', 'queued', 'downloading'}.contains(episode.state)) return;
+    final web = _web;
+    if (web == null) return;
+    _seriesOfferBusy = true;
+    try {
+      final raw = await web.evaluateJavascript(
+          source: WebPageCapture.captureJavaScript);
+      final capture = WebPageCapture.parse(raw);
+      if (capture == null || capture.images.isEmpty ||
+          capture.expectedImages > capture.images.length) {
+        if (manual) _error(AppLocalizations.of(context)!.seriesImagesIncomplete);
+        return;
+      }
+      if (!mounted) return;
+      final labels = AppLocalizations.of(context)!;
+      _seriesOfferShown = true;
+      final accepted = await showDialog<bool>(context: context,
+        builder: (dialog) => AlertDialog(
+          title: Text(labels.seriesSaveAfterReading),
+          content: Text(labels.seriesSaveImagesPrompt(capture.images.length)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog, false),
+              child: Text(labels.seriesSaveLater)),
+            FilledButton(onPressed: () => Navigator.pop(dialog, true),
+              child: Text(labels.seriesSaveImages)),
+          ],
+        ));
+      if (accepted != true || !mounted) return;
+      final verified = WebPageCapture(
+        sourceUrl: Uri.parse(widget.episodeUrl!),
+        title: episode.title,
+        author: capture.author,
+        publishedAt: episode.date,
+        expectedImages: capture.expectedImages,
+        images: capture.images,
+      );
+      await widget.store.enqueue(verified,
+        List<int>.generate(verified.images.length, (index) => index),
+        title: episode.title,
+        seriesUrl: group.url, episodeUrl: episode.url);
+      _seriesSaveQueued = true;
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(labels.seriesDownloadStarted(verified.images.length)),
+      ));
+    } catch (error) {
+      _seriesOfferShown = false;
+      _error(error);
+    } finally {
+      _seriesOfferBusy = false;
+    }
+  }
+
+  Future<void> _openCurrentInChrome() async {
+    final target = WebViewerStore.safeUrl(_currentUrl);
+    if (target == null) return;
+    try {
+      await launchUrl(target, mode: LaunchMode.externalApplication);
+    } catch (error) { _error(error); }
+  }
+
+  void _showWebIssue() {
+    final issue = _webLoadIssue;
+    if (issue == null) return;
+    final labels = AppLocalizations.of(context)!;
+    showDialog<void>(context: context, builder: (dialog) => AlertDialog(
+      title: Text(labels.webViewerResourceError),
+      content: SelectableText(issue),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialog),
+          child: Text(MaterialLocalizations.of(dialog).closeButtonLabel)),
+        FilledButton(onPressed: () {
+          Navigator.pop(dialog);
+          _openCurrentInChrome();
+        }, child: Text(labels.webViewerOpenChrome)),
+      ],
+    ));
+  }
+
   Widget _browser(WebViewEnvironment? environment) => InAppWebView(
     webViewEnvironment: environment,
     initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
     initialSettings: InAppWebViewSettings(
-      javaScriptEnabled: true, useShouldOverrideUrlLoading: true,
+      javaScriptEnabled: true,
+      domStorageEnabled: true,
+      loadsImagesAutomatically: true,
+      blockNetworkImage: false,
+      thirdPartyCookiesEnabled: true,
+      useShouldOverrideUrlLoading: true,
       useShouldInterceptRequest: false, supportMultipleWindows: false,
       javaScriptCanOpenWindowsAutomatically: false,
       contentBlockers: const <ContentBlocker>[],
     ),
     onWebViewCreated: (controller) => _web = controller,
+    onScrollChanged: (controller, x, y) {
+      unawaited(_checkSeriesReadPosition(controller));
+    },
+    onReceivedError: (controller, request, error) {
+      if (!mounted || _webLoadIssue != null) return;
+      final resource = request.isForMainFrame == true ? '페이지' : '이미지/리소스';
+      setState(() => _webLoadIssue = resource + ' (' +
+          request.url.host + '): ' + error.description);
+    },
     onLoadStart: (_, __) {
-      if (mounted) setState(() { _loaded = false; _capture = null; });
+      if (mounted) setState(() {
+        _loaded = false; _capture = null; _webLoadIssue = null;
+      });
     },
     onLoadStop: (controller, url) {
       if (mounted) setState(() {
@@ -1018,6 +1275,24 @@ class _WebViewerBrowserState extends State<WebViewerBrowser> {
             onPressed: _openRecentTabs,
             icon: const Icon(Icons.history),
             tooltip: labels.webViewerRecentTabs),
+          PopupMenuButton<String>(
+            tooltip: labels.seriesWebManage,
+            onSelected: (action) {
+              if (action == 'save') _offerSeriesSave(manual: true);
+              if (action == 'chrome') _openCurrentInChrome();
+              if (action == 'error') _showWebIssue();
+            },
+            itemBuilder: (_) => [
+              if (_isSeriesChapter)
+                PopupMenuItem(value: 'save',
+                  child: Text(labels.seriesFinishAndSave)),
+              PopupMenuItem(value: 'chrome',
+                child: Text(labels.webViewerOpenChrome)),
+              if (_webLoadIssue != null)
+                PopupMenuItem(value: 'error',
+                  child: Text(labels.webViewerShowLoadError)),
+            ],
+          ),
           IconButton(
             onPressed: _busy || !_loaded || _batchRunning ? null : _captureImages,
             icon: const Icon(Icons.image_search),
